@@ -33,8 +33,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { ArabicDatePicker } from '@/components/ui/arabic-date-picker';
 import { Loader2, Wallet } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { cn } from '@/lib/utils';
 import { useAgentContext } from '@/hooks/useAgentContext';
 import { useAuth } from '@/hooks/useAuth';
+import { useCompaniesOutstanding } from '@/hooks/useCompaniesOutstanding';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import type { CompanyLite } from './AddVoucherDialog';
@@ -61,6 +63,8 @@ export function AddCompanyCreditNoteDialog({
 }: Props) {
   const { agentId } = useAgentContext();
   const { user } = useAuth();
+  const { outstandingByCompany } = useCompaniesOutstanding();
+  const balance = outstandingByCompany.get(company.id) ?? null;
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [notes, setNotes] = useState('');
@@ -156,6 +160,44 @@ export function AddCompanyCreditNoteDialog({
           <div className="rounded-lg border bg-muted/30 p-4">
             <div className="text-xs text-muted-foreground mb-1">شركة التأمين</div>
             <div className="font-semibold text-base">{displayName}</div>
+            {balance && (
+              <div className="mt-3 pt-3 border-t border-border/60 space-y-1.5">
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="text-[11px] font-semibold text-muted-foreground">
+                    المستحق للشركة
+                  </span>
+                  <span
+                    className={cn(
+                      'text-base font-bold tabular-nums',
+                      balance.outstanding > 0
+                        ? 'text-rose-700 dark:text-rose-300'
+                        : balance.outstanding < 0
+                          ? 'text-emerald-700 dark:text-emerald-300'
+                          : 'text-muted-foreground',
+                    )}
+                  >
+                    {balance.outstanding < 0
+                      ? `للشركة عندك ₪${Math.round(Math.abs(balance.outstanding)).toLocaleString('en-US')}`
+                      : `₪${Math.round(balance.outstanding).toLocaleString('en-US')}`}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[10.5px] text-muted-foreground tabular-nums">
+                  <span>
+                    إجمالي المستحق: ₪{Math.round(balance.totalPayable).toLocaleString('en-US')}
+                    {' '}({balance.policiesCount} بوليصة)
+                  </span>
+                  <span>
+                    إشعارات دائنة: ₪{Math.round(balance.totalCreditNotes).toLocaleString('en-US')}
+                  </span>
+                  <span>
+                    سندات الصرف: ₪{Math.round(balance.totalPaidOut).toLocaleString('en-US')}
+                  </span>
+                  <span>
+                    سندات القبض: ₪{Math.round(balance.totalPaidIn).toLocaleString('en-US')}
+                  </span>
+                </div>
+              </div>
+            )}
             <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-2 leading-relaxed">
               إشعار دائن يُضاف على الحساب المفتوح بينك وبين الشركة — يزيد المستحق
               لها بدون كاش. لتسديده فعلياً أصدر سند صرف لاحقاً.

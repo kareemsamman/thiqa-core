@@ -42,6 +42,7 @@ import { MultiImagePicker } from '@/components/shared/MultiImagePicker';
 import { sanitizeChequeNumber, validateChequeNumber } from '@/lib/chequeUtils';
 import { cn } from '@/lib/utils';
 import { persistSettlementLines } from './persistSettlementLines';
+import { useCompaniesOutstanding, type CompanyOutstanding } from '@/hooks/useCompaniesOutstanding';
 
 export type SettlementMode = 'company' | 'broker' | 'client';
 export type SettlementKind = 'disbursement' | 'receipt';
@@ -224,6 +225,16 @@ export function AddSettlementDialog({
     owesUs: number;
     weOwe: number;
   } | null>(null);
+
+  // Company balance — the agent always owes companies (one-directional
+  // relationship), so we just surface the breakdown the receipts
+  // picker also shows. Pulled from the shared hook so the same
+  // numbers reconcile across surfaces.
+  const { outstandingByCompany } = useCompaniesOutstanding();
+  const companyBalance: CompanyOutstanding | null =
+    mode === 'company' && entityId
+      ? outstandingByCompany.get(entityId) ?? null
+      : null;
 
   useEffect(() => {
     if (mode !== 'broker' || !entityId) {
@@ -705,6 +716,60 @@ export function AddSettlementDialog({
                   <div className="text-[10px] text-muted-foreground mt-0.5">
                     سعر شراء معاملات الوسيط بعد خصم سندات الصرف
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* Company balance — single-direction (agent owes the
+                insurance company) so we surface the running-account
+                breakdown rather than the bidirectional broker pills.
+                The chosen voucher kind ring-highlights the row that
+                will change: a سند صرف reduces المستحق, a سند قبض
+                increases the المستلم column (rare — company refunding
+                the agent). */}
+            {mode === 'company' && companyBalance && (
+              <div
+                className={cn(
+                  'rounded-lg border p-3 space-y-2',
+                  kind === 'disbursement'
+                    ? 'border-rose-500/40 bg-rose-50 dark:bg-rose-950/20 ring-1 ring-rose-500/30'
+                    : 'border-emerald-500/40 bg-emerald-50 dark:bg-emerald-950/20 ring-1 ring-emerald-500/30',
+                )}
+              >
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="text-[11px] font-semibold text-muted-foreground">
+                    المستحق للشركة
+                  </span>
+                  <span
+                    className={cn(
+                      'text-lg font-bold tabular-nums',
+                      companyBalance.outstanding > 0
+                        ? 'text-rose-700 dark:text-rose-300'
+                        : companyBalance.outstanding < 0
+                          ? 'text-emerald-700 dark:text-emerald-300'
+                          : 'text-muted-foreground',
+                    )}
+                  >
+                    {companyBalance.outstanding < 0
+                      ? `للشركة عندك ₪${Math.round(Math.abs(companyBalance.outstanding)).toLocaleString('en-US')}`
+                      : `₪${Math.round(companyBalance.outstanding).toLocaleString('en-US')}`}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[10.5px] text-muted-foreground tabular-nums">
+                  <span>
+                    إجمالي المستحق من البوليصات:
+                    {' '}₪{Math.round(companyBalance.totalPayable).toLocaleString('en-US')}
+                    {' '}({companyBalance.policiesCount} بوليصة)
+                  </span>
+                  <span>
+                    إشعارات دائنة: ₪{Math.round(companyBalance.totalCreditNotes).toLocaleString('en-US')}
+                  </span>
+                  <span>
+                    سندات الصرف: ₪{Math.round(companyBalance.totalPaidOut).toLocaleString('en-US')}
+                  </span>
+                  <span>
+                    سندات القبض: ₪{Math.round(companyBalance.totalPaidIn).toLocaleString('en-US')}
+                  </span>
                 </div>
               </div>
             )}

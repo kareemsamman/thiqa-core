@@ -722,6 +722,11 @@ interface CompanyPickerProps {
 }
 
 interface CompanyRow extends CompanyLite {
+  totalPayable: number;
+  totalPaidOut: number;
+  totalPaidIn: number;
+  totalCreditNotes: number;
+  policiesCount: number;
   outstanding: number;
 }
 
@@ -739,10 +744,9 @@ function CompanyPicker({ agentId, value, onChange }: CompanyPickerProps) {
       // Two queries:
       //   • Active companies the agent has (insurance_companies.agent_id)
       //   • DISTINCT company_ids of non-ELZAMI policies the agent owns
-      // Intersect on company id, then merge in the outstanding from
-      // the shared hook. Avoiding a server-side join keeps this
-      // generic — same shape works whether the agent has 5 or 500
-      // companies.
+      // Intersect on company id, then merge in the breakdown from
+      // the shared hook so the picker can show the full running
+      // account per row.
       const [companiesRes, nonElzamiRes] = await Promise.all([
         supabase
           .from('insurance_companies')
@@ -765,12 +769,20 @@ function CompanyPicker({ agentId, value, onChange }: CompanyPickerProps) {
       }
       const filtered = (companiesRes.data ?? [])
         .filter((c) => nonElzamiSet.has(c.id))
-        .map((c) => ({
-          id: c.id,
-          name: c.name,
-          name_ar: c.name_ar,
-          outstanding: outstandingByCompany.get(c.id)?.outstanding ?? 0,
-        }));
+        .map((c) => {
+          const b = outstandingByCompany.get(c.id);
+          return {
+            id: c.id,
+            name: c.name,
+            name_ar: c.name_ar,
+            totalPayable: b?.totalPayable ?? 0,
+            totalPaidOut: b?.totalPaidOut ?? 0,
+            totalPaidIn: b?.totalPaidIn ?? 0,
+            totalCreditNotes: b?.totalCreditNotes ?? 0,
+            policiesCount: b?.policiesCount ?? 0,
+            outstanding: b?.outstanding ?? 0,
+          };
+        });
       setRows(filtered);
       setLoading(false);
     })();
@@ -817,15 +829,28 @@ function CompanyPicker({ agentId, value, onChange }: CompanyPickerProps) {
               <CommandEmpty>لا توجد شركات (ما عندك بوليصات غير الإلزامي بعد)</CommandEmpty>
             )}
             {!loading && rows.length > 0 && (
-              <ScrollArea className="max-h-72">
+              <ScrollArea className="max-h-[420px]">
                 {rows.map((c) => {
                   const isSelected = value?.id === c.id;
-                  // Three balance flavours:
-                  //   positive → agent owes company (red pill)
-                  //   negative → company owes agent (green pill)
-                  //   ~zero    → settled (muted)
-                  const out = c.outstanding;
-                  const settled = Math.abs(out) < 0.01;
+                  // Full running-account breakdown so the agent never
+                  // has to guess where a balance came from:
+                  //   • إجمالي المستحق  = sum of payed_for_company
+                  //   • المدفوع          = outgoing settlements
+                  //   • المستلم          = incoming settlements (refunds)
+                  //   • إشعارات دائنة    = paper credit memos (ADD to debt)
+                  //   • المتبقي          = signed net
+                  // Color codes the net direction.
+                  const fmt = (n: number) =>
+                    `₪${Math.round(n).toLocaleString('en-US')}`;
+                  const rounded = Math.round(c.outstanding);
+                  const tone =
+                    rounded > 0 ? 'text-rose-600 dark:text-rose-400'
+                    : rounded < 0 ? 'text-emerald-600 dark:text-emerald-400'
+                    : 'text-muted-foreground';
+                  const netLabel =
+                    rounded < 0
+                      ? `للشركة عندك رصيد ${fmt(Math.abs(rounded))}`
+                      : `المستحق للشركة ${fmt(rounded)}`;
                   return (
                     <CommandItem
                       key={c.id}
@@ -834,25 +859,24 @@ function CompanyPicker({ agentId, value, onChange }: CompanyPickerProps) {
                         onChange({ id: c.id, name: c.name, name_ar: c.name_ar });
                         setOpen(false);
                       }}
-                      className="flex items-center gap-2 px-3 py-2 data-[selected=true]:bg-muted/60 data-[selected=true]:text-foreground"
+                      className="flex flex-col items-stretch gap-1.5 px-3 py-2.5 data-[selected=true]:bg-muted/60 data-[selected=true]:text-foreground"
                     >
-                      <div className="flex-1 min-w-0">
-                        <div className="font-semibold truncate">{displayName(c)}</div>
-                        <div className="text-xs mt-0.5">
-                          {settled ? (
-                            <span className="text-muted-foreground">مسوّى</span>
-                          ) : out > 0 ? (
-                            <span className="text-rose-600 dark:text-rose-400 ltr-nums">
-                              مستحق للشركة: ₪{Math.round(out).toLocaleString('en-US')}
-                            </span>
-                          ) : (
-                            <span className="text-emerald-600 dark:text-emerald-400 ltr-nums">
-                              للشركة عندك رصيد: ₪{Math.round(Math.abs(out)).toLocaleString('en-US')}
-                            </span>
-                          )}
-                        </div>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="font-semibold truncate flex-1">{displayName(c)}</div>
+                        {isSelected && <Check className="h-3.5 w-3.5 text-primary mt-0.5 shrink-0" />}
                       </div>
-                      {isSelected && <Check className="h-3.5 w-3.5 text-primary" />}
+                      <div className="flex items-center justify-between text-[11px] text-muted-foreground ltr-nums">
+                        <span>{c.policiesCount} بوليصة فعّالة</span>
+                        <span>إجمالي المستحق: {fmt(c.totalPayable)}</span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-1 text-[10px] text-muted-foreground ltr-nums">
+                        <span>مدفوع: {fmt(c.totalPaidOut)}</span>
+                        <span>مستلم: {fmt(c.totalPaidIn)}</span>
+                        <span>إشعار دائن: {fmt(c.totalCreditNotes)}</span>
+                      </div>
+                      <div className={cn('text-xs font-semibold ltr-nums mt-0.5', tone)}>
+                        {netLabel}
+                      </div>
                     </CommandItem>
                   );
                 })}

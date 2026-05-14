@@ -26,6 +26,16 @@ import { supabase } from '@/integrations/supabase/client';
 // row, so a refused سند صرف has no net effect on what's owed.
 
 export interface CompanyOutstanding {
+  /** Σ payed_for_company across active (non-cancelled, non-transferred) policies. */
+  totalPayable: number;
+  /** Σ outgoing settlements (cash the agent paid the company), non-refused. */
+  totalPaidOut: number;
+  /** Σ incoming settlements (cash the company paid the agent), non-refused. */
+  totalPaidIn: number;
+  /** Σ credit-note receipts for this company (ADD to debt). */
+  totalCreditNotes: number;
+  /** Count of active policies tied to this company. */
+  policiesCount: number;
   /** Signed outstanding. Positive = agent owes company. Negative = company owes agent. */
   outstanding: number;
 }
@@ -38,6 +48,15 @@ interface UseCompaniesOutstandingResult {
   /** Forces a re-fetch. Call after saving a voucher to keep the picker fresh. */
   refresh: () => void;
 }
+
+const emptyRow = (): CompanyOutstanding => ({
+  totalPayable: 0,
+  totalPaidOut: 0,
+  totalPaidIn: 0,
+  totalCreditNotes: 0,
+  policiesCount: 0,
+  outstanding: 0,
+});
 
 export function useCompaniesOutstanding(): UseCompaniesOutstandingResult {
   const [outstandingByCompany, setOutstandingByCompany] = useState<
@@ -74,40 +93,54 @@ export function useCompaniesOutstanding(): UseCompaniesOutstandingResult {
         if (settlementsRes.error) throw settlementsRes.error;
         if (creditNotesRes.error) throw creditNotesRes.error;
 
-        // Start with policy-side debt, dropping cancelled / transferred
-        // rows (their company_payable ledger entries get reversed by
-        // the existing policy_cancelled / policy_transferred triggers,
-        // so the live debt should follow the same exclusion).
-        const map = new Map<string, number>();
+        const map = new Map<string, CompanyOutstanding>();
+        const get = (id: string) => {
+          let row = map.get(id);
+          if (!row) {
+            row = emptyRow();
+            map.set(id, row);
+          }
+          return row;
+        };
+
+        // Policy-side debt — drop cancelled / transferred rows (their
+        // company_payable ledger entries get reversed by the existing
+        // policy_cancelled / policy_transferred triggers).
         for (const p of policiesRes.data ?? []) {
           if (!p.company_id) continue;
           if (p.cancelled || p.transferred) continue;
-          const cur = map.get(p.company_id) ?? 0;
-          map.set(p.company_id, cur + Number(p.payed_for_company || 0));
+          const row = get(p.company_id);
+          row.totalPayable += Number(p.payed_for_company || 0);
+          row.policiesCount += 1;
         }
 
-        // Both outgoing (we paid them) and incoming (they paid us)
-        // reduce the outstanding. Refused rows excluded — their
-        // reversal trigger already restored the ledger entry.
+        // Settlements split by direction so the picker can show both
+        // sides of the running account separately.
         for (const s of settlementsRes.data ?? []) {
           if (!s.company_id || s.refused) continue;
-          const cur = map.get(s.company_id) ?? 0;
-          map.set(s.company_id, cur - Number(s.total_amount || 0));
+          const row = get(s.company_id);
+          const amt = Number(s.total_amount || 0);
+          if (s.direction === 'incoming') row.totalPaidIn += amt;
+          else row.totalPaidOut += amt;
         }
 
-        // إشعار دائن ADDS to debt — the agent acknowledges they owe
-        // the company more, outside the normal policy-issuance flow.
+        // إشعار دائن ADDS to debt.
         for (const r of creditNotesRes.data ?? []) {
           if (!r.company_id || r.cancelled_at) continue;
-          const cur = map.get(r.company_id) ?? 0;
-          map.set(r.company_id, cur + Number(r.amount || 0));
+          const row = get(r.company_id);
+          row.totalCreditNotes += Number(r.amount || 0);
         }
 
-        const result = new Map<string, CompanyOutstanding>();
-        for (const [id, val] of map.entries()) {
-          result.set(id, { outstanding: val });
+        // Final signed balance.
+        for (const row of map.values()) {
+          row.outstanding =
+            row.totalPayable
+            + row.totalCreditNotes
+            - row.totalPaidOut
+            - row.totalPaidIn;
         }
-        setOutstandingByCompany(result);
+
+        setOutstandingByCompany(map);
         setLoading(false);
       } catch (e) {
         if (cancelled) return;
