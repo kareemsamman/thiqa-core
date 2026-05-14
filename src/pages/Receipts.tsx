@@ -126,6 +126,17 @@ const PAYMENT_METHOD_OPTIONS = [
 
 const PAGE_SIZE = 50;
 
+// Module-level default so every per-tab "no filters set yet" lookup
+// returns the SAME object reference — avoids triggering useCallback /
+// useEffect deps with a fresh empty filter set on every render.
+const DEFAULT_FILTERS: AccountingFiltersValue = {
+  dateFrom: "",
+  dateTo: "",
+  companies: [],
+  types: [],
+  paymentMethods: [],
+};
+
 // Tiny coloured pill rendered under the voucher number on the "الكل"
 // tab so the user can tell سند قبض from سند إلغاء at a glance — both
 // share the R-prefix in the receipt_number column. On single-type
@@ -554,24 +565,37 @@ export default function Receipts() {
   // in the AccountingFilters popover so we get one canonical filter UI
   // across the app (date range / month, companies, types, payment
   // methods).
-  const [searchQuery, setSearchQuery] = useState("");
-  const [filters, setFilters] = useState<AccountingFiltersValue>({
-    dateFrom: "",
-    dateTo: "",
-    companies: [],
-    types: [],
-    paymentMethods: [],
-  });
-  // Page-level branch filter — global admins only.
-  const [branchFilter, setBranchFilter] = useState<string | null>(null);
-  // Hide "passthrough" ELZAMI receipts — the visa/cash payment whose
-  // amount equals the joined policy's insurance_price for an ELZAMI
-  // policy. That money goes straight to the insurer, not the agency,
-  // so it pollutes the agency's receipts list. Detection is amount-
-  // based because a customer might split a package payment across the
-  // ELZAMI policy_id even though only one of those slices is the
-  // actual إلزامي premium.
-  const [hideElzamiPayments, setHideElzamiPayments] = useState(false);
+  // Filters / search / "hide إلزامي" / branch — all per-tab so the
+  // user can keep one set of criteria on سندات القبض and another on
+  // الكل without one stomping the other. Storage is in-memory only
+  // (these are session-state, not preferences worth persisting).
+  const [searchByTab, setSearchByTab] = useState<Record<string, string>>({});
+  const [filtersByTab, setFiltersByTab] = useState<Record<string, AccountingFiltersValue>>({});
+  const [branchByTab, setBranchByTab] = useState<Record<string, string | null>>({});
+  const [hideElzamiByTab, setHideElzamiByTab] = useState<Record<string, boolean>>({});
+
+  const searchQuery = searchByTab[activeTab] ?? "";
+  const filters = filtersByTab[activeTab] ?? DEFAULT_FILTERS;
+  const branchFilter = branchByTab[activeTab] ?? null;
+  const hideElzamiPayments = hideElzamiByTab[activeTab] ?? false;
+
+  const setSearchQuery = useCallback(
+    (v: string) => setSearchByTab((prev) => ({ ...prev, [activeTab]: v })),
+    [activeTab],
+  );
+  const setFilters = useCallback(
+    (v: AccountingFiltersValue) =>
+      setFiltersByTab((prev) => ({ ...prev, [activeTab]: v })),
+    [activeTab],
+  );
+  const setBranchFilter = useCallback(
+    (v: string | null) => setBranchByTab((prev) => ({ ...prev, [activeTab]: v })),
+    [activeTab],
+  );
+  const setHideElzamiPayments = useCallback(
+    (v: boolean) => setHideElzamiByTab((prev) => ({ ...prev, [activeTab]: v })),
+    [activeTab],
+  );
 
   // Insurance companies — loaded once for the filter dropdown options.
   const [companyOptions, setCompanyOptions] = useState<
@@ -613,14 +637,22 @@ export default function Receipts() {
     [],
   );
 
-  // Column visibility for the receipts table. Bumped to v2 when the
-  // "النوع" column was added so existing users get a fresh default
-  // set that includes it instead of inheriting the pre-feature one.
-  const colsState = useTableColumnVisibility(
-    "receipts-table-v2",
-    RECEIPTS_DEFAULT_VISIBLE,
-    RECEIPTS_COLUMN_KEYS,
-  );
+  // Column visibility per tab. The hook can't accept a dynamic key
+  // mid-life (its useState initializer only runs once), so we call it
+  // once per tab and pick the matching one. Five localStorage entries,
+  // five independent visibility states — the user can hide "ملاحظات"
+  // on سندات القبض while keeping it on الكل.
+  const colsAll = useTableColumnVisibility('receipts-all-v1', RECEIPTS_DEFAULT_VISIBLE, RECEIPTS_COLUMN_KEYS);
+  const colsPayment = useTableColumnVisibility('receipts-payment-v1', RECEIPTS_DEFAULT_VISIBLE, RECEIPTS_COLUMN_KEYS);
+  const colsCancel = useTableColumnVisibility('receipts-cancel-v1', RECEIPTS_DEFAULT_VISIBLE, RECEIPTS_COLUMN_KEYS);
+  const colsCredit = useTableColumnVisibility('receipts-credit-v1', RECEIPTS_DEFAULT_VISIBLE, RECEIPTS_COLUMN_KEYS);
+  const colsDisb = useTableColumnVisibility('receipts-disb-v1', RECEIPTS_DEFAULT_VISIBLE, RECEIPTS_COLUMN_KEYS);
+  const colsState =
+    activeTab === 'all' ? colsAll
+      : activeTab === 'payment' ? colsPayment
+      : activeTab === 'cancellation' ? colsCancel
+      : activeTab === 'credit_note' ? colsCredit
+      : colsDisb;
   const isCol = (key: string) => colsState.visible.includes(key);
   // Per-tab column list — "النوع" only appears on الكل (and only there
   // does the Manage Columns dropdown surface it as a toggle).
@@ -772,6 +804,37 @@ export default function Receipts() {
         .eq("is_imported", false);
       if (activeTab !== 'all') countQuery = countQuery.eq("receipt_type", activeTab);
 
+      // Pre-resolve the search term across fields the receipts table
+      // doesn't hold directly. The user wants to search by:
+      //   • name              → receipts.client_name (ilike)
+      //   • car number        → receipts.car_number (ilike)
+      //   • amount            → receipts.amount (eq, when numeric)
+      //   • customer ID number → clients.id_number (ilike)
+      // The ID-number case can't be done in a single PostgREST OR
+      // because id_number lives on a join two hops away; we look up
+      // the matching client IDs first, then map them to receipts via
+      // client_id (direct) and policy_id (the linked policy's owner).
+      // Only triggered when the term looks like digits, to avoid the
+      // extra round-trip on every keystroke for plain-text searches.
+      const trimmedSearch = searchQuery.trim();
+      let searchClientIds: string[] = [];
+      let searchPolicyIds: string[] = [];
+      if (trimmedSearch && /^\d{4,}$/.test(trimmedSearch)) {
+        const { data: idClients } = await supabase
+          .from('clients')
+          .select('id')
+          .ilike('id_number', `%${trimmedSearch}%`)
+          .limit(50);
+        searchClientIds = (idClients ?? []).map((c: any) => c.id);
+        if (searchClientIds.length > 0) {
+          const { data: idPolicies } = await supabase
+            .from('policies')
+            .select('id')
+            .in('client_id', searchClientIds);
+          searchPolicyIds = (idPolicies ?? []).map((p: any) => p.id);
+        }
+      }
+
       const applyShared = (q: any) => {
         // Hide ₪0 receipts — they have no print value and only confuse
         // the operator. Live receipts always carry a positive amount;
@@ -781,9 +844,22 @@ export default function Receipts() {
         if (dateTo) q = q.lte("receipt_date", dateTo);
         if (paymentMethods.length > 0) q = q.in("payment_method", paymentMethods);
         if (branchFilter) q = q.eq("branch_id", branchFilter);
-        if (searchQuery.trim()) {
-          const term = searchQuery.trim();
-          q = q.or(`client_name.ilike.%${term}%,car_number.ilike.%${term}%`);
+        if (trimmedSearch) {
+          const orClauses: string[] = [
+            `client_name.ilike.%${trimmedSearch}%`,
+            `car_number.ilike.%${trimmedSearch}%`,
+          ];
+          const numericTerm = Number(trimmedSearch.replace(/,/g, ''));
+          if (Number.isFinite(numericTerm) && numericTerm > 0) {
+            orClauses.push(`amount.eq.${numericTerm}`);
+          }
+          if (searchClientIds.length > 0) {
+            orClauses.push(`client_id.in.(${searchClientIds.join(',')})`);
+          }
+          if (searchPolicyIds.length > 0) {
+            orClauses.push(`policy_id.in.(${searchPolicyIds.join(',')})`);
+          }
+          q = q.or(orClauses.join(','));
         }
         if (companies.length > 0) {
           q = q.in("policy.company_id", companies);
@@ -1739,9 +1815,39 @@ export default function Receipts() {
       if (dateTo) q = q.lte("receipt_date", dateTo);
       if (paymentMethods.length > 0) q = q.in("payment_method", paymentMethods);
       if (branchFilter) q = q.eq("branch_id", branchFilter);
-      if (searchQuery.trim()) {
-        const term = searchQuery.trim();
-        q = q.or(`client_name.ilike.%${term}%,car_number.ilike.%${term}%`);
+      const trimmedSearch = searchQuery.trim();
+      if (trimmedSearch) {
+        // Same multi-field search the table view uses — keep them in
+        // lockstep so "طباعة الكل" reflects exactly what the user
+        // sees on screen.
+        const orClauses: string[] = [
+          `client_name.ilike.%${trimmedSearch}%`,
+          `car_number.ilike.%${trimmedSearch}%`,
+        ];
+        const numericTerm = Number(trimmedSearch.replace(/,/g, ''));
+        if (Number.isFinite(numericTerm) && numericTerm > 0) {
+          orClauses.push(`amount.eq.${numericTerm}`);
+        }
+        if (/^\d{4,}$/.test(trimmedSearch)) {
+          const { data: idClients } = await supabase
+            .from('clients')
+            .select('id')
+            .ilike('id_number', `%${trimmedSearch}%`)
+            .limit(50);
+          const clientIds = (idClients ?? []).map((c: any) => c.id);
+          if (clientIds.length > 0) {
+            orClauses.push(`client_id.in.(${clientIds.join(',')})`);
+            const { data: idPolicies } = await supabase
+              .from('policies')
+              .select('id')
+              .in('client_id', clientIds);
+            const policyIds = (idPolicies ?? []).map((p: any) => p.id);
+            if (policyIds.length > 0) {
+              orClauses.push(`policy_id.in.(${policyIds.join(',')})`);
+            }
+          }
+        }
+        q = q.or(orClauses.join(','));
       }
       if (companies.length > 0) q = q.in("policy.company_id", companies);
       if (types.length > 0) {
@@ -1979,7 +2085,7 @@ export default function Receipts() {
                   type="search"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="بحث باسم العميل أو رقم السيارة..."
+                  placeholder="بحث: اسم / رقم هوية / رقم سيارة / مبلغ..."
                   className="h-8 w-full pr-8 text-sm"
                 />
               </div>
