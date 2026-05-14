@@ -115,6 +115,14 @@ export function AddBrokerCreditNoteDialog({
       // NULL since this isn't tied to a customer. The receipts page
       // and accounting balance both look at broker_id to scope
       // broker-related rows.
+      // receipts.notes is the single free-text column. Combine the
+      // reason + the optional notes so neither is lost — the reason
+      // leads, the extra notes append below under a labelled line.
+      const trimmedNotes = notes.trim();
+      const combinedNotes = trimmedNotes
+        ? `${description.trim()}\nملاحظات: ${trimmedNotes}`
+        : description.trim();
+
       const { data: receiptRow, error: receiptErr } = await supabase
         .from('receipts')
         .insert({
@@ -126,7 +134,7 @@ export function AddBrokerCreditNoteDialog({
           broker_id: broker.id,
           amount: amt,
           receipt_date: issueDate,
-          notes: description.trim(),
+          notes: combinedNotes,
           agent_id: agentId,
           // No branch resolution for brokers — they're agency-wide
           // entities, not branch-scoped.

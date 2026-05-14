@@ -141,6 +141,15 @@ export function AddCreditNoteDialog({
       //    tied to a specific policy. The kashf / wallet UIs handle
       //    null policy_id by attributing the credit to the customer
       //    as a whole.
+      // receipts.notes is the single free-text column on this side;
+      // combine reason + extra notes so the longer text isn't lost.
+      // The wallet_transaction already carries them separately
+      // (description + notes), so the wallet-level audit trail keeps
+      // its precision.
+      const trimmedNotes = notes.trim();
+      const combinedReceiptNotes = trimmedNotes
+        ? `${description.trim()}\nملاحظات: ${trimmedNotes}`
+        : description.trim();
       const { data: receiptRow, error: receiptErr } = await supabase
         .from('receipts')
         .insert({
@@ -152,7 +161,7 @@ export function AddCreditNoteDialog({
           wallet_transaction_id: walletRow?.id,
           amount: amt,
           receipt_date: issueDate,
-          notes: description.trim(),
+          notes: combinedReceiptNotes,
           agent_id: agentId,
           branch_id: branchId,
           created_by: user?.id ?? null,
