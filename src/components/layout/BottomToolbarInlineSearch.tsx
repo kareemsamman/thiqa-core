@@ -374,18 +374,15 @@ export function BottomToolbarInlineSearch({
                   {r.full_name}
                 </div>
                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
-                  {r.matchedCarNumber ? (
-                    <>
-                      <Car className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                      <span className="ltr-nums">{r.matchedCarNumber}</span>
-                    </>
-                  ) : (
-                    <>
-                      <IdCard className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                      <span className="ltr-nums">{r.id_number}</span>
-                    </>
-                  )}
+                  <IdCard className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  <span className="ltr-nums">{r.id_number}</span>
                 </div>
+                {r.matchedCarNumber && (
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
+                    <Car className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                    <span className="ltr-nums">{r.matchedCarNumber}</span>
+                  </div>
+                )}
               </button>
             ))}
           </div>
