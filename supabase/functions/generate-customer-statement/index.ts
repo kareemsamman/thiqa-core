@@ -1387,10 +1387,12 @@ function buildStatementHtml(args: BuildArgs): string {
   const groupedReceipts = new Map<ReceiptGroupKey, ReceiptGroup>();
   const standaloneReceipts: any[] = [];
   for (const r of ledger) {
-    // Skip credit_notes whose obligation was consumed at sale time —
-    // they're already accounted for in the consuming package's debit
-    // reduction; rendering them here would double-subtract.
-    if (hideCreditNoteIds.has(r.id)) continue;
+    // Per user feedback: NEVER hide a credit_note from the kashf. The
+    // customer must see every إشعار دائن the office issued — for
+    // transparency and audit. The "consumed at sale" case is handled
+    // by setting balanceDelta=0 on the row (notation only) so the
+    // running balance doesn't double-subtract. See balanceDelta block
+    // below.
     const key = groupKeyFor(r);
     if (!key) {
       standaloneReceipts.push(r);
@@ -1493,23 +1495,37 @@ function buildStatementHtml(args: BuildArgs): string {
       ? new Date(r.created_at).getTime()
       : new Date(r.receipt_date).getTime();
     // Per-event balance contribution per the user's accounting rules:
-    //   • إشعار دائن (credit_note) ALWAYS subtracts from the balance
-    //     — it puts a credit into the customer's wallet, reducing
-    //     what they owe us in the system.
+    //   • إشعار دائن (credit_note):
+    //       — Outstanding (not yet applied): subtracts from balance,
+    //         it's a real wallet credit the office owes the customer.
+    //       — Already consumed against a new transaction at sale
+    //         time: balanceDelta=0. The consuming transaction already
+    //         carries the full gross debit, so subtracting the credit
+    //         here too would double-count. The row stays VISIBLE for
+    //         transparency, with a subline note.
     //   • سند صرف (disbursement) is 0 — it's external cash from the
     //     agent's pocket, doesn't touch the wallet, doesn't change
     //     what the customer owes. "طلع المصاري وراحوا."
     //   • Cancellation receipt (refused cheque) still puts debt back.
+    const creditWasConsumed = r.receipt_type === 'credit_note' && hideCreditNoteIds.has(r.id);
     const balanceDelta = (() => {
       switch (r.receipt_type) {
         case 'payment':       return -displayedAmount; // customer paid
         case 'accident_fee':  return -displayedAmount; // billed as payment-like
         case 'cancellation':  return +displayedAmount; // refused cheque puts debt back
         case 'disbursement':  return 0;                // external cash, no wallet effect
-        case 'credit_note':   return -displayedAmount; // wallet credit
+        case 'credit_note':   return creditWasConsumed ? 0 : -displayedAmount;
         default:              return isDebit ? +displayedAmount : -displayedAmount;
       }
     })();
+    // Surface a small note under the row for consumed credits so the
+    // customer understands why the balance column didn't move on this
+    // line — the credit was applied to a new transaction directly.
+    if (creditWasConsumed) {
+      detailLines.push(
+        `<div class="ledger-detail"><strong>تم خصمه من معاملة جديدة</strong> — لا تأثير على الرصيد هون</div>`,
+      );
+    }
     events.push({
       date: r.receipt_date,
       timestamp: Number.isNaN(receiptTimestamp) ? 0 : receiptTimestamp,
