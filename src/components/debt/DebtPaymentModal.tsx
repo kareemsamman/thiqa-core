@@ -697,18 +697,18 @@ export function DebtPaymentModal({
       items.sort((a, b) => b.remainingTotal - a.remainingTotal);
 
       // ─── Kashf-aligned outstanding ──────────────────────────────
-      // The items[] sum can drift from the kashf number for two
-      // reasons:
-      //   • per-package clamping loses payments mirrored onto a
-      //     transfer destination (those don't reach policiesData),
-      //   • cancellation refunds (credit_note / disbursement) and
-      //     credit_consumed wallet entries aren't subtracted here.
-      // Recompute the customer's true outstanding using the same
-      // formula the kashf totals box uses — sum every non-destination
-      // policy's office_claim, add customer_pays transfer fees, then
-      // subtract gross paid + credit_consumed. The number lands in
-      // kashfOutstanding state and overrides totalRemaining for the
-      // summary tile and the payment ceiling below.
+      // Same formula as ClientDetails.fetchPaymentSummary and the
+      // kashf totals box:
+      //   outstanding = sum_office_claim(non-destination, non-broker)
+      //               + transfer_customer_pays
+      //               − gross_paid
+      //               − credit_consumed
+      //               − transfer_office_pays (refunds the office owes)
+      // The local items[] sum drifts because per-package clamping
+      // loses payments mirrored to transfer destinations and the
+      // cancellation refunds aren't netted. This kashfTotal is what
+      // the summary tile + payment ceiling use below; the items[]
+      // breakdown stays for "which transactions still have lines".
       const officeClaimSum = (policiesData || [])
         .filter((p: any) => !p.broker_id)
         .reduce((sum: number, p: any) => {
@@ -716,8 +716,34 @@ export function DebtPaymentModal({
           if (p.policy_type_parent === 'ELZAMI') return sum + commission;
           return sum + Number(p.insurance_price || 0) + commission;
         }, 0);
-      const transferCustomerPaysSum = Object.values(transferAmountByPolicy)
-        .reduce((s: number, v: number) => s + v, 0);
+      // Transfer adjustments — fetch ALL transfer rows where ANY of
+      // the customer's policies (source or destination, active or
+      // canceled) is on either side. transferAmountByPolicy built
+      // earlier only contained destinations indexed by new_policy_id;
+      // for the kashf-aligned outstanding we want the gross
+      // customer_pays / office_pays totals across every transfer
+      // the customer was party to.
+      const allCustomerPolicyIds = (everyPolicyRow || []).map((p: any) => p.id);
+      let transferCustomerPaysSum = 0;
+      let transferOfficePaysSum = 0;
+      if (allCustomerPolicyIds.length > 0) {
+        const customerIdsList = allCustomerPolicyIds.join(',');
+        const { data: allTransfers } = await supabase
+          .from('policy_transfers')
+          .select('adjustment_amount, adjustment_type, policy_id, new_policy_id')
+          .or(
+            `policy_id.in.(${customerIdsList}),new_policy_id.in.(${customerIdsList})`,
+          );
+        for (const t of (allTransfers || []) as any[]) {
+          const amt = Number(t.adjustment_amount || 0);
+          if (amt <= 0.01) continue;
+          if (t.adjustment_type === 'customer_pays') {
+            transferCustomerPaysSum += amt;
+          } else if (t.adjustment_type === 'office_pays') {
+            transferOfficePaysSum += amt;
+          }
+        }
+      }
       const { data: consumedRows } = await supabase
         .from('customer_wallet_transactions')
         .select('amount')
@@ -728,7 +754,11 @@ export function DebtPaymentModal({
         .reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
       const kashfTotal = Math.max(
         0,
-        officeClaimSum + transferCustomerPaysSum - grossPaid - creditConsumedTotal,
+        officeClaimSum
+          + transferCustomerPaysSum
+          - grossPaid
+          - creditConsumedTotal
+          - transferOfficePaysSum,
       );
       setKashfOutstanding(kashfTotal);
 
