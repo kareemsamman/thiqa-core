@@ -909,8 +909,25 @@ serve(async (req) => {
       }
     } else if (receiptRow.payment_id) {
       // Customer payment path — the legacy bulk-receipt source.
-      // Pull the anchor + every payment in the same
-      // payment_session_id / batch_id.
+      //
+      // Scope rules (نفس قاعدة العميل، مهمة لما تفهم الفرق بين السندَين):
+      //
+      // • payment (سند قبض) → fan out to the whole session. سند قبض
+      //   يطبع لحظة التحصيل بكامل صفوفها (كل الشيكات + الكاش الي
+      //   انجمعوا بجلسة دفع واحدة). الشيك الملغى لاحقاً يضل ظاهر هون
+      //   بنفس شكله وقيمته — السند وثيقة تاريخية مجمّدة، الإلغاء
+      //   يُعالَج بسند إلغاء منفصل (feedback_payment_receipt_immutable).
+      //
+      // • cancellation (سند إلغاء) → MUST scope to the SPECIFIC
+      //   cheque this voucher was issued for. كل سند إلغاء مربوط
+      //   بـ payment_id واحد فقط؛ لما يلغي المستخدم شيكاً ثانياً
+      //   بنفس الجلسة، ما لازم يبيّن على هاد السند. لو الشيك المُلغى
+      //   مقسوم على عدة بوالص (batch_id splits)، بنفتح bبس على batch_id
+      //   حتى يطلع الشيك بصف واحد بقيمته الكاملة.
+      //
+      // الـ bug القديم: كانت كل أنواع السندات بتوسّع للجلسة كلها، وسند
+      // الإلغاء بيفلتر refused=true بس — يعني لو لغّيت شيكين بنفس
+      // الجلسة بأوقات مختلفة، كل سند إلغاء بيظهر الاثنين.
       const { data: anchorPayment } = await supabase
         .from('policy_payments')
         .select('payment_session_id, batch_id, payment_date, receipt_number, notes')
@@ -919,29 +936,47 @@ serve(async (req) => {
       if (anchorPayment) {
         voucherDate = (anchorPayment.payment_date as string) || voucherDate;
         voucherNotes = (anchorPayment.notes as string | null) ?? voucherNotes;
-        if (anchorPayment.receipt_number) {
+        // For payment type we want the SHARED R-number that lives on
+        // policy_payments (one number for the whole session, formatted
+        // by the allocator). For cancellation type we keep the
+        // cancellation receipt's OWN serial number — anchorPayment's
+        // number is the ORIGINAL payment's R-number, which would
+        // overwrite the correct سند إلغاء number with the cancelled
+        // سند قبض's number.
+        if (receiptType !== 'cancellation' && anchorPayment.receipt_number) {
           voucherNumber = String(anchorPayment.receipt_number);
         }
-        const sessionId = anchorPayment.payment_session_id ?? anchorPayment.batch_id;
-        const filterCol = sessionId ? (anchorPayment.payment_session_id ? 'payment_session_id' : 'batch_id') : 'id';
-        const filterVal = sessionId ?? receiptRow.payment_id;
+
+        let filterCol: string;
+        let filterVal: string;
+        if (receiptType === 'cancellation') {
+          // سند إلغاء: حصراً الشيك الملغى نفسه (+ splits لو مقسوم).
+          if (anchorPayment.batch_id) {
+            filterCol = 'batch_id';
+            filterVal = anchorPayment.batch_id as string;
+          } else {
+            filterCol = 'id';
+            filterVal = receiptRow.payment_id as string;
+          }
+        } else {
+          // سند قبض (وأي نوع تاني): الجلسة كاملة.
+          const sessionId = anchorPayment.payment_session_id ?? anchorPayment.batch_id;
+          filterCol = sessionId ? (anchorPayment.payment_session_id ? 'payment_session_id' : 'batch_id') : 'id';
+          filterVal = (sessionId ?? receiptRow.payment_id) as string;
+        }
+
         const { data: siblings } = await supabase
           .from('policy_payments')
           .select(`
-            payment_type, cheque_number, cheque_due_date, cheque_date, cheque_issue_date,
+            id, batch_id, payment_type, cheque_number, cheque_due_date, cheque_date, cheque_issue_date,
             payment_date, bank_code, branch_code, notes, amount, refused
           `)
           .eq(filterCol, filterVal);
         voucherTotal = 0;
         for (const r of (siblings ?? []) as any[]) {
-          // سند قبض هو وثيقة تاريخية مجمّدة — لازم يطبع زي ما انكتب،
-          // الشيك الملغى يضل ظاهر بنفس الشكل والقيمة، الإلغاء يُعالج
-          // بسند إلغاء منفصل (feedback_payment_receipt_immutable).
-          //
-          // سند الإلغاء هو الوجه المعاكس: ما بيظهر إلا اللي انلغى فعلاً.
-          // كنا قبل هيك نطبع الصفوف الـ refused=false في سند الإلغاء،
-          // فكان يطلع الكاش والتحويل اللي ما انلغوا كأنهم تم إلغاؤهم —
-          // وهاد بالظبط اللي اشتكى منه المستخدم.
+          // سند الإلغاء حصراً يظهر الشيك المُلغى. الـ scope فوق ضيّق
+          // الاستعلام أصلاً، بس defensive guard خفيف بحال صار split
+          // وبعض الـ rows ضلوا refused=false (ما بصير عادةً).
           if (receiptType === 'cancellation' && !r.refused) continue;
           const amt = Number(r.amount || 0);
           voucherTotal += amt;
@@ -968,6 +1003,18 @@ serve(async (req) => {
             amount: amt,
           });
         }
+
+        // سند إلغاء + شيك مقسوم: نجمع الـ splits بصف واحد بقيمة
+        // الشيك الكاملة (face value). من غير هاي الخطوة، شيك مقسوم
+        // على 3 بوالص بيطلع 3 صفوف على سند الإلغاء — نفس الـ collapse
+        // الي بنعمله على سند القبض، بس هون مطلوب عشان السند يطلع
+        // فيه صف واحد فقط للشيك المُلغى.
+        if (receiptType === 'cancellation' && lines.length > 1) {
+          const totalAmt = lines.reduce((s, l) => s + l.amount, 0);
+          lines = [{ ...lines[0], amount: totalAmt }];
+          voucherTotal = totalAmt;
+        }
+
         if (voucherTotal === 0) voucherTotal = Number(receiptRow.amount || 0);
       }
     }

@@ -573,15 +573,21 @@ serve(async (req) => {
         .eq('id', voucherRow.payment_id)
         .maybeSingle();
       if (src) {
-        const groupKey = src.payment_session_id || src.batch_id || src.id;
-        const filterCol = src.payment_session_id
-          ? 'payment_session_id'
-          : (src.batch_id ? 'batch_id' : 'id');
+        // سند الإلغاء لازم يظهر فقط الشيك الملغى نفسه، مش كل
+        // الـ refused rows بنفس الجلسة. لو الشيك مقسوم على عدة
+        // بوالص (batch_id splits) بنفتح على batch_id حتى يطلع
+        // الشيك بصف واحد بقيمته الكاملة. غير هيك (شيك واحد فردي
+        // أو كاش/تحويل): بنحصر على الـ id نفسه.
+        //
+        // الـ bug القديم: كان يفتح على payment_session_id ويفلتر
+        // refused=true — يعني لو لغّيت شيكين بنفس الجلسة بأوقات
+        // مختلفة، كل سند إلغاء بيظهر الاثنين بدل الواحد.
+        const filterCol = src.batch_id ? 'batch_id' : 'id';
+        const groupKey = src.batch_id ?? src.id;
         const { data: siblings } = await supabase
           .from('policy_payments')
           .select('id, receipt_number, payment_type, cheque_number, cheque_date, payment_date, bank_code, branch_code, notes, amount, batch_id, refused')
-          .eq(filterCol, groupKey)
-          .eq('refused', true);
+          .eq(filterCol, groupKey);
         const rows = (siblings ?? []) as Array<{
           id: string;
           receipt_number: string | null;
@@ -621,6 +627,10 @@ serve(async (req) => {
         const standalone: Line[] = [];
         for (const r of rows) {
           if (!r.payment_type) continue;
+          // Defensive: scope above already isolates to the cancelled
+          // cheque's id / batch_id; skip any row that somehow isn't
+          // refused so the سند إلغاء never shows an active row.
+          if (!r.refused) continue;
           const baseLine: Line = {
             payment_type: r.payment_type,
             cheque_number: r.cheque_number,
