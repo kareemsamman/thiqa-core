@@ -1130,6 +1130,23 @@ export default function Receipts() {
     return Array.from(map.values());
   }, [receipts, sessionByPaymentId]);
 
+  // Identify the counterparty (broker vs client) for a group from its
+  // first row. Used by both the badge label and the filter dropdown.
+  const getCounterparty = useCallback((group: ReceiptGroup): 'broker' | 'client' | null => {
+    const r = group.receipts[0] as any;
+    if (!r) return null;
+    if (r.broker_id) return 'broker';
+    if (r.client_id || r.policy_id) return 'client';
+    return null;
+  }, []);
+
+  // Apply the counterparty filter from the filter panel.
+  const filteredGroups: ReceiptGroup[] = useMemo(() => {
+    const cp = filters.counterparty ?? 'all';
+    if (cp === 'all') return groups;
+    return groups.filter((g) => getCounterparty(g) === cp);
+  }, [groups, filters.counterparty, getCounterparty]);
+
   // ─── Print ─────────────────────────────────────────────────────
   //
   // For auto-source groups (rows mirrored from policy_payments) we call
@@ -2413,6 +2430,7 @@ export default function Receipts() {
                   types: true,
                   paymentMethods: true,
                   hideElzami: true,
+                  counterparty: true,
                 }}
                 hideElzami={hideElzamiPayments}
                 onHideElzamiChange={setHideElzamiPayments}
@@ -3102,7 +3120,7 @@ export default function Receipts() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {groups.map((group) => {
+                {filteredGroups.map((group) => {
                   const firstReceipt = group.receipts[0];
                   const combinedMethodLabel = Array.from(
                     new Set(group.receipts.map((r) => paymentLabelShort(r.payment_method))),
@@ -3232,10 +3250,24 @@ export default function Receipts() {
                           {(() => {
                             const cfg = RECEIPT_TYPE_BADGE[rowType] ?? RECEIPT_TYPE_BADGE.payment;
                             const TypeIcon = cfg.icon;
+                            // Append the counterparty so the agent reads
+                            // "سند قبض من عميل" / "سند صرف لوسيط" at a
+                            // glance. Direction word depends on type:
+                            // payments come FROM the counterparty,
+                            // disbursements / credit_notes go TO them.
+                            // Cancellations stay bare — they refer to a
+                            // prior receipt, not a counterparty event.
+                            const cp = getCounterparty(group);
+                            let suffix = '';
+                            if (cp && rowType !== 'cancellation') {
+                              const who = cp === 'broker' ? 'وسيط' : 'عميل';
+                              const prep = rowType === 'payment' ? 'من' : 'لـ';
+                              suffix = ` ${prep}${who}`;
+                            }
                             return (
                               <Badge variant={cfg.variant} className="gap-1">
                                 <TypeIcon className="h-3 w-3" />
-                                <span>{cfg.label}</span>
+                                <span>{cfg.label}{suffix}</span>
                               </Badge>
                             );
                           })()}

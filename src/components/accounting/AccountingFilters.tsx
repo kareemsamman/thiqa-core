@@ -15,6 +15,8 @@ export interface FilterOption {
   label: string;
 }
 
+export type CounterpartyFilter = 'all' | 'broker' | 'client';
+
 export interface AccountingFiltersValue {
   /** First day of selected range (or month), ISO yyyy-MM-dd. */
   dateFrom: string;
@@ -23,6 +25,8 @@ export interface AccountingFiltersValue {
   companies: string[];
   types: string[];
   paymentMethods: string[];
+  /** Limit رows to a counterparty kind — broker vs customer. Default 'all'. */
+  counterparty?: CounterpartyFilter;
 }
 
 interface Props {
@@ -37,6 +41,7 @@ interface Props {
     types?: boolean;
     paymentMethods?: boolean;
     hideElzami?: boolean;
+    counterparty?: boolean;
   };
   // Optional standalone toggle wired only on /receipts. Lives outside
   // AccountingFiltersValue because other pages (e.g. /accounting) don't
@@ -52,6 +57,7 @@ const ALL_SHOWN: Required<NonNullable<Props['show']>> = {
   types: true,
   paymentMethods: true,
   hideElzami: false,
+  counterparty: false,
 };
 
 type DateMode = 'month' | 'range';
@@ -104,12 +110,14 @@ export function AccountingFilters({
 
   const monthInput = isoToMonthInput(value.dateFrom);
 
+  const counterparty: CounterpartyFilter = value.counterparty ?? 'all';
   const activeCount =
     (value.dateFrom ? 1 : 0) +
     value.companies.length +
     value.types.length +
     value.paymentMethods.length +
-    (visible.hideElzami && hideElzami ? 1 : 0);
+    (visible.hideElzami && hideElzami ? 1 : 0) +
+    (visible.counterparty && counterparty !== 'all' ? 1 : 0);
 
   const reset = () => {
     onChange({
@@ -118,6 +126,7 @@ export function AccountingFilters({
       companies: [],
       types: [],
       paymentMethods: [],
+      counterparty: 'all',
     });
     if (visible.hideElzami) onHideElzamiChange?.(false);
   };
@@ -256,6 +265,31 @@ export function AccountingFilters({
                 onChange={(p) => onChange({ ...value, paymentMethods: p })}
                 placeholder="كل الطرق"
               />
+            </div>
+          )}
+
+          {visible.counterparty && (
+            <div className="space-y-1.5">
+              <Label className="text-xs">المستفيد</Label>
+              <div className="inline-flex rounded-md border bg-muted p-0.5 text-[12px] w-full">
+                {([
+                  { v: 'all', l: 'الكل' },
+                  { v: 'client', l: 'عميل' },
+                  { v: 'broker', l: 'وسيط' },
+                ] as Array<{ v: CounterpartyFilter; l: string }>).map((opt) => (
+                  <button
+                    key={opt.v}
+                    type="button"
+                    onClick={() => onChange({ ...value, counterparty: opt.v })}
+                    className={cn(
+                      'flex-1 px-2.5 py-1 rounded transition-colors',
+                      counterparty === opt.v ? 'bg-white shadow-sm font-medium' : 'text-muted-foreground',
+                    )}
+                  >
+                    {opt.l}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 
