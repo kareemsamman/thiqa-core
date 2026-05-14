@@ -1716,85 +1716,61 @@ export default function Receipts() {
   };
 
   const openCancelDialog = async (group: ReceiptGroupView) => {
-    // Resolve the customer from the clicked row so we can expand the
-    // cancel scope to every non-إلزامي / non-visa_external payment
-    // this customer ever made — same scope the printed receipt shows.
-    // Anything less and the row-clicked-cancel ends up half-voiding a
-    // multi-split cheque (e.g. كریم تست 7 ended with cheque 901 slice
-    // 834 cancelled while slice 332 stayed live — the bookkeeper's
-    // worst nightmare).
-    const firstReceipt = group.receipts.find((r) => r.policy);
-    const policyResolved = Array.isArray((firstReceipt as any)?.policy)
-      ? (firstReceipt as any).policy[0]
-      : (firstReceipt as any)?.policy;
-    const clientId =
-      policyResolved?.clients?.id ||
-      policyResolved?.client_id ||
-      (Array.isArray(policyResolved?.clients) ? policyResolved.clients[0]?.id : null);
-    if (!clientId) {
-      toast.error('لم يمكن تحديد العميل من هذا الصف');
+    // إلغاء السند بيحصر على دفعات السند المضغوط عليه (الـ session
+    // الحالية) فقط، مش على كل دفعات الزبون. النسخة القديمة كانت
+    // بتمسح كل غير-المُلغاة بكل المعاملات للزبون — لما الزبون عنده
+    // كذا سند قبض، الواحد كان يلغي كلهم بضغطة وحدة.
+    //
+    // قاعدة الـ multi-split cheque (شيك مقسوم على عدة بوالص):
+    // لو نصف الشيك بـ سند تاني، بنوسّع الـ scope ليشمل كل
+    // الـ batch_id siblings — الشيك الفيزيكال ما بيتجزّأ، لازم
+    // يلغي كله مرّة وحدة. هاي الـ extension فقط للـ splits، مش
+    // لكل دفعات الزبون.
+    const groupPaymentIds = group.receipts
+      .map((r) => (r as any).payment_id)
+      .filter((id: any): id is string => typeof id === 'string' && id.length > 0);
+    if (groupPaymentIds.length === 0) {
+      toast.error('لا توجد دفعات قابلة للإلغاء في هذا السند');
       return;
     }
 
     setReasonResolving(true);
     try {
-      const { data: policies } = await supabase
-        .from('policies')
-        .select('id, policy_type_parent, insurance_price')
-        .eq('client_id', clientId)
-        .is('deleted_at', null);
-      const policyIds = (policies ?? []).map((p: any) => p.id);
-      if (policyIds.length === 0) {
-        toast.error('لا توجد بوالص لهذا العميل');
-        return;
-      }
-
-      const { data: payments } = await supabase
+      // Stage 1: fetch the clicked group's payments to discover any
+      // batch_ids they participate in.
+      const { data: groupPayments } = await supabase
         .from('policy_payments')
-        .select('id, amount, payment_type, batch_id, policy_id, refused, locked, printed_at')
-        .in('policy_id', policyIds);
-
-      const policyById = new Map<string, any>(
-        (policies ?? []).map((p: any) => [p.id, p]),
-      );
-
-      // Stage 1: pick the live rows that survive the same filter the
-      // print uses (skip already-refused, skip visa_external, skip
-      // إلزامي passthrough — same rule from the edge function).
-      // إلزامي passthrough now also requires locked=true so a manual
-      // cash إلزامي premium the office actually collected isn't
-      // wrongly hidden / skipped from the cancel scope.
-      const survivors = (payments ?? []).filter((p: any) => {
-        if (p.refused) return false;
-        if (p.payment_type === 'visa_external') return false;
-        if (p.locked !== true) return true;
-        const pol = policyById.get(p.policy_id);
-        if (!pol) return true;
-        if (pol.policy_type_parent !== 'ELZAMI') return true;
-        const price = Number(pol.insurance_price ?? 0);
-        if (price <= 0) return true;
-        return Math.abs(Number(p.amount ?? 0) - price) >= 0.005;
-      });
-
-      // Stage 2: keep multi-split cheques whole. If any slice of a
-      // batch survives the filter, every still-live slice of that
-      // batch joins the target — a physical cheque can't be half-
-      // cancelled. Already-refused siblings are left alone (no point
-      // re-flipping refused=true on rows that already are).
+        .select('id, batch_id, refused')
+        .in('id', groupPaymentIds);
       const batchIds = new Set(
-        survivors
-          .filter((p: any) => !!p.batch_id)
+        (groupPayments ?? [])
+          .filter((p: any) => !!p.batch_id && !p.refused)
           .map((p: any) => p.batch_id as string),
       );
-      const survivorIds = new Set(survivors.map((p: any) => p.id));
-      const finalRows = (payments ?? []).filter((p: any) => {
-        if (p.refused) return false;
-        if (survivorIds.has(p.id)) return true;
-        return !!p.batch_id && batchIds.has(p.batch_id);
-      });
+
+      // Stage 2: gather every live payment that's either in the group
+      // OR shares a batch_id with one of the group's rows (to keep
+      // multi-split cheques whole).
+      const targetIdSet = new Set<string>(groupPaymentIds);
+      if (batchIds.size > 0) {
+        const { data: batchSiblings } = await supabase
+          .from('policy_payments')
+          .select('id, refused')
+          .in('batch_id', Array.from(batchIds));
+        for (const r of (batchSiblings ?? []) as any[]) {
+          if (!r.refused) targetIdSet.add(r.id as string);
+        }
+      }
+
+      // Stage 3: resolve the final live rows + printed_at flag.
+      const { data: liveRows } = await supabase
+        .from('policy_payments')
+        .select('id, amount, printed_at, refused')
+        .in('id', Array.from(targetIdSet));
+      const finalRows = (liveRows ?? []).filter((p: any) => !p.refused);
 
       if (finalRows.length === 0) {
-        toast.error('لا توجد سندات قابلة للإلغاء (كل دفعات العميل ملغاة أو إلزامي/فيزا خارجي)');
+        toast.error('لا توجد سندات قابلة للإلغاء (كل دفعات هذا السند ملغاة)');
         return;
       }
 
@@ -3535,13 +3511,21 @@ export default function Receipts() {
                     group.receipts.length === 1 && firstReceipt?.payment_method === "cheque"
                       ? firstReceipt.cheque_number || "-"
                       : "-";
-                  const notesPreview =
-                    group.receipts.length === 1
-                      ? firstReceipt?.notes || "-"
-                      : group.receipts
-                          .map((r) => r.notes)
-                          .filter(Boolean)
-                          .join(" · ") || "-";
+                  // Dedupe notes — every receipt in the group is mirrored
+                  // from a sibling policy_payment that often shares the
+                  // same note (user typed it once for the session). Without
+                  // dedup, "jsj" repeats N times like "jsj · jsj · jsj".
+                  const notesPreview = (() => {
+                    if (group.receipts.length === 1) {
+                      return firstReceipt?.notes || "-";
+                    }
+                    const seen = new Set<string>();
+                    for (const r of group.receipts) {
+                      const note = (r.notes ?? "").trim();
+                      if (note) seen.add(note);
+                    }
+                    return seen.size > 0 ? Array.from(seen).join(" · ") : "-";
+                  })();
                   return (
                     <TableRow
                       key={group.key}
