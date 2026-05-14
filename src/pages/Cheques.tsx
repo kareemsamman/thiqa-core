@@ -176,6 +176,11 @@ export default function Cheques() {
   const [cheques, setCheques] = useState<ChequeRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  // Debounced mirror of searchQuery — used as a server-side filter so
+  // typing a cheque number / customer name searches across ALL pages,
+  // not just the current paginated 100-row window. 300ms keeps the
+  // input snappy while throttling DB roundtrips.
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   // Page-level branch filter — global admins only.
   const [filterBranch, setFilterBranch] = useState<string | null>(null);
@@ -601,6 +606,82 @@ export default function Cheques() {
   const fetchCheques = useCallback(async () => {
     setLoading(true);
     try {
+      // ── Server-side search across all pages ────────────────────
+      // When the user is actively searching, we DON'T paginate —
+      // they're looking for a specific cheque number or customer
+      // that might be on any page. We resolve the search to a set
+      // of matching cheque IDs (via cheque_number ilike + clients
+      // matched by name/phone → their policies → their cheques),
+      // then fetch the full cheque rows for that ID set. When the
+      // search box is empty we fall back to normal pagination.
+      const q = debouncedSearch.trim();
+      let searchIds: string[] | null = null;
+      if (q) {
+        // PostgREST `.or()` with ilike values containing commas / dots
+        // / parens is fragile, so we fan out into three plain ilike
+        // queries in parallel: cheque number, client name, client
+        // phone. The pattern uses raw PostgreSQL ILIKE wildcards —
+        // bare % or _ from the user become wildcards, which is
+        // acceptable for a free-text search box.
+        const pattern = `%${q}%`;
+        const [byChequeNumberRes, byNameRes, byPhoneRes] = await Promise.all([
+          supabase
+            .from('policy_payments')
+            .select('id')
+            .eq('payment_type', 'cheque')
+            .ilike('cheque_number', pattern)
+            .limit(500),
+          supabase
+            .from('clients')
+            .select('id')
+            .ilike('full_name', pattern)
+            .limit(100),
+          supabase
+            .from('clients')
+            .select('id')
+            .ilike('phone_number', pattern)
+            .limit(100),
+        ]);
+
+        const idSet = new Set<string>();
+        for (const r of (byChequeNumberRes.data || []) as any[]) idSet.add(r.id);
+
+        const clientIdSet = new Set<string>();
+        for (const c of (byNameRes.data || []) as any[]) clientIdSet.add(c.id);
+        for (const c of (byPhoneRes.data || []) as any[]) clientIdSet.add(c.id);
+        const clientIds = Array.from(clientIdSet);
+
+        if (clientIds.length > 0) {
+          const { data: policyRows } = await supabase
+            .from('policies')
+            .select('id')
+            .in('client_id', clientIds);
+          const policyIds = (policyRows || []).map((p: any) => p.id);
+          if (policyIds.length > 0) {
+            const { data: chequeIdRows } = await supabase
+              .from('policy_payments')
+              .select('id')
+              .eq('payment_type', 'cheque')
+              .in('policy_id', policyIds)
+              .limit(500);
+            for (const r of (chequeIdRows || []) as any[]) idSet.add(r.id);
+          }
+        }
+
+        searchIds = Array.from(idSet);
+        if (searchIds.length === 0) {
+          // No matching customer cheques — but outgoing cheques may
+          // still match by recipient/number client-side via the
+          // visibleCheques memo. So we still fetch outgoing and let
+          // the memo narrow them.
+          const outgoingOnly = await fetchOutgoingCheques();
+          setCheques(outgoingOnly);
+          setTotalCount(0);
+          setLoading(false);
+          return;
+        }
+      }
+
       let query = supabase
         .from('policy_payments')
         .select(`
@@ -615,8 +696,16 @@ export default function Cheques() {
           )
         `, { count: 'exact' })
         .eq('payment_type', 'cheque')
-        .order('payment_date', { ascending: false })
-        .range((currentPage - 1) * pageSize, currentPage * pageSize - 1);
+        .order('payment_date', { ascending: false });
+
+      if (searchIds) {
+        // Search mode: fetch the full union of matched cheques, no
+        // pagination. The list is already capped by the ID-resolution
+        // queries above (~1000 ids max).
+        query = query.in('id', searchIds);
+      } else {
+        query = query.range((currentPage - 1) * pageSize, currentPage * pageSize - 1);
+      }
 
       if (statusFilter !== "all") {
         query = query.eq('cheque_status', statusFilter);
@@ -764,10 +853,23 @@ export default function Cheques() {
     } finally {
       setLoading(false);
     }
-  }, [currentPage, statusFilter, overdueOnly, dueTodayOnly, filterBranch, toast]);
+  }, [currentPage, statusFilter, overdueOnly, dueTodayOnly, filterBranch, debouncedSearch, toast]);
 
   useEffect(() => { fetchSummaryStats(); }, [fetchSummaryStats]);
   useEffect(() => { fetchCheques(); }, [fetchCheques]);
+
+  // Mirror searchQuery into debouncedSearch with a 300ms delay. Each
+  // keystroke restarts the timer so we only hit the DB once the user
+  // pauses typing. Resetting to page 1 in the same effect keeps the
+  // pagination state coherent — without it, switching from a deep
+  // page into search mode could return zero rows.
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      setDebouncedSearch(searchQuery.trim());
+      setCurrentPage(1);
+    }, 300);
+    return () => window.clearTimeout(t);
+  }, [searchQuery]);
 
   const handleStatusChange = async (chequeId: string, newStatus: string, reason?: string) => {
     try {
@@ -1596,9 +1698,30 @@ export default function Cheques() {
                 <Input
                   placeholder="بحث بالعميل، رقم الشيك، أو رقم الهاتف..."
                   value={searchQuery}
-                  onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
-                  className="pr-9"
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pr-9 pl-24"
                 />
+                {searchQuery && (
+                  // Two-state hint inside the input. While the debounce
+                  // timer is still running OR the fetch is in flight
+                  // (loading && searchQuery), show "جاري البحث..." so
+                  // the user gets immediate feedback that typing
+                  // registered. Otherwise show a small × to clear.
+                  (searchQuery.trim() !== debouncedSearch || (loading && debouncedSearch)) ? (
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-[11px] text-muted-foreground">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      جاري البحث…
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery('')}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] text-muted-foreground hover:text-foreground"
+                    >
+                      مسح
+                    </button>
+                  )
+                )}
               </div>
               <div className="space-y-2 sm:space-y-0 sm:flex sm:items-center sm:gap-2 sm:flex-wrap">
                 <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setCurrentPage(1); }}>
@@ -1847,20 +1970,26 @@ export default function Cheques() {
                 </Table>
               </div>
 
-              {/* Pagination */}
+              {/* Pagination. During an active search the result set
+                  is the full server-side match (capped, not paginated),
+                  so the prev/next controls are hidden — the counter on
+                  the right is enough context. */}
               <div className="flex items-center justify-between border-t border-border/30 px-4 py-3">
                 <p className="text-sm text-muted-foreground">
                   {customerGroups.length} عميل، {visibleCheques.length} شيك
+                  {debouncedSearch ? ' · نتائج البحث' : ''}
                 </p>
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setCurrentPage((p) => p - 1)}>
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                  <span className="text-sm text-muted-foreground">صفحة {currentPage} من {totalPages || 1}</span>
-                  <Button variant="outline" size="sm" disabled={currentPage >= totalPages} onClick={() => setCurrentPage((p) => p + 1)}>
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                </div>
+                {!debouncedSearch && (
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setCurrentPage((p) => p - 1)}>
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                    <span className="text-sm text-muted-foreground">صفحة {currentPage} من {totalPages || 1}</span>
+                    <Button variant="outline" size="sm" disabled={currentPage >= totalPages} onClick={() => setCurrentPage((p) => p + 1)}>
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
               </div>
             </Card>
           </TabsContent>
