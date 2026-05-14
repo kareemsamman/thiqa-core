@@ -81,6 +81,7 @@ import {
 import {
   AddVoucherDialog,
   type ClientLite,
+  type BrokerLite,
   type VoucherPickResult,
 } from "@/components/receipts/AddVoucherDialog";
 import { AddCreditNoteDialog } from "@/components/receipts/AddCreditNoteDialog";
@@ -742,6 +743,14 @@ export default function Receipts() {
   const [addVoucherOpen, setAddVoucherOpen] = useState(false);
   const [disburseClient, setDisburseClient] = useState<ClientLite | null>(null);
   const [creditNoteClient, setCreditNoteClient] = useState<ClientLite | null>(null);
+  // Broker routes — same AddSettlementDialog the accounting page
+  // uses, but launched from the wizard with a single pre-picked
+  // broker pinned as the only entity option. `kind` selects
+  // 'disbursement' (سند صرف لوسيط) vs 'receipt' (سند قبض من وسيط).
+  const [brokerSettlement, setBrokerSettlement] = useState<{
+    broker: BrokerLite;
+    kind: 'disbursement' | 'receipt';
+  } | null>(null);
 
   // After a voucher is created, hand the agent the print / SMS / WhatsApp
   // popup the rest of the app already uses. Two flavours:
@@ -1808,28 +1817,49 @@ export default function Receipts() {
   // and clicked متابعة again. Without the reset, two sub-modals
   // could end up stacked.
   const handleVoucherPicked = (result: VoucherPickResult) => {
-    if (result.counterparty !== 'client' || !result.client) {
-      // Phase 1 ships customer routes only — the picker prevents
-      // selecting non-customer counterparties via its disabled state,
-      // so this branch is defensive.
-      toast.info('هذا النوع رح يكون متاح قريباً');
-      return;
-    }
-    const c = result.client;
+    // Close any sibling sub-modal first — the user may be revising
+    // their choice after opening a previous one, and stacking two
+    // would corrupt Radix focus state.
     setDebtModalOpen(false);
     setDisburseClient(null);
     setCreditNoteClient(null);
-    setTimeout(() => {
-      if (result.kind === 'payment') {
-        setDebtModalClient({ id: c.id, full_name: c.full_name, phone: c.phone_number });
-        setDebtModalEditingSession(null);
-        setDebtModalOpen(true);
-      } else if (result.kind === 'disbursement') {
-        setDisburseClient(c);
-      } else if (result.kind === 'credit_note') {
-        setCreditNoteClient(c);
+    setBrokerSettlement(null);
+
+    if (result.counterparty === 'client' && result.client) {
+      const c = result.client;
+      setTimeout(() => {
+        if (result.kind === 'payment') {
+          setDebtModalClient({ id: c.id, full_name: c.full_name, phone: c.phone_number });
+          setDebtModalEditingSession(null);
+          setDebtModalOpen(true);
+        } else if (result.kind === 'disbursement') {
+          setDisburseClient(c);
+        } else if (result.kind === 'credit_note') {
+          setCreditNoteClient(c);
+        }
+      }, 100);
+      return;
+    }
+
+    if (result.counterparty === 'broker' && result.broker) {
+      // إشعار دائن for brokers has no infrastructure yet (no
+      // broker_wallet equivalent of customer_wallet_transactions),
+      // so explicitly bounce that case rather than open a half-
+      // working dialog. سند قبض / سند صرف map cleanly to
+      // broker_settlements.direction ('broker_owes' / 'we_owe').
+      if (result.kind === 'credit_note') {
+        toast.info('إشعار الدائن للوسطاء غير مفعّل بعد — استخدم سند صرف عادي');
+        return;
       }
-    }, 100);
+      const broker = result.broker;
+      const kind = result.kind === 'payment' ? 'receipt' : 'disbursement';
+      setTimeout(() => {
+        setBrokerSettlement({ broker, kind });
+      }, 100);
+      return;
+    }
+
+    toast.info('هذا النوع رح يكون متاح قريباً');
   };
 
   // ─── Summary ───────────────────────────────────────────────────
@@ -2495,6 +2525,38 @@ export default function Receipts() {
                 clientPhone: c.phone_number,
               });
             }
+          }}
+        />
+      )}
+
+      {/* Broker + قبض/صرف — same AddSettlementDialog the accounting
+          page's BrokersSection opens, but with the entities list
+          pinned to the wizard's picked broker so the user can't
+          accidentally switch entities mid-flow. Writes to
+          broker_settlements; the ab_ledger trigger handles
+          accounting downstream. */}
+      {brokerSettlement && (
+        <AddSettlementDialog
+          open={!!brokerSettlement}
+          onOpenChange={(o) => !o && setBrokerSettlement(null)}
+          mode="broker"
+          kind={brokerSettlement.kind}
+          entities={[{ id: brokerSettlement.broker.id, name: brokerSettlement.broker.name }]}
+          defaultEntityId={brokerSettlement.broker.id}
+          cancelLabel="رجوع"
+          onSaved={() => {
+            setBrokerSettlement(null);
+            setAddVoucherOpen(false);
+            // Receipts page table doesn't show broker settlements
+            // today (no receipts-row mirror); refresh is harmless
+            // but won't produce a new row. The accounting page is
+            // the canonical surface for broker vouchers.
+            fetchReceipts();
+            toast.success(
+              brokerSettlement.kind === 'disbursement'
+                ? 'تم تسجيل سند صرف للوسيط'
+                : 'تم تسجيل سند قبض من الوسيط',
+            );
           }}
         />
       )}

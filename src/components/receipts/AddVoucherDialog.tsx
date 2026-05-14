@@ -71,10 +71,17 @@ export interface ClientLite {
   id_number: string | null;
 }
 
+export interface BrokerLite {
+  id: string;
+  name: string;
+  phone: string | null;
+}
+
 export interface VoucherPickResult {
   kind: VoucherKind;
   counterparty: CounterpartyKind;
   client?: ClientLite;
+  broker?: BrokerLite;
 }
 
 interface Props {
@@ -150,7 +157,7 @@ const COUNTERPARTY_OPTIONS: Array<{
     label: 'وسيط',
     description: 'قبض/صرف لوسيط',
     icon: Users,
-    enabled: false,
+    enabled: true,
   },
   {
     value: 'company',
@@ -173,6 +180,7 @@ export function AddVoucherDialog({ open, onOpenChange, onPicked }: Props) {
   const [kind, setKind] = useState<VoucherKind | null>(null);
   const [counterparty, setCounterparty] = useState<CounterpartyKind | null>(null);
   const [selectedClient, setSelectedClient] = useState<ClientLite | null>(null);
+  const [selectedBroker, setSelectedBroker] = useState<BrokerLite | null>(null);
 
   // Reset all picks when the modal closes so the next opening starts
   // fresh. Without this, switching tabs and re-opening would carry
@@ -184,15 +192,19 @@ export function AddVoucherDialog({ open, onOpenChange, onPicked }: Props) {
       setKind(null);
       setCounterparty(null);
       setSelectedClient(null);
+      setSelectedBroker(null);
     }
   }, [open]);
 
-  // Continue enabled only when all three choices are made AND the
-  // counterparty is one Phase 1 supports.
+  // Continue enabled when the (kind, counterparty, entity) tuple is
+  // complete. Counterparty-specific check:
+  //   • client → need selectedClient
+  //   • broker → need selectedBroker
+  //   • company / other → still disabled (next iterations)
   const canContinue =
     !!kind &&
-    counterparty === 'client' &&
-    !!selectedClient;
+    ((counterparty === 'client' && !!selectedClient) ||
+      (counterparty === 'broker' && !!selectedBroker));
 
   const handleContinue = () => {
     if (!kind || !counterparty) return;
@@ -200,6 +212,7 @@ export function AddVoucherDialog({ open, onOpenChange, onPicked }: Props) {
       kind,
       counterparty,
       client: counterparty === 'client' ? selectedClient ?? undefined : undefined,
+      broker: counterparty === 'broker' ? selectedBroker ?? undefined : undefined,
     });
   };
 
@@ -328,7 +341,9 @@ export function AddVoucherDialog({ open, onOpenChange, onPicked }: Props) {
             </section>
           )}
 
-          {/* Step 3: entity picker — Phase 1 only supports client. */}
+          {/* Step 3: entity picker — Phase 1 supports client + broker.
+              The picker swaps based on counterparty so the user only
+              sees the search for the type they actually picked. */}
           {kind && counterparty === 'client' && (
             <section className="space-y-2">
               <h3 className="text-sm font-semibold text-muted-foreground">
@@ -339,6 +354,24 @@ export function AddVoucherDialog({ open, onOpenChange, onPicked }: Props) {
                 value={selectedClient}
                 onChange={setSelectedClient}
               />
+            </section>
+          )}
+          {kind && counterparty === 'broker' && (
+            <section className="space-y-2">
+              <h3 className="text-sm font-semibold text-muted-foreground">
+                ٣. اختيار الوسيط
+              </h3>
+              <BrokerPicker
+                agentId={agentId}
+                value={selectedBroker}
+                onChange={setSelectedBroker}
+              />
+              {kind === 'credit_note' && (
+                <p className="text-[11px] text-amber-700 dark:text-amber-400 pt-1">
+                  إشعار الدائن للوسطاء غير مفعّل حالياً — استخدم سند صرف عادي
+                  لتسجيل المبلغ الذي يحتفظ به الوسيط على حسابك.
+                </p>
+              )}
             </section>
           )}
         </div>
@@ -489,6 +522,139 @@ function ClientPicker({ agentId, value, onChange }: ClientPickerProps) {
                           {c.id_number && <span>{c.id_number}</span>}
                           {c.phone_number && <span>· {c.phone_number}</span>}
                         </div>
+                      </div>
+                      {isSelected && <Check className="h-3.5 w-3.5 text-primary" />}
+                    </CommandItem>
+                  );
+                })}
+              </ScrollArea>
+            )}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+// ─── BrokerPicker ──────────────────────────────────────────────
+//
+// Sibling of ClientPicker for the brokers table. Brokers carry only
+// (id, name, phone) per the schema, so the search field is narrower
+// — name and phone, no id_number. Same race-guarded debounced query
+// pattern: we wait for two characters before hitting the DB and drop
+// stale responses by request id.
+
+interface BrokerPickerProps {
+  agentId: string | null;
+  value: BrokerLite | null;
+  onChange: (broker: BrokerLite | null) => void;
+}
+
+function BrokerPicker({ agentId, value, onChange }: BrokerPickerProps) {
+  const [open, setOpen] = useState(false);
+  const [term, setTerm] = useState('');
+  const [results, setResults] = useState<BrokerLite[]>([]);
+  const [loading, setLoading] = useState(false);
+  const requestRef = useRef(0);
+
+  useEffect(() => {
+    if (!agentId) return;
+    const trimmed = term.trim();
+    if (trimmed.length < 2) {
+      setResults([]);
+      setLoading(false);
+      return;
+    }
+    const myReq = ++requestRef.current;
+    setLoading(true);
+    const handle = setTimeout(async () => {
+      // brokers has no agent_id column in the legacy schema — every
+      // agent currently sees the same global broker pool. If a tenant
+      // wants per-agent brokers later, this is where to add the
+      // .eq('agent_id', agentId) filter.
+      const { data } = await supabase
+        .from('brokers')
+        .select('id, name, phone')
+        .or(`name.ilike.%${trimmed}%,phone.ilike.%${trimmed}%`)
+        .order('name')
+        .limit(25);
+      if (myReq !== requestRef.current) return;
+      setResults((data ?? []) as BrokerLite[]);
+      setLoading(false);
+    }, 200);
+    return () => clearTimeout(handle);
+  }, [term, agentId]);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="w-full justify-between font-normal"
+        >
+          {value ? (
+            <span className="flex items-center gap-2 truncate">
+              <span className="font-semibold">{value.name}</span>
+              {value.phone && (
+                <span className="text-xs text-muted-foreground ltr-nums">
+                  {value.phone}
+                </span>
+              )}
+            </span>
+          ) : (
+            <span className="text-muted-foreground inline-flex items-center gap-2">
+              <Search className="h-3.5 w-3.5" />
+              ابحث بالاسم أو رقم الهاتف...
+            </span>
+          )}
+          <ChevronsUpDown className="h-3.5 w-3.5 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" dir="rtl">
+        <Command shouldFilter={false}>
+          <CommandInput
+            placeholder="ابحث بالاسم أو رقم الهاتف..."
+            value={term}
+            onValueChange={setTerm}
+          />
+          <CommandList>
+            {loading && (
+              <div className="py-6 text-center text-sm text-muted-foreground flex items-center justify-center gap-2">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                جاري البحث...
+              </div>
+            )}
+            {!loading && term.trim().length < 2 && (
+              <div className="py-6 text-center text-xs text-muted-foreground">
+                اكتب حرفين على الأقل لبدء البحث
+              </div>
+            )}
+            {!loading && term.trim().length >= 2 && results.length === 0 && (
+              <CommandEmpty>لا يوجد وسيط مطابق</CommandEmpty>
+            )}
+            {!loading && results.length > 0 && (
+              <ScrollArea className="max-h-72">
+                {results.map((b) => {
+                  const isSelected = value?.id === b.id;
+                  return (
+                    <CommandItem
+                      key={b.id}
+                      value={b.id}
+                      onSelect={() => {
+                        onChange(b);
+                        setOpen(false);
+                      }}
+                      className="flex items-center gap-2 data-[selected=true]:bg-muted/60 data-[selected=true]:text-foreground"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold truncate">{b.name}</div>
+                        {b.phone && (
+                          <div className="text-xs text-muted-foreground ltr-nums">
+                            {b.phone}
+                          </div>
+                        )}
                       </div>
                       {isSelected && <Check className="h-3.5 w-3.5 text-primary" />}
                     </CommandItem>
