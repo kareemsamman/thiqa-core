@@ -268,7 +268,7 @@ serve(async (req: Request) => {
       .select(`
         id, policy_number, document_number, policy_type_parent, policy_type_child,
         start_date, end_date, insurance_price, office_commission, profit,
-        cancelled, transferred, group_id, notes, created_at, updated_at,
+        cancelled, transferred, group_id, notes, created_at, updated_at, broker_id,
         cancellation_note, cancellation_date,
         transferred_from_policy_id, transferred_car_number, transferred_to_car_number,
         car:cars(id, car_number, manufacturer_name, model),
@@ -281,7 +281,13 @@ serve(async (req: Request) => {
       .lte('start_date', yearEnd)
       .is('deleted_at', null)
       .order('start_date', { ascending: true });
-    const policies = (policiesRaw || []) as any[];
+    // Broker-channel policies belong on the broker's account, not on
+    // the customer's kashf. Per the user: "هادا بخص الوسيط" — the
+    // customer-facing statement should ignore them entirely. Filtering
+    // at the source automatically excludes broker-side payments,
+    // receipts, transfers, and refunds from every downstream query
+    // (they're all keyed by policy_id).
+    const policies = ((policiesRaw || []) as any[]).filter((p) => !p.broker_id);
 
     // Payments linked to these policies — used to compute "paid
     // against year-Y transactions" per-policy chips. Refused rows
@@ -388,10 +394,14 @@ serve(async (req: Request) => {
     // started in a different year.
     const { data: allClientPolicyRows } = await userClient
       .from('policies')
-      .select('id')
+      .select('id, broker_id')
       .eq('client_id', client_id)
       .is('deleted_at', null);
-    const allClientPolicyIds = (allClientPolicyRows || []).map((p: any) => p.id);
+    // Exclude broker-channel policies — receipts tied to them are on
+    // the broker's books, not the customer's kashf.
+    const allClientPolicyIds = (allClientPolicyRows || [])
+      .filter((p: any) => !p.broker_id)
+      .map((p: any) => p.id);
 
     const [byClientIdRes, byPolicyIdRes] = await Promise.all([
       userClient

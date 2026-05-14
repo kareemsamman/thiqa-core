@@ -984,11 +984,13 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
         .reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
 
       setPaymentSummary({
-        // Display the gross cash collected from the customer (matches
-        // the kashf). total_remaining still uses the active-only
-        // clientPaid so the outstanding-debt math doesn't get fooled
-        // by payments that landed on a now-cancelled transaction.
-        total_paid: grossPaid,
+        // Display only what the CUSTOMER paid — broker-channel
+        // payments live on the broker's account and don't belong in
+        // the customer's إجمالي المدفوع (per user's rule "هادا بخص
+        // الوسيط"). clientPaid is the sum of paidTowardClient across
+        // groups, so broker portions and إلزامي pass-through are
+        // already excluded.
+        total_paid: clientPaid,
         total_remaining: Math.max(0, clientOwed - clientPaid + transferCustomerPaysTotal - totalCreditConsumed),
         total_profit: totalProfit,
       });
