@@ -97,3 +97,6 @@ verify_jwt = false
 
 [functions.generate-voucher]
 verify_jwt = false
+
+[functions.send-voucher]
+verify_jwt = false

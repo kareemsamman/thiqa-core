@@ -67,54 +67,52 @@ const COPY: Record<VoucherKind, {
   errorPrint: string;
   errorSms: string;
   errorWhatsapp: string;
-  edgeFunction: string;
-  /** When true, only print is supported — SMS / WhatsApp buttons
-   *  are hidden. Used for the broker سند قبض path, which prints via
-   *  the unified generate-voucher edge function but doesn't have a
-   *  send-broker-payment-sms wrapper yet. */
-  printOnly?: boolean;
 }> = {
   credit_note: {
     title: "تم إصدار إشعار دائن بنجاح",
-    subtitle: "يمكنك طباعة أو إرسال الإشعار للعميل",
+    subtitle: "يمكنك طباعة أو إرسال الإشعار للجهة",
     cardTitle: "طباعة أو إرسال الإشعار",
-    cardDescription: "إثبات الرصيد الدائن للعميل لدى المكتب",
-    tooltip: "إشعار دائن يثبت أن العميل له رصيد لدى المكتب يُحسم تلقائياً من أي دفعة قادمة.",
+    cardDescription: "إثبات الرصيد الدائن للجهة لدى المكتب",
+    tooltip: "إشعار دائن يثبت أن الجهة لها رصيد لدى المكتب يُحسم تلقائياً من أي دفعة قادمة.",
     successPrint: "تم فتح الإشعار",
     successSms: "تم إرسال الإشعار عبر SMS",
     errorPrint: "فشل في تحميل الإشعار",
     errorSms: "فشل في إرسال SMS",
     errorWhatsapp: "فشل في تجهيز رسالة واتساب",
-    edgeFunction: "send-credit-note-sms",
   },
   disbursement: {
     title: "تم إصدار سند الصرف بنجاح",
-    subtitle: "يمكنك طباعة أو إرسال السند للعميل",
+    subtitle: "يمكنك طباعة أو إرسال السند للجهة",
     cardTitle: "طباعة أو إرسال سند الصرف",
-    cardDescription: "إثبات صرف المبلغ للعميل",
-    tooltip: "سند صرف يثبت أن المكتب صرف هذا المبلغ نقداً للعميل.",
+    cardDescription: "إثبات صرف المبلغ للجهة",
+    tooltip: "سند صرف يثبت أن المكتب صرف هذا المبلغ نقداً للجهة.",
     successPrint: "تم فتح سند الصرف",
     successSms: "تم إرسال سند الصرف عبر SMS",
     errorPrint: "فشل في تحميل سند الصرف",
     errorSms: "فشل في إرسال SMS",
     errorWhatsapp: "فشل في تجهيز رسالة واتساب",
-    edgeFunction: "send-disbursement-sms",
   },
   payment: {
     title: "تم تسجيل سند القبض بنجاح",
-    subtitle: "يمكنك طباعة السند للجهة",
-    cardTitle: "طباعة سند القبض",
+    subtitle: "يمكنك طباعة أو إرسال السند للجهة",
+    cardTitle: "طباعة أو إرسال سند القبض",
     cardDescription: "إثبات استلام المبلغ من الجهة",
     tooltip: "سند قبض يثبت أن المكتب استلم المبلغ من الجهة.",
     successPrint: "تم فتح سند القبض",
-    successSms: "",
+    successSms: "تم إرسال سند القبض عبر SMS",
     errorPrint: "فشل في تحميل سند القبض",
-    errorSms: "",
+    errorSms: "فشل في إرسال SMS",
     errorWhatsapp: "فشل في تجهيز رسالة واتساب",
-    edgeFunction: "generate-voucher",
-    printOnly: true,
   },
 };
+
+// All voucher kinds now route through the unified send-voucher
+// edge function — one function handles every (receipt_type,
+// counterparty) combination, looks up the recipient phone from
+// client_id OR broker_id, and stamps receipts.printed_at on every
+// delivery path so editing is sealed once the voucher has left the
+// office in any form.
+const VOUCHER_EDGE_FUNCTION = "send-voucher";
 
 export function VoucherSendDialog({
   open,
@@ -147,7 +145,7 @@ export function VoucherSendDialog({
     setErrorMessage(null);
     try {
       const { data, error } = await supabase.functions.invoke(
-        copy.edgeFunction,
+        VOUCHER_EDGE_FUNCTION,
         { body: { voucher_receipt_id: voucher.receiptId, skip_sms: true } },
       );
       if (error) {
@@ -189,7 +187,7 @@ export function VoucherSendDialog({
     setErrorMessage(null);
     try {
       const { data, error } = await supabase.functions.invoke(
-        copy.edgeFunction,
+        VOUCHER_EDGE_FUNCTION,
         { body: { voucher_receipt_id: voucher.receiptId } },
       );
       if (error) {
@@ -222,7 +220,7 @@ export function VoucherSendDialog({
     setErrorMessage(null);
     try {
       const { data, error } = await supabase.functions.invoke(
-        copy.edgeFunction,
+        VOUCHER_EDGE_FUNCTION,
         { body: { voucher_receipt_id: voucher.receiptId, whatsapp_mode: true } },
       );
       if (error) {
@@ -301,7 +299,6 @@ export function VoucherSendDialog({
                   icon={<Printer className="h-5 w-5" />}
                   colorIdle="text-emerald-600"
                 />
-                {!copy.printOnly && (
                 <ChannelButton
                   label={clientPhone ? "إرسال SMS" : "لا يوجد رقم هاتف"}
                   state={cellState.sms}
@@ -311,8 +308,6 @@ export function VoucherSendDialog({
                   icon={<MessageSquare className="h-5 w-5" />}
                   colorIdle="text-blue-600"
                 />
-                )}
-                {!copy.printOnly && (
                 <ChannelButton
                   label={clientPhone ? "إرسال واتساب" : "لا يوجد رقم هاتف"}
                   state={cellState.whatsapp}
@@ -321,7 +316,6 @@ export function VoucherSendDialog({
                   icon={<WhatsappLogo className="h-5 w-5" weight="fill" />}
                   colorIdle="text-green-600"
                 />
-                )}
               </div>
 
               <div className="w-full p-4 rounded-xl border-2 border-border bg-background text-right flex items-center gap-4">
