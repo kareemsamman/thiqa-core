@@ -953,13 +953,31 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
         }
       });
 
+      // Transfer adjustments where the customer owes the office
+      // (تكلفة التحويل على الزبون). These live on policy_transfers,
+      // not on a policy's office_commission, so they have to be
+      // added to the debt total explicitly — the kashf already does
+      // the same in totalYearAmount. Without this, a transfer fee
+      // shows in the kashf but is missing from the in-app card.
+      const allClientPolicyIds = (everyPolicyRow || []).map((p: any) => p.id);
+      let transferCustomerPaysTotal = 0;
+      if (allClientPolicyIds.length > 0) {
+        const { data: transferRows } = await supabase
+          .from('policy_transfers')
+          .select('adjustment_amount, adjustment_type')
+          .in('policy_id', allClientPolicyIds);
+        transferCustomerPaysTotal = (transferRows || [])
+          .filter((t: any) => t.adjustment_type === 'customer_pays')
+          .reduce((s: number, t: any) => s + Number(t.adjustment_amount || 0), 0);
+      }
+
       setPaymentSummary({
         // Display the gross cash collected from the customer (matches
         // the kashf). total_remaining still uses the active-only
         // clientPaid so the outstanding-debt math doesn't get fooled
         // by payments that landed on a now-cancelled transaction.
         total_paid: grossPaid,
-        total_remaining: Math.max(0, clientOwed - clientPaid),
+        total_remaining: Math.max(0, clientOwed - clientPaid + transferCustomerPaysTotal),
         total_profit: totalProfit,
       });
       setBrokerDebts(Array.from(brokerTotals.values()));
