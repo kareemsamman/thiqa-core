@@ -36,6 +36,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Search,
+  Plus,
   Printer,
   Receipt,
   Banknote,
@@ -77,6 +78,13 @@ import {
   type ReceiptGroupView,
   type ReceiptRow,
 } from "@/components/receipts/ReceiptGroupDetailsDialog";
+import {
+  AddVoucherDialog,
+  type ClientLite,
+  type VoucherPickResult,
+} from "@/components/receipts/AddVoucherDialog";
+import { AddCreditNoteDialog } from "@/components/receipts/AddCreditNoteDialog";
+import { AddSettlementDialog } from "@/components/accounting/AddSettlementDialog";
 import { printAccountingReport } from "@/components/accounting/printAccountingReport";
 import {
   AccountingFilters,
@@ -722,6 +730,16 @@ export default function Receipts() {
     phone: string | null;
   } | null>(null);
   const [debtModalResolving, setDebtModalResolving] = useState(false);
+
+  // "إضافة سند" — picker + routed sub-modals. The picker (Add­Voucher­
+  // Dialog) collects three answers (kind / counterparty / entity)
+  // then hands off to one of the specialized dialogs below. We keep
+  // separate open-state for each follow-up so the picker can close
+  // before the next dialog opens — overlapping dialogs introduce
+  // focus-trap bugs in Radix UI.
+  const [addVoucherOpen, setAddVoucherOpen] = useState(false);
+  const [disburseClient, setDisburseClient] = useState<ClientLite | null>(null);
+  const [creditNoteClient, setCreditNoteClient] = useState<ClientLite | null>(null);
   const [reasonText, setReasonText] = useState("");
   const [reasonError, setReasonError] = useState<string | null>(null);
   const [reasonSubmitting, setReasonSubmitting] = useState(false);
@@ -1760,6 +1778,32 @@ export default function Receipts() {
     setDetailsOpen(true);
   };
 
+  // Picker → sub-modal router. We close the picker first, then open
+  // the matching follow-up on the next tick so Radix UI's focus-trap
+  // doesn't get confused by two open Dialog components simultaneously.
+  const handleVoucherPicked = (result: VoucherPickResult) => {
+    setAddVoucherOpen(false);
+    if (result.counterparty !== 'client' || !result.client) {
+      // Phase 1 ships customer routes only — the picker prevents
+      // selecting non-customer counterparties via its disabled state,
+      // so this branch is defensive.
+      toast.info('هذا النوع رح يكون متاح قريباً');
+      return;
+    }
+    const c = result.client;
+    setTimeout(() => {
+      if (result.kind === 'payment') {
+        setDebtModalClient({ id: c.id, full_name: c.full_name, phone: c.phone_number });
+        setDebtModalEditingSession(null);
+        setDebtModalOpen(true);
+      } else if (result.kind === 'disbursement') {
+        setDisburseClient(c);
+      } else if (result.kind === 'credit_note') {
+        setCreditNoteClient(c);
+      }
+    }, 100);
+  };
+
   // ─── Summary ───────────────────────────────────────────────────
 
   const totalAmount = useMemo(
@@ -2064,6 +2108,14 @@ export default function Receipts() {
           <div className="flex flex-wrap items-center gap-2">
             <Button
               size="sm"
+              className="h-8 gap-1.5"
+              onClick={() => setAddVoucherOpen(true)}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              <span>إضافة سند</span>
+            </Button>
+            <Button
+              size="sm"
               variant="outline"
               className="h-8 gap-1.5"
               disabled={printingAll || loading || receipts.length === 0}
@@ -2343,6 +2395,49 @@ export default function Receipts() {
           await fetchReceipts();
         }}
       />
+
+      {/* "إضافة سند" picker — opens from the toolbar button on every
+          tab. Picks (kind, counterparty, entity); on continue we hand
+          off to one of the three sub-dialogs below. Phase 1: customer
+          routes only. */}
+      <AddVoucherDialog
+        open={addVoucherOpen}
+        onOpenChange={setAddVoucherOpen}
+        onPicked={handleVoucherPicked}
+      />
+
+      {/* Customer + سند صرف — reuses the accounting page's existing
+          settlement dialog, which already creates client_settlements
+          rows that trigger a receipts mirror via the DB sync trigger. */}
+      {disburseClient && (
+        <AddSettlementDialog
+          open={!!disburseClient}
+          onOpenChange={(o) => !o && setDisburseClient(null)}
+          mode="client"
+          kind="disbursement"
+          defaultEntityId={disburseClient.id}
+          clientName={disburseClient.full_name}
+          onSaved={() => {
+            setDisburseClient(null);
+            fetchReceipts();
+          }}
+        />
+      )}
+
+      {/* Customer + إشعار دائن — standalone credit note (not tied to
+          a cancellation). Inserts wallet transaction + receipt with
+          a C{nn}/{year} voucher_number from the shared allocator. */}
+      {creditNoteClient && (
+        <AddCreditNoteDialog
+          open={!!creditNoteClient}
+          onOpenChange={(o) => !o && setCreditNoteClient(null)}
+          client={creditNoteClient}
+          onSaved={() => {
+            setCreditNoteClient(null);
+            fetchReceipts();
+          }}
+        />
+      )}
 
       <DeleteConfirmDialog
         open={!!deleteReceipt}
