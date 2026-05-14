@@ -9,7 +9,6 @@ import {
   ChevronLeft,
   Calendar,
   Car,
-  Banknote,
   FileText,
   CheckCircle,
   XCircle,
@@ -53,7 +52,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { PackagePaymentModal } from './PackagePaymentModal';
 import { PaymentGroupDetailsDialog, type GroupedPayment } from './PaymentGroupDetailsDialog';
 import { PaymentEditDialog } from './PaymentEditDialog';
 import { DeleteConfirmDialog } from '@/components/shared/DeleteConfirmDialog';
@@ -302,10 +300,6 @@ export function PolicyYearTimeline({
   const paymentInfo = externalPaymentInfo ?? internalPaymentInfo;
   const accidentInfo = externalAccidentInfo ?? internalAccidentInfo;
   const childrenInfo = externalChildrenInfo ?? internalChildrenInfo;
-  const [packagePaymentOpen, setPackagePaymentOpen] = useState(false);
-  const [selectedPackagePolicyIds, setSelectedPackagePolicyIds] = useState<string[]>([]);
-  const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null);
-
   // Payment details dialog state — shows the same PaymentGroupDetailsDialog
   // that ClientDetails opens when clicking a payment row, so the summary
   // button and the table row route to an identical popup.
@@ -770,13 +764,6 @@ export function PolicyYearTimeline({
     });
   };
 
-  const handlePackagePayment = (e: React.MouseEvent, policyIds: string[], branchId: string | null) => {
-    e.stopPropagation();
-    setSelectedPackagePolicyIds(policyIds);
-    setSelectedBranchId(branchId);
-    setPackagePaymentOpen(true);
-  };
-
   // Fetch all payments across the clicked package's policies and wrap them
   // in a single GroupedPayment so PaymentGroupDetailsDialog (the same popup
   // the ClientDetails payments table uses) can render them as-is.
@@ -1123,7 +1110,6 @@ export function PolicyYearTimeline({
                           ? () => onOpenPolicyFiles(mainPolicy?.id || pkg.allPolicyIds[0])
                           : undefined}
                         onPolicyClick={onPolicyClick}
-                        onPaymentClick={(e) => handlePackagePayment(e, pkg.allPolicyIds, pkg.mainPolicy?.branch_id || pkg.addons[0]?.branch_id || null)}
                         onPrintInvoice={() => handleCardPrintInvoice(pkg.allPolicyIds, pkg.allPolicyIds.length > 1)}
                         onSendInvoiceSms={() => handleCardSendInvoiceSms(pkg.allPolicyIds, pkg.allPolicyIds.length > 1)}
                         onSendInvoiceWhatsapp={() => handleCardSendInvoiceWhatsapp(pkg.allPolicyIds)}
@@ -1159,16 +1145,6 @@ export function PolicyYearTimeline({
           </Collapsible>
         );
       })}
-
-      <PackagePaymentModal
-        open={packagePaymentOpen}
-        onOpenChange={setPackagePaymentOpen}
-        policyIds={selectedPackagePolicyIds}
-        branchId={selectedBranchId}
-        onSuccess={async () => {
-          if (onPaymentAdded) await onPaymentAdded();
-        }}
-      />
 
       <PaymentGroupDetailsDialog
         open={paymentDetailsOpen}
@@ -1244,7 +1220,6 @@ function PolicyPackageCard({
   fileCount = 0,
   onOpenFiles,
   onPolicyClick,
-  onPaymentClick,
   onPrintInvoice,
   onSendInvoiceSms,
   onSendInvoiceWhatsapp,
@@ -1299,7 +1274,6 @@ function PolicyPackageCard({
    *  pre-positioned to the files tab. */
   onOpenFiles?: () => void;
   onPolicyClick: (id: string) => void;
-  onPaymentClick: (e: React.MouseEvent) => void;
   onPrintInvoice: () => Promise<boolean>;
   onSendInvoiceSms: () => Promise<boolean>;
   onSendInvoiceWhatsapp: () => Promise<boolean>;
@@ -1613,18 +1587,6 @@ function PolicyPackageCard({
 
           {/* Quick Actions */}
           <div className="flex items-center gap-1">
-            {hasUnpaid && isActive && !hasBroker && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-1 h-8 border-primary text-primary hover:bg-primary hover:text-white"
-                onClick={onPaymentClick}
-              >
-                <Banknote className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">دفع</span>
-              </Button>
-            )}
-
             {/* Files shortcut — replaces the previous whole-card click
                 to open the details drawer. Compact button with the
                 file count badge; click opens the drawer pre-positioned
@@ -2167,60 +2129,42 @@ function PolicyPackageCard({
                   </div>
                 );
               })()}
-              {/* Totals footer row — non-interactive. The previous
-                  click-to-open-details flow was removed at the user's
-                  request: the totals are read-only summary info and
-                  the dedicated سجل الدفعات tab already provides the
-                  detailed breakdown. The wrapper stays a flex row so
-                  the layout / hover affordance for the broker banner
-                  doesn't change visually. */}
-              <div
-                className={cn(
-                  "w-full flex items-center gap-3 px-3 py-2 border-t border-border/60",
-                  hasBroker
-                    ? "justify-start bg-amber-50/60 dark:bg-amber-500/5 text-right"
-                    : "justify-end bg-muted/30 text-right",
-                )}
-                title={hasBroker ? brokerNoteText : undefined}
-              >
-                {hasBroker ? (
-                  <div className="flex items-center gap-2 text-xs text-amber-800 dark:text-amber-200">
-                    <Handshake className="h-3.5 w-3.5 shrink-0" />
-                    <span>{brokerNoteText}</span>
-                  </div>
-                ) : (
-                  <>
-                    <div className="flex flex-col text-xs items-end text-left">
-                      <span className="text-[10px] text-muted-foreground uppercase tracking-wide">المدفوع</span>
-                      <span className="font-bold text-success ltr-nums">
-                        ₪{paymentStatus.totalPaid.toLocaleString('en-US')}
-                      </span>
+              {/* Totals footer — payment-totals chips (المدفوع / المتبقي)
+                  were removed because payment now flows through تسديد
+                  الديون only, not from inside the package card. The
+                  footer still surfaces the broker note when a broker is
+                  involved, and the الربح chip for users with the
+                  view_financial permission. */}
+              {(hasBroker || canSeeFinancials) && (
+                <div
+                  className={cn(
+                    "w-full flex items-center gap-3 px-3 py-2 border-t border-border/60",
+                    hasBroker
+                      ? "justify-start bg-amber-50/60 dark:bg-amber-500/5 text-right"
+                      : "justify-end bg-muted/30 text-right",
+                  )}
+                  title={hasBroker ? brokerNoteText : undefined}
+                >
+                  {hasBroker ? (
+                    <div className="flex items-center gap-2 text-xs text-amber-800 dark:text-amber-200">
+                      <Handshake className="h-3.5 w-3.5 shrink-0" />
+                      <span>{brokerNoteText}</span>
                     </div>
+                  ) : (
                     <div className="flex flex-col text-xs items-end text-left">
-                      <span className="text-[10px] text-muted-foreground uppercase tracking-wide">المتبقي للدفع</span>
+                      <span className="text-[10px] text-muted-foreground uppercase tracking-wide">الربح</span>
                       <span className={cn(
                         "font-bold ltr-nums",
-                        paymentStatus.remaining > 0 ? "text-destructive" : "text-success"
+                        paymentStatus.profit > 0 ? "text-emerald-700 dark:text-emerald-400"
+                        : paymentStatus.profit < 0 ? "text-red-700 dark:text-red-400"
+                        : "text-muted-foreground",
                       )}>
-                        ₪{paymentStatus.remaining.toLocaleString('en-US')}
+                        ₪{paymentStatus.profit.toLocaleString('en-US')}
                       </span>
                     </div>
-                    {canSeeFinancials && (
-                      <div className="flex flex-col text-xs items-end text-left">
-                        <span className="text-[10px] text-muted-foreground uppercase tracking-wide">الربح</span>
-                        <span className={cn(
-                          "font-bold ltr-nums",
-                          paymentStatus.profit > 0 ? "text-emerald-700 dark:text-emerald-400"
-                          : paymentStatus.profit < 0 ? "text-red-700 dark:text-red-400"
-                          : "text-muted-foreground",
-                        )}>
-                          ₪{paymentStatus.profit.toLocaleString('en-US')}
-                        </span>
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
+                  )}
+                </div>
+              )}
             </div>
             {/* Creator + creation timestamp — "أنشأها: <name> · <date>
                 <time>". Name falls back to email-username when
@@ -2281,10 +2225,12 @@ function PolicyPackageCard({
                 onPoliciesUpdate={onPoliciesUpdate}
               />
             </div>
-            {isActive && (
+            {isActive && (hasBroker || canSeeFinancials) && (
               <div className="rounded-lg border border-border/60 bg-muted/20 overflow-hidden">
-                {/* Standalone-policy totals footer — non-interactive,
-                    same change as the package version. */}
+                {/* Standalone-policy totals footer — same chip cleanup as
+                    the package version: payment totals are gone (payment
+                    happens via تسديد الديون now), broker note + الربح
+                    stay. */}
                 <div
                   className={cn(
                     "w-full flex items-center gap-3 px-3 py-2",
@@ -2300,36 +2246,17 @@ function PolicyPackageCard({
                       <span>{brokerNoteText}</span>
                     </div>
                   ) : (
-                    <>
-                      <div className="flex flex-col text-xs items-end text-left">
-                        <span className="text-[10px] text-muted-foreground uppercase tracking-wide">المدفوع</span>
-                        <span className="font-bold text-success ltr-nums">
-                          ₪{paymentStatus.totalPaid.toLocaleString('en-US')}
-                        </span>
-                      </div>
-                      <div className="flex flex-col text-xs items-end text-left">
-                        <span className="text-[10px] text-muted-foreground uppercase tracking-wide">المتبقي للدفع</span>
-                        <span className={cn(
-                          "font-bold ltr-nums",
-                          paymentStatus.remaining > 0 ? "text-destructive" : "text-success"
-                        )}>
-                          ₪{paymentStatus.remaining.toLocaleString('en-US')}
-                        </span>
-                      </div>
-                      {canSeeFinancials && (
-                        <div className="flex flex-col text-xs items-end text-left">
-                          <span className="text-[10px] text-muted-foreground uppercase tracking-wide">الربح</span>
-                          <span className={cn(
-                            "font-bold ltr-nums",
-                            paymentStatus.profit > 0 ? "text-emerald-700 dark:text-emerald-400"
-                            : paymentStatus.profit < 0 ? "text-red-700 dark:text-red-400"
-                            : "text-muted-foreground",
-                          )}>
-                            ₪{paymentStatus.profit.toLocaleString('en-US')}
-                          </span>
-                        </div>
-                      )}
-                    </>
+                    <div className="flex flex-col text-xs items-end text-left">
+                      <span className="text-[10px] text-muted-foreground uppercase tracking-wide">الربح</span>
+                      <span className={cn(
+                        "font-bold ltr-nums",
+                        paymentStatus.profit > 0 ? "text-emerald-700 dark:text-emerald-400"
+                        : paymentStatus.profit < 0 ? "text-red-700 dark:text-red-400"
+                        : "text-muted-foreground",
+                      )}>
+                        ₪{paymentStatus.profit.toLocaleString('en-US')}
+                      </span>
+                    </div>
                   )}
                 </div>
               </div>
