@@ -21,7 +21,7 @@
 // notes). Re-implementing those here would duplicate logic and risk
 // drift from the customer-page flows the user trusts.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -31,7 +31,6 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
 import {
   Popover,
   PopoverContent,
@@ -84,36 +83,51 @@ interface Props {
   onPicked: (result: VoucherPickResult) => void;
 }
 
-// Static config for the voucher-kind cards. The badge tone matches
-// the per-row badge on the "الكل" tab so the user reads the same
-// visual vocabulary on the table and in this picker.
+// Static config for the voucher-kind cards. Each tone maps to a
+// Tailwind colour pair (icon bubble background + ring/border on
+// selection) so the card itself communicates the type at a glance —
+// no need to read the badge first. Keep these in sync with
+// RECEIPT_TYPE_BADGE on the receipts page for a consistent visual
+// vocabulary between picker and table.
 const VOUCHER_KIND_OPTIONS: Array<{
   value: VoucherKind;
   label: string;
   description: string;
   icon: typeof Receipt;
-  tone: 'success' | 'warning' | 'destructive';
+  iconWrap: string;
+  iconColor: string;
+  ring: string;
+  selectedBg: string;
 }> = [
   {
     value: 'payment',
     label: 'سند قبض',
     description: 'استلام مبلغ من الجهة',
     icon: Receipt,
-    tone: 'success',
+    iconWrap: 'bg-emerald-100 dark:bg-emerald-950/40',
+    iconColor: 'text-emerald-600 dark:text-emerald-400',
+    ring: 'ring-emerald-500/40 border-emerald-500/60',
+    selectedBg: 'bg-emerald-50/60 dark:bg-emerald-950/20',
   },
   {
     value: 'disbursement',
     label: 'سند صرف',
     description: 'صرف مبلغ من المكتب للجهة',
     icon: Banknote,
-    tone: 'destructive',
+    iconWrap: 'bg-rose-100 dark:bg-rose-950/40',
+    iconColor: 'text-rose-600 dark:text-rose-400',
+    ring: 'ring-rose-500/40 border-rose-500/60',
+    selectedBg: 'bg-rose-50/60 dark:bg-rose-950/20',
   },
   {
     value: 'credit_note',
     label: 'إشعار دائن',
     description: 'تسجيل رصيد للجهة عندنا بدون كاش',
     icon: Wallet,
-    tone: 'warning',
+    iconWrap: 'bg-amber-100 dark:bg-amber-950/40',
+    iconColor: 'text-amber-600 dark:text-amber-400',
+    ring: 'ring-amber-500/40 border-amber-500/60',
+    selectedBg: 'bg-amber-50/60 dark:bg-amber-950/20',
   },
 ];
 
@@ -127,28 +141,28 @@ const COUNTERPARTY_OPTIONS: Array<{
   {
     value: 'client',
     label: 'عميل',
-    description: 'استخدم محرّك التسديد العادي',
+    description: 'تسديد ديون أو إصدار إشعار',
     icon: User,
     enabled: true,
   },
   {
     value: 'broker',
     label: 'وسيط',
-    description: 'قبض/صرف لوسيط مرتبط بالمكتب',
+    description: 'قبض/صرف لوسيط',
     icon: Users,
     enabled: false,
   },
   {
     value: 'company',
     label: 'شركة تأمين',
-    description: 'تسوية مع شركة تأمين (باستثناء الإلزامي)',
+    description: 'تسوية مع شركة',
     icon: Building,
     enabled: false,
   },
   {
     value: 'other',
     label: 'آخر',
-    description: 'جهة خارجية أو مصروف عام',
+    description: 'جهة خارجية أو مصروف',
     icon: UserPlus,
     enabled: false,
   },
@@ -200,12 +214,16 @@ export function AddVoucherDialog({ open, onOpenChange, onPicked }: Props) {
         </DialogHeader>
 
         <div className="space-y-6 py-2">
-          {/* Step 1: voucher kind */}
+          {/* Step 1: voucher kind. Vertical/centered cards — icon on
+              top in a tinted bubble, label below it, description
+              underneath. The whole card tints to its tone colour when
+              selected so the type colour the user picks here matches
+              the badge they'll see on the receipts table later. */}
           <section className="space-y-2">
             <h3 className="text-sm font-semibold text-muted-foreground">
               ١. نوع السند
             </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {VOUCHER_KIND_OPTIONS.map((opt) => {
                 const Icon = opt.icon;
                 const active = kind === opt.value;
@@ -215,24 +233,28 @@ export function AddVoucherDialog({ open, onOpenChange, onPicked }: Props) {
                     type="button"
                     onClick={() => setKind(opt.value)}
                     className={cn(
-                      'group relative flex flex-col gap-1 rounded-lg border p-3 text-right transition-colors',
-                      'hover:border-primary/60 hover:bg-muted/40',
-                      active && 'border-primary bg-primary/5 ring-2 ring-primary/20',
+                      'group relative flex flex-col items-center text-center gap-2 rounded-xl border p-4 transition-all',
+                      'hover:border-primary/40 hover:shadow-sm',
+                      active
+                        ? cn('ring-2', opt.ring, opt.selectedBg)
+                        : 'border-border',
                     )}
                   >
-                    <div className="flex items-center gap-2">
-                      <Badge
-                        variant={opt.tone}
-                        className="gap-1 px-2 py-0 h-5 text-[10px]"
-                      >
-                        <Icon className="h-3 w-3" />
-                        {opt.label}
-                      </Badge>
-                      {active && (
-                        <Check className="h-3.5 w-3.5 text-primary ms-auto" />
+                    {active && (
+                      <div className="absolute top-2 start-2">
+                        <Check className={cn('h-4 w-4', opt.iconColor)} />
+                      </div>
+                    )}
+                    <div
+                      className={cn(
+                        'inline-flex items-center justify-center h-12 w-12 rounded-full',
+                        opt.iconWrap,
                       )}
+                    >
+                      <Icon className={cn('h-6 w-6', opt.iconColor)} />
                     </div>
-                    <p className="text-xs text-muted-foreground">
+                    <div className="text-sm font-bold">{opt.label}</div>
+                    <p className="text-[11px] text-muted-foreground leading-snug">
                       {opt.description}
                     </p>
                   </button>
@@ -241,15 +263,17 @@ export function AddVoucherDialog({ open, onOpenChange, onPicked }: Props) {
             </div>
           </section>
 
-          {/* Step 2: counterparty kind — only after kind is picked, to
-              guide the eye through the flow instead of dumping every
-              question on screen at once. */}
+          {/* Step 2: counterparty kind — same vertical card layout as
+              step 1 for visual consistency. Deferred entries (broker /
+              company / other) dim out with a "قريباً" pill in the
+              bottom-end corner so the user sees the planned scope but
+              can't click them. */}
           {kind && (
             <section className="space-y-2">
               <h3 className="text-sm font-semibold text-muted-foreground">
                 ٢. الجهة
               </h3>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {COUNTERPARTY_OPTIONS.map((opt) => {
                   const Icon = opt.icon;
                   const active = counterparty === opt.value;
@@ -260,25 +284,41 @@ export function AddVoucherDialog({ open, onOpenChange, onPicked }: Props) {
                       disabled={!opt.enabled}
                       onClick={() => setCounterparty(opt.value)}
                       className={cn(
-                        'group relative flex flex-col items-start gap-1 rounded-lg border p-3 text-right transition-colors',
-                        opt.enabled && 'hover:border-primary/60 hover:bg-muted/40',
-                        active && 'border-primary bg-primary/5 ring-2 ring-primary/20',
-                        !opt.enabled && 'opacity-60 cursor-not-allowed',
+                        'group relative flex flex-col items-center text-center gap-2 rounded-xl border p-3 transition-all',
+                        opt.enabled && 'hover:border-primary/40 hover:shadow-sm',
+                        active &&
+                          'ring-2 ring-primary/40 border-primary/60 bg-primary/5',
+                        !opt.enabled && 'opacity-50 cursor-not-allowed',
                       )}
                     >
-                      <div className="flex items-center gap-2 w-full">
-                        <Icon className="h-4 w-4 text-foreground" />
-                        <span className="text-sm font-semibold">{opt.label}</span>
-                        {!opt.enabled && (
-                          <Badge variant="outline" className="ms-auto text-[9px] px-1.5 py-0 h-4">
-                            قريباً
-                          </Badge>
+                      {active && (
+                        <div className="absolute top-2 start-2">
+                          <Check className="h-3.5 w-3.5 text-primary" />
+                        </div>
+                      )}
+                      {!opt.enabled && (
+                        <Badge
+                          variant="outline"
+                          className="absolute top-1.5 start-1.5 text-[9px] px-1.5 py-0 h-4"
+                        >
+                          قريباً
+                        </Badge>
+                      )}
+                      <div
+                        className={cn(
+                          'inline-flex items-center justify-center h-10 w-10 rounded-full bg-muted',
+                          active && 'bg-primary/10',
                         )}
-                        {active && (
-                          <Check className="h-3.5 w-3.5 text-primary ms-auto" />
-                        )}
+                      >
+                        <Icon
+                          className={cn(
+                            'h-5 w-5 text-muted-foreground',
+                            active && 'text-primary',
+                          )}
+                        />
                       </div>
-                      <p className="text-[11px] text-muted-foreground leading-tight">
+                      <div className="text-sm font-bold">{opt.label}</div>
+                      <p className="text-[10px] text-muted-foreground leading-snug">
                         {opt.description}
                       </p>
                     </button>
