@@ -137,6 +137,9 @@ interface ChequeRecord {
   batch_id?: string | null;
   member_ids?: string[];
   member_policy_ids?: string[];
+  /** When the underlying row was inserted. Used to float customer
+   *  groups that just received a new cheque to the top of the list. */
+  created_at?: string | null;
 }
 
 interface CustomerGroup {
@@ -446,8 +449,26 @@ export default function Cheques() {
       }
     });
     
-    // Sort by customer name
-    return Object.values(groups).sort((a, b) => a.customerName.localeCompare(b.customerName, 'ar'));
+    // Float the customer who just received a cheque to the top —
+    // staff add a cheque and expect the row to land where they're
+    // already looking. We sort by each group's newest cheque
+    // (max created_at desc), falling back to name when nothing has
+    // a timestamp (legacy rows or outgoing surfaces that don't carry
+    // one yet).
+    const newestTsForGroup = (g: CustomerGroup): number => {
+      let max = 0;
+      for (const c of g.cheques) {
+        const t = c.created_at ? new Date(c.created_at).getTime() : 0;
+        if (Number.isFinite(t) && t > max) max = t;
+      }
+      return max;
+    };
+    return Object.values(groups).sort((a, b) => {
+      const ta = newestTsForGroup(a);
+      const tb = newestTsForGroup(b);
+      if (ta !== tb) return tb - ta;
+      return a.customerName.localeCompare(b.customerName, 'ar');
+    });
   }, [visibleCheques]);
 
   // Fetch summary stats separately (not affected by filters). The page
@@ -686,7 +707,7 @@ export default function Cheques() {
         .from('policy_payments')
         .select(`
           id, policy_id, amount, payment_date, cheque_due_date, cheque_issue_date,
-          cheque_number, cheque_date, batch_id,
+          cheque_number, cheque_date, batch_id, created_at,
           bank_code, branch_code, cheque_image_url,
           cheque_status, refused, notes, transferred_to_type, transferred_to_id, transferred_payment_id,
           policies!policy_payments_policy_id_fkey(
@@ -815,6 +836,7 @@ export default function Cheques() {
           transferred_to_name: transferredToName,
           transferred_payment_id: c.transferred_payment_id,
           source: 'customer',
+          created_at: c.created_at ?? null,
         };
       });
 
