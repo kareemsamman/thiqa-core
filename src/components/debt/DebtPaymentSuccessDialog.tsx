@@ -285,7 +285,7 @@ export function DebtPaymentSuccessDialog({
 
           <Button
             variant="outline"
-            className="w-full gap-2 mt-1"
+            className="w-full gap-2 mt-1 bg-white hover:bg-white"
             onClick={handleClose}
             disabled={anyLoading}
           >
