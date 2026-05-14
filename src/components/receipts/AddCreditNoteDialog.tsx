@@ -173,28 +173,50 @@ export function AddCreditNoteDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !saving && onOpenChange(o)}>
-      <DialogContent className="sm:max-w-md" dir="rtl">
+      {/* Match AddSettlementDialog's container (max-w-3xl + 90vh
+          scrollable) so the three voucher-creation flows feel like
+          one family — same modal width, same paddings, same footer
+          shape. The body is leaner than the disbursement dialog
+          because credit notes don't need a payment-lines section
+          (there's no cash moving). */}
+      <DialogContent
+        dir="rtl"
+        className="max-w-3xl max-h-[90vh] overflow-y-auto"
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Wallet className="h-5 w-5 text-amber-600" />
-            إشعار دائن جديد
+            إضافة إشعار دائن — {client.full_name}
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4 py-2">
-          <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+        <div className="space-y-4">
+          {/* Client banner — same role the "عميل" section plays in the
+              disbursement dialog. Shows name + ID + phone so the agent
+              confirms the right person before saving. */}
+          <div className="rounded-lg border bg-muted/30 p-4">
             <div className="text-xs text-muted-foreground mb-1">العميل</div>
-            <div className="font-semibold">{client.full_name}</div>
-            {client.id_number && (
-              <div className="text-xs text-muted-foreground ltr-nums mt-0.5">
-                {client.id_number}
-              </div>
-            )}
+            <div className="flex items-baseline gap-3 flex-wrap">
+              <span className="font-semibold text-base">{client.full_name}</span>
+              {client.id_number && (
+                <span className="text-xs text-muted-foreground ltr-nums">
+                  هوية: {client.id_number}
+                </span>
+              )}
+              {client.phone_number && (
+                <span className="text-xs text-muted-foreground ltr-nums">
+                  هاتف: {client.phone_number}
+                </span>
+              )}
+            </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label htmlFor="cn-amount">المبلغ (₪)</Label>
+          {/* Amount + date pair — mirrors the layout of the first row
+              of every payment-line block in AddSettlementDialog, so
+              the eye recognises the same pattern. */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="cn-amount" className="text-xs">المبلغ (₪)</Label>
               <Input
                 id="cn-amount"
                 type="number"
@@ -205,22 +227,24 @@ export function AddCreditNoteDialog({
                 onChange={(e) => setAmount(e.target.value)}
                 placeholder="0"
                 className="ltr-nums"
+                dir="ltr"
               />
             </div>
-            <div>
-              <Label htmlFor="cn-date">التاريخ</Label>
+            <div className="space-y-1.5">
+              <Label htmlFor="cn-date" className="text-xs">التاريخ</Label>
               <Input
                 id="cn-date"
                 type="date"
                 value={issueDate}
                 onChange={(e) => setIssueDate(e.target.value)}
                 className="ltr-nums"
+                dir="ltr"
               />
             </div>
           </div>
 
-          <div>
-            <Label htmlFor="cn-description">السبب</Label>
+          <div className="space-y-1.5">
+            <Label htmlFor="cn-description" className="text-xs">السبب</Label>
             <Input
               id="cn-description"
               value={description}
@@ -229,8 +253,8 @@ export function AddCreditNoteDialog({
             />
           </div>
 
-          <div>
-            <Label htmlFor="cn-notes">ملاحظات (اختياري)</Label>
+          <div className="space-y-1.5">
+            <Label htmlFor="cn-notes" className="text-xs">ملاحظات (اختياري)</Label>
             <Textarea
               id="cn-notes"
               value={notes}
