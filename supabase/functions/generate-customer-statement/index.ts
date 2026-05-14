@@ -972,17 +972,6 @@ function buildStatementHtml(args: BuildArgs): string {
 
   const events: LedgerEvent[] = [];
 
-  // Policies whose cancellation/transfer reversal row carries the
-  // refund obligation on its own balance line. Any credit_note /
-  // disbursement linked to one of these is a stage of that same
-  // obligation, so it must NOT subtract from the running balance a
-  // second time. Standalone credit_notes / disbursements (no policy
-  // link, or linked to an active policy) still flow through their
-  // normal balance impact.
-  const reversalCarriesRefund = new Set<string>(
-    policies.filter((p: any) => p.cancelled || p.transferred).map((p: any) => p.id),
-  );
-
   // 1. Transaction events from policies (one per group_id package)
   const packageMap = new Map<string, any[]>();
   const singletons: any[] = [];
@@ -1254,29 +1243,23 @@ function buildStatementHtml(args: BuildArgs): string {
           ? `<div class="reason-line"><strong>المرتجع:</strong> ${formatMoney(refundTotal)}</div>`
           : `<div class="reason-line"><strong>المرتجع:</strong> لا يوجد</div>`,
       );
-      // Cancellation row's balance side: when the agent flipped
-      // "يوجد مرتجع للعميل" with an amount, the cancellation creates
-      // an obligation — office now owes the customer that refund.
-      // The إلغاء row carries that as a −refundObligation balance dip
-      // (customer's outstanding goes down by the refund amount). The
-      // matching سند صرف / إشعار دائن rows below DO NOT subtract
-      // again; the disbursement row adds the cash back, closing the
-      // cycle so المتبقي ends correct.
-      // Transfer: NOTATION + adjustment. The "تكلفة التحويل" the user
-      // sets when moving a policy is real money owed in one direction
-      // or the other, so it lands on this row directly:
+      // Cancellation row is NOTATION ONLY — no balance impact per
+      // "إلغاء المعاملة ≠ إلغاء الدين". The actual money movement
+      // shows up as its own rows:
+      //   • إشعار دائن (credit_note): wallet credit for the customer,
+      //     subtracts from the balance there
+      //   • سند صرف (disbursement): external cash from the agent's
+      //     pocket — no balance effect (it never touches the wallet)
+      // Transfer: NOTATION + adjustment. The "تكلفة التحويل" lands on
+      // this row directly:
       //   customer_pays → +adjustment   (debit, customer owes more)
       //   office_pays   → −adjustment   (credit, office owes refund)
       const reversalLabel = mainPolicy.cancelled ? 'إلغاء معاملة' : 'تحويل معاملة';
-      let reversalDebit = transferAdjIsCustomerPays ? transferAdjAmount : 0;
-      let reversalCredit = !transferAdjIsCustomerPays && transferAdjAmount > 0 ? transferAdjAmount : 0;
-      let reversalDeltaSigned = transferAdjAmount > 0
+      const reversalDebit = transferAdjIsCustomerPays ? transferAdjAmount : 0;
+      const reversalCredit = !transferAdjIsCustomerPays && transferAdjAmount > 0 ? transferAdjAmount : 0;
+      const reversalDeltaSigned = transferAdjAmount > 0
         ? (transferAdjIsCustomerPays ? +transferAdjAmount : -transferAdjAmount)
         : 0;
-      if (mainPolicy.cancelled && refundObligation > 0.01) {
-        reversalCredit += refundObligation;
-        reversalDeltaSigned -= refundObligation;
-      }
       events.push({
         date: reversalDate,
         timestamp: Number.isNaN(reversalTimestamp) ? pkgTimestamp : reversalTimestamp,
@@ -1421,25 +1404,21 @@ function buildStatementHtml(args: BuildArgs): string {
     const receiptTimestamp = r.created_at
       ? new Date(r.created_at).getTime()
       : new Date(r.receipt_date).getTime();
-    // Per-event balance contribution. When the receipt is tied to a
-    // cancelled/transferred policy, the إلغاء row above already
-    // booked the refund obligation as a balance dip. The credit_note
-    // is just the formal paper version of that obligation (notation,
-    // 0 impact), and the سند صرف is the cash settling it (adds the
-    // amount back to close the cycle so المتبقي ends correct).
-    // Standalone rows (no policy link, or linked to an active
-    // policy) still subtract directly — they represent direct value
-    // transfer with no prior obligation.
-    const isRefundStageOfReversal =
-      (r.receipt_type === 'credit_note' || r.receipt_type === 'disbursement') &&
-      r.policy_id && reversalCarriesRefund.has(r.policy_id);
+    // Per-event balance contribution per the user's accounting rules:
+    //   • إشعار دائن (credit_note) ALWAYS subtracts from the balance
+    //     — it puts a credit into the customer's wallet, reducing
+    //     what they owe us in the system.
+    //   • سند صرف (disbursement) is 0 — it's external cash from the
+    //     agent's pocket, doesn't touch the wallet, doesn't change
+    //     what the customer owes. "طلع المصاري وراحوا."
+    //   • Cancellation receipt (refused cheque) still puts debt back.
     const balanceDelta = (() => {
       switch (r.receipt_type) {
         case 'payment':       return -displayedAmount; // customer paid
         case 'accident_fee':  return -displayedAmount; // billed as payment-like
         case 'cancellation':  return +displayedAmount; // refused cheque puts debt back
-        case 'disbursement':  return isRefundStageOfReversal ? +displayedAmount : -displayedAmount;
-        case 'credit_note':   return isRefundStageOfReversal ? 0 : -displayedAmount;
+        case 'disbursement':  return 0;                // external cash, no wallet effect
+        case 'credit_note':   return -displayedAmount; // wallet credit
         default:              return isDebit ? +displayedAmount : -displayedAmount;
       }
     })();
