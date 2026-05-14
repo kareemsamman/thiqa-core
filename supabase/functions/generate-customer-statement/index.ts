@@ -645,9 +645,10 @@ serve(async (req: Request) => {
 
       const baseAmount = pkg.reduce((s, p) => s + policyOfficeAmount(p), 0);
       const refundTotal = refundTotalForPackage(pkg);
-      const skipBaseAmount =
-        mainPolicy.transferred ||
-        (mainPolicy.cancelled && refundTotal <= 0.01);
+      // Mirror the per-row rule above: zero out ONLY for cancelled-
+      // no-refund. Transferred policies keep their original amount
+      // because the value moved, not vanished.
+      const skipBaseAmount = mainPolicy.cancelled && refundTotal <= 0.01;
 
       return sum + (skipBaseAmount ? 0 : baseAmount);
     }, 0);
@@ -1133,14 +1134,14 @@ function buildStatementHtml(args: BuildArgs): string {
       ? pkgCreatedAt
       : new Date(mainPolicy.start_date).getTime();
 
-    // Money side of the new-transaction row. We zero out the debit
-    // when the transaction never really stuck with the customer —
-    // i.e. transferred (handed off to a new car, only the تكلفة
-    // التحويل matters) or cancelled without any refund (the customer
-    // never owed anything since the office didn't return money
-    // either, per the user's "ما حطيت بدنا مصاري" rule). The row
-    // still renders so the customer sees what was attempted, but the
-    // balance is unaffected.
+    // Money side of the new-transaction row. We zero the debit ONLY
+    // when cancelled with no refund (the customer agreed to walk
+    // away with nothing changing — per the user's rule "لما نلغي
+    // وما في مرتجع ولا اشي بتغير بالمبلغ"). Transferred policies
+    // KEEP their original debit because the insurance value didn't
+    // disappear — it just moved to a new car (the destination row is
+    // skipped to avoid double-counting). The تحويل row below adds
+    // only the adjustment delta on top.
     let pkgRefundTotal = 0;
     for (const r of ledger as any[]) {
       if (!pkg.some((p) => p.id === r.policy_id)) continue;
@@ -1148,9 +1149,7 @@ function buildStatementHtml(args: BuildArgs): string {
         pkgRefundTotal += Math.abs(Number(r.amount || 0));
       }
     }
-    const newTxnSkipBalance =
-      mainPolicy.transferred ||
-      (mainPolicy.cancelled && pkgRefundTotal <= 0.01);
+    const newTxnSkipBalance = mainPolicy.cancelled && pkgRefundTotal <= 0.01;
     const newTxnDebit = newTxnSkipBalance ? 0 : totalDebit;
 
     events.push({
