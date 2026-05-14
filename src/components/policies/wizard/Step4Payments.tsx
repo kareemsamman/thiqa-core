@@ -81,6 +81,11 @@ export function Step4Payments({
   const [activePolicyIdForPayment, setActivePolicyIdForPayment] = useState<string | null>(null);
   const [splitPopoverOpen, setSplitPopoverOpen] = useState(false);
   const [splitCount, setSplitCount] = useState(2);
+  // IDs that were just duplicated — used to play a one-shot slide-up
+  // animation on the new card so the agent's eye lands on it. Cleared
+  // after the animation finishes so re-renders don't leave the class
+  // dangling on the DOM.
+  const [freshIds, setFreshIds] = useState<Set<string>>(new Set());
   
   // Preview URLs for payment images (separate from files stored in payment objects)
   const [previewUrls, setPreviewUrls] = useState<PreviewUrls>({});
@@ -181,9 +186,10 @@ export function Step4Payments({
   const duplicatePayment = (id: string) => {
     const source = payments.find(p => p.id === id);
     if (!source) return;
+    const newId = crypto.randomUUID();
     const clone: PaymentLine = {
       ...source,
-      id: crypto.randomUUID(),
+      id: newId,
       locked: undefined,
       locked_label: undefined,
       tranzila_paid: undefined,
@@ -191,6 +197,14 @@ export function Step4Payments({
       cheque_image_url: undefined,
     };
     setPayments([...payments, clone]);
+    setFreshIds(prev => new Set(prev).add(newId));
+    setTimeout(() => {
+      setFreshIds(prev => {
+        const next = new Set(prev);
+        next.delete(newId);
+        return next;
+      });
+    }, 600);
   };
 
   // Split remaining amount into equal installments (keeps locked payments)
@@ -449,7 +463,8 @@ export function Step4Payments({
                   key={payment.id}
                   className={cn(
                     "relative p-3",
-                    visaPaid && "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800"
+                    visaPaid && "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800",
+                    freshIds.has(payment.id) && "animate-in slide-in-from-bottom-8 fade-in-0 duration-500"
                   )}
                 >
                   {/* Row actions — absolute top-left so they never claim

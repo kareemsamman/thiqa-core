@@ -193,6 +193,8 @@ export function DebtPaymentModal({
   // modal in sync so all three surfaces agree.
   const [grossPaidAmount, setGrossPaidAmount] = useState(0);
   const [paymentLines, setPaymentLines] = useState<PaymentLine[]>([]);
+  // One-shot slide-up animation on freshly-duplicated rows.
+  const [freshIds, setFreshIds] = useState<Set<string>>(new Set());
   const [tranzilaModalOpen, setTranzilaModalOpen] = useState(false);
   const [activeVisaPaymentIndex, setActiveVisaPaymentIndex] = useState<number | null>(null);
   const [activeTranzilaPolicyId, setActiveTranzilaPolicyId] = useState<string | null>(null);
@@ -741,16 +743,25 @@ export function DebtPaymentModal({
   const duplicatePaymentLine = (id: string) => {
     const source = paymentLines.find(p => p.id === id);
     if (!source) return;
+    const newId = crypto.randomUUID();
     setPaymentLines([
       ...paymentLines,
       {
         ...source,
-        id: crypto.randomUUID(),
+        id: newId,
         tranzilaPaid: undefined,
         pendingImages: undefined,
         cheque_image_url: undefined,
       },
     ]);
+    setFreshIds(prev => new Set(prev).add(newId));
+    setTimeout(() => {
+      setFreshIds(prev => {
+        const next = new Set(prev);
+        next.delete(newId);
+        return next;
+      });
+    }, 600);
   };
 
   const updatePaymentLine = (id: string, field: keyof PaymentLine, value: any) => {
@@ -1367,7 +1378,8 @@ export function DebtPaymentModal({
               {paymentLines.map((payment, index) => ({ payment, index })).reverse().map(({ payment, index }) => (
                 <Card key={payment.id} className={cn(
                   "p-3",
-                  payment.tranzilaPaid && "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800"
+                  payment.tranzilaPaid && "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800",
+                  freshIds.has(payment.id) && "animate-in slide-in-from-bottom-8 fade-in-0 duration-500"
                 )}>
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">

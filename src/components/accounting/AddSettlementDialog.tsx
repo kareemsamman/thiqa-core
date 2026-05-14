@@ -201,6 +201,8 @@ export function AddSettlementDialog({
   const [entityId, setEntityId] = useState<string>(defaultEntityId ?? '');
   const [notes, setNotes] = useState('');
   const [lines, setLines] = useState<PaymentLine[]>([makeLine('cash')]);
+  // One-shot slide-up animation on freshly-duplicated rows.
+  const [freshIds, setFreshIds] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
   // تقسيط — split a single amount into N lines spaced monthly.
   // The user picks the line type (cash/cheque/customer_cheque/bank_transfer/visa).
@@ -430,7 +432,8 @@ export function AddSettlementDialog({
   // belongs to a specific physical cheque) and selected_cheques (each
   // customer-cheque can only sit in one settlement, so the picker on
   // the new card opens empty for a fresh selection).
-  const duplicateLine = (id: string) =>
+  const duplicateLine = (id: string) => {
+    const newId = crypto.randomUUID();
     setLines((prev) => {
       const source = prev.find((l) => l.id === id);
       if (!source) return prev;
@@ -438,12 +441,21 @@ export function AddSettlementDialog({
         ...prev,
         {
           ...source,
-          id: crypto.randomUUID(),
+          id: newId,
           cheque_image_urls: undefined,
           selected_cheques: undefined,
         },
       ];
     });
+    setFreshIds((prev) => new Set(prev).add(newId));
+    setTimeout(() => {
+      setFreshIds((prev) => {
+        const next = new Set(prev);
+        next.delete(newId);
+        return next;
+      });
+    }, 600);
+  };
 
   // Drop the seeded empty cash line when the user adds a different
   // payment — otherwise the dialog would keep that placeholder row
@@ -902,6 +914,7 @@ export function AddSettlementDialog({
                     onChange={(patch) => updateLine(line.id, patch)}
                     onRemove={lines.length > 1 ? () => removeLine(line.id) : undefined}
                     onDuplicate={() => duplicateLine(line.id)}
+                    isFresh={freshIds.has(line.id)}
                   />
                 ))}
             </div>
@@ -1034,16 +1047,21 @@ function PaymentLineCard({
   onChange,
   onRemove,
   onDuplicate,
+  isFresh,
 }: {
   index: number;
   line: PaymentLine;
   onChange: (patch: Partial<PaymentLine>) => void;
   onRemove?: () => void;
   onDuplicate?: () => void;
+  isFresh?: boolean;
 }) {
   const Icon = PAYMENT_TYPE_ICON[line.payment_type];
   return (
-    <Card className="p-3 space-y-3">
+    <Card className={cn(
+      "p-3 space-y-3",
+      isFresh && "animate-in slide-in-from-bottom-8 fade-in-0 duration-500",
+    )}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Icon className="h-3.5 w-3.5 text-muted-foreground" />
