@@ -192,7 +192,7 @@ export function PaymentGroupDetailsDialog({
       // for both paths so future edits stay in one place).
       const ids = group.payments.map((p) => p.id);
       const { data, error } = await supabase.functions.invoke(
-        'generate-bulk-payment-receipt',
+        'generate-voucher',
         { body: { payment_ids: ids } },
       );
       if (error) throw error;

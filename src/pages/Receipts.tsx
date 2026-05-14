@@ -1151,10 +1151,7 @@ export default function Receipts() {
         );
         return;
       }
-      const fnName =
-        groupType === 'credit_note'
-          ? 'generate-credit-note-voucher'
-          : 'generate-disbursement-voucher';
+      const fnName = 'generate-voucher';
       const docLabel = groupType === 'credit_note' ? 'الإشعار' : 'سند الصرف';
       setPrintProgress({ open: true, value: 8 });
       const ticker = setInterval(() => {
@@ -1311,7 +1308,7 @@ export default function Receipts() {
             if (cand < cur) canonical = r;
           }
           const { data, error } = await supabase.functions.invoke(
-            'generate-cancellation-voucher',
+            'generate-voucher',
             { body: { voucher_receipt_id: (canonical as any).id } },
           );
           if (error) throw error;
@@ -1326,7 +1323,7 @@ export default function Receipts() {
           return;
         }
 
-        const fn = "generate-bulk-payment-receipt";
+        const fn = "generate-voucher";
         const body = { payment_ids: paymentIds };
         const { data, error } = await supabase.functions.invoke(fn, { body });
         if (error) throw error;

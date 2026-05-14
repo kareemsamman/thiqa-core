@@ -135,8 +135,10 @@ serve(async (req) => {
     let receiptData: any = null;
     let receiptErrorText = "";
     try {
+      // Unified voucher pipeline — branches on receipts.receipt_type
+      // internally to render the credit-note template.
       const receiptResp = await fetch(
-        `${supabaseUrl}/functions/v1/generate-credit-note-voucher`,
+        `${supabaseUrl}/functions/v1/generate-voucher`,
         {
           method: "POST",
           headers: {

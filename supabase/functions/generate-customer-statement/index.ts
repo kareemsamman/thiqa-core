@@ -561,10 +561,13 @@ serve(async (req: Request) => {
       if (!arr.includes(r.payment_id)) arr.push(r.payment_id);
     }
 
-    // One bulk-receipt fetch per session, in parallel.
+    // One voucher fetch per session, in parallel. The unified
+    // generate-voucher resolves payment_ids → canonical receipts
+    // row + expands the session siblings — same final URL as the
+    // legacy generate-bulk-payment-receipt path.
     const bulkUrlBySession = new Map<string, string>();
     const bulkPromises = Array.from(sessionToPaymentIds.entries()).map(async ([key, ids]) => {
-      const url = await fetchVoucherUrl('generate-bulk-payment-receipt', { payment_ids: ids });
+      const url = await fetchVoucherUrl('generate-voucher', { payment_ids: ids });
       return { key, url };
     });
     const bulkResults = await Promise.allSettled(bulkPromises);
@@ -574,16 +577,12 @@ serve(async (req: Request) => {
       }
     }
 
-    // Non-payment rows still resolve to their own single-row docs.
+    // Non-payment rows go through the same unified endpoint with
+    // voucher_receipt_id — the function branches on receipt_type
+    // internally to render the right template.
     const otherUrlPromises = (ledgerForEvents as any[]).map(async (r) => {
-      let url: string | null = null;
-      if (r.receipt_type === 'cancellation') {
-        url = await fetchVoucherUrl('generate-cancellation-voucher', { voucher_receipt_id: r.id });
-      } else if (r.receipt_type === 'credit_note') {
-        url = await fetchVoucherUrl('generate-credit-note-voucher', { voucher_receipt_id: r.id });
-      } else if (r.receipt_type === 'disbursement') {
-        url = await fetchVoucherUrl('generate-disbursement-voucher', { voucher_receipt_id: r.id });
-      }
+      if (r.receipt_type === 'payment') return { id: r.id as string, url: null };
+      const url = await fetchVoucherUrl('generate-voucher', { voucher_receipt_id: r.id });
       return { id: r.id as string, url };
     });
     const otherResults = await Promise.allSettled(otherUrlPromises);

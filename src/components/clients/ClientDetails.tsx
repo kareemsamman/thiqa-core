@@ -1821,7 +1821,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
     try {
       // Unified template: always call the bulk endpoint (it renders
       // the singular layout when a single id is passed).
-      const { data, error } = await supabase.functions.invoke('generate-bulk-payment-receipt', {
+      const { data, error } = await supabase.functions.invoke('generate-voucher', {
         body: { payment_ids: [paymentId] }
       });
 
@@ -1880,7 +1880,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       // stays in the codebase for any external callers but no UI
       // surface routes to it anymore.
       {
-        const { data, error } = await supabase.functions.invoke('generate-bulk-payment-receipt', {
+        const { data, error } = await supabase.functions.invoke('generate-voucher', {
           body: { payment_ids: paymentIds },
         });
         if (error) throw error;
@@ -1950,7 +1950,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
     };
     try {
       const { data, error } = await supabase.functions.invoke(
-        'generate-disbursement-voucher',
+        'generate-voucher',
         { body: { voucher_receipt_id: voucherId } },
       );
       if (error) throw error;
@@ -1997,7 +1997,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
     };
     try {
       const { data, error } = await supabase.functions.invoke(
-        'generate-credit-note-voucher',
+        'generate-voucher',
         { body: { voucher_receipt_id: voucherId } },
       );
       if (error) throw error;
@@ -2039,7 +2039,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
     };
     try {
       const { data, error } = await supabase.functions.invoke(
-        'generate-cancellation-voucher',
+        'generate-voucher',
         { body: { voucher_receipt_id: voucherId } },
       );
       if (error) throw error;

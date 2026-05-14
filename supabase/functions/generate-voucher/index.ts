@@ -40,7 +40,20 @@ const corsHeaders = {
 };
 
 interface VoucherRequest {
-  voucher_receipt_id: string;
+  /** Primary input. The function reads this receipts row and
+   *  resolves everything else from it. */
+  voucher_receipt_id?: string;
+  /** Legacy/alternative input — callers that historically targeted
+   *  generate-bulk-payment-receipt pass an array of policy_payments
+   *  IDs and we resolve the canonical receipts row from them. The
+   *  session sibling expansion happens via the same downstream logic
+   *  regardless of which input was used. */
+  payment_ids?: string[];
+  /** Legacy ignored — the SMS wrappers passed this for the
+   *  print-only path. Accepted silently so old callers don't error. */
+  skip_sms?: boolean;
+  /** Legacy ignored — same reason. */
+  customer_scope?: boolean;
 }
 
 interface PhoneLink {
@@ -644,10 +657,31 @@ serve(async (req) => {
     const agentId = await resolveAgentId(supabase, user.id);
     const branding = await getAgentBranding(supabase, agentId);
 
-    const { voucher_receipt_id }: VoucherRequest = await req.json();
+    const body = await req.json() as VoucherRequest;
+    let voucher_receipt_id = body.voucher_receipt_id;
+
+    // Legacy path: callers that haven't migrated yet pass
+    // payment_ids (the old generate-bulk-payment-receipt contract).
+    // Resolve to the first matching receipts row — its
+    // payment_session_id (or batch_id) will fan out to every sibling
+    // during the source-ladder phase below, so passing any one of
+    // the payment_ids gives the same final voucher.
+    if (!voucher_receipt_id && body.payment_ids && body.payment_ids.length > 0) {
+      const { data: matching } = await supabase
+        .from('receipts')
+        .select('id')
+        .in('payment_id', body.payment_ids)
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (matching?.id) {
+        voucher_receipt_id = matching.id as string;
+      }
+    }
+
     if (!voucher_receipt_id) {
       return new Response(
-        JSON.stringify({ error: "voucher_receipt_id is required" }),
+        JSON.stringify({ error: "voucher_receipt_id (or payment_ids) is required" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }

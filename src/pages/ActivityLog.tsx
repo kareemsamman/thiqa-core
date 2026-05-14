@@ -562,26 +562,15 @@ export default function ActivityLog() {
     setPrintingId(activity.id);
     try {
       let fnName: string;
-      let body: Record<string, unknown>;
-      if (d.receipt_type === "payment") {
-        // payment receipts route through the bulk endpoint keyed by
-        // policy_payments.id (not receipts.id). Single-payment scope.
-        if (!d.payment_id) {
-          toast.error("لا يوجد معرّف دفعة لطباعة السند");
-          return;
-        }
-        fnName = "generate-bulk-payment-receipt";
-        body = { payment_ids: [d.payment_id] };
-      } else if (d.receipt_type === "cancellation") {
-        fnName = "generate-cancellation-voucher";
-        body = { voucher_receipt_id: d.receipt_id };
-      } else if (d.receipt_type === "disbursement") {
-        fnName = "generate-disbursement-voucher";
-        body = { voucher_receipt_id: d.receipt_id };
-      } else {
-        fnName = "generate-credit-note-voucher";
-        body = { voucher_receipt_id: d.receipt_id };
-      }
+      // All voucher kinds now go through the unified
+      // generate-voucher edge function — it reads the receipts row
+      // (resolving payment_ids → receipt for legacy callers) and
+      // branches on receipt_type internally.
+      fnName = "generate-voucher";
+      const body: Record<string, unknown> =
+        d.receipt_type === "payment" && d.payment_id
+          ? { payment_ids: [d.payment_id] }
+          : { voucher_receipt_id: d.receipt_id };
       const { data, error } = await supabase.functions.invoke(fnName, { body });
       if (error) throw error;
       const url = (data as any)?.receipt_url;

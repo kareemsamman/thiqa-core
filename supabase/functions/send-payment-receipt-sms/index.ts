@@ -133,8 +133,12 @@ serve(async (req) => {
     let receiptData: any = null;
     let receiptErrorText = "";
     try {
+      // Routes through the unified generate-voucher edge function,
+      // which resolves payment_ids → receipts row and expands the
+      // session siblings for the same final output the legacy
+      // generate-bulk-payment-receipt produced.
       const receiptResp = await fetch(
-        `${supabaseUrl}/functions/v1/generate-bulk-payment-receipt`,
+        `${supabaseUrl}/functions/v1/generate-voucher`,
         {
           method: "POST",
           headers: {

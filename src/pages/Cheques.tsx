@@ -972,7 +972,7 @@ export default function Cheques() {
         return;
       }
       const { data, error } = await supabase.functions.invoke(
-        'generate-cancellation-voucher',
+        'generate-voucher',
         { body: { voucher_receipt_id: voucherId } },
       );
       if (error) throw error;

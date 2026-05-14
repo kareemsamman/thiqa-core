@@ -96,8 +96,9 @@ export function PolicyReceiptsDrawer({
   const handlePrint = async (paymentId: string) => {
     setPrintingId(paymentId);
     try {
-      // Unified template — bulk endpoint handles single payments too.
-      const { data, error } = await supabase.functions.invoke('generate-bulk-payment-receipt', {
+      // Unified template — generate-voucher resolves payment_ids
+      // to a receipts row + expands the session siblings.
+      const { data, error } = await supabase.functions.invoke('generate-voucher', {
         body: { payment_ids: [paymentId] },
       });
       if (error) throw error;
@@ -117,7 +118,7 @@ export function PolicyReceiptsDrawer({
     setPrintingId('all');
     try {
       const ids = receipts.map((r) => r.id);
-      const { data, error } = await supabase.functions.invoke('generate-bulk-payment-receipt', {
+      const { data, error } = await supabase.functions.invoke('generate-voucher', {
         body: { payment_ids: ids },
       });
       if (error) throw error;
