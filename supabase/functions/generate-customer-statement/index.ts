@@ -272,7 +272,9 @@ serve(async (req: Request) => {
         cancellation_note, cancellation_date,
         transferred_from_policy_id, transferred_car_number, transferred_to_car_number,
         car:cars(id, car_number, manufacturer_name, model),
-        company:insurance_companies(name, name_ar)
+        company:insurance_companies(name, name_ar),
+        road_service:road_services(name, name_ar),
+        accident_fee_service:accident_fee_services(name, name_ar)
       `)
       .eq('client_id', client_id)
       .gte('start_date', yearStart)
@@ -1019,6 +1021,20 @@ function buildStatementHtml(args: BuildArgs): string {
       const typeLabel = getPolicyTypeLabel(p.policy_type_parent, p.policy_type_child);
       const companyName = p.company?.name_ar || p.company?.name || '';
       const companyTag = companyName ? ` · ${escapeHtml(companyName)}` : '';
+      // Sub-type tag for خدمات الطريق / إعفاء رسوم الحادث — the
+      // policy itself only says "خدمات الطريق", but the agent picked
+      // a specific service (e.g. "خدمة A / B / مميز") at sale time,
+      // and the customer needs to know which one they bought.
+      const serviceName = (() => {
+        if (p.policy_type_parent === 'ROAD_SERVICE') {
+          return p.road_service?.name_ar || p.road_service?.name || '';
+        }
+        if (p.policy_type_parent === 'ACCIDENT_FEE_EXEMPTION') {
+          return p.accident_fee_service?.name_ar || p.accident_fee_service?.name || '';
+        }
+        return '';
+      })();
+      const serviceTag = serviceName ? ` · <span class="service-tag">${escapeHtml(serviceName)}</span>` : '';
       if (p.policy_type_parent === 'ELZAMI') {
         // Show the إلزامي line item with its base price + a "خارج
         // الكشف" tag so the customer reads what it covers. Office
@@ -1036,7 +1052,7 @@ function buildStatementHtml(args: BuildArgs): string {
           ? ` <span class="commission-note">(منها ${formatMoney(commission)} عمولة مكتب)</span>`
           : '';
         lineItems.push(
-          `<div class="line-item"><span class="line-amount">${formatMoney(insurancePrice + commission)}</span> · <strong>${escapeHtml(typeLabel)}</strong>${companyTag}${breakdownTag}</div>`,
+          `<div class="line-item"><span class="line-amount">${formatMoney(insurancePrice + commission)}</span> · <strong>${escapeHtml(typeLabel)}</strong>${companyTag}${serviceTag}${breakdownTag}</div>`,
         );
       }
     }
@@ -1776,6 +1792,11 @@ function buildStatementHtml(args: BuildArgs): string {
     }
     .ledger-table .commission-note {
       font-size: 10px; color: #6b7280; font-weight: 500;
+    }
+    .ledger-table .service-tag {
+      display: inline-block; font-size: 10px; font-weight: 700;
+      padding: 1px 6px; border-radius: 8px;
+      background: #ede9fe; color: #5b21b6; border: 1px solid #c4b5fd;
     }
     .ledger-table .elzami-summary {
       font-size: 10.5px; color: #6b7280; font-weight: 600;
