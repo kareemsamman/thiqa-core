@@ -36,6 +36,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { ArabicDatePicker } from '@/components/ui/arabic-date-picker';
 import { Loader2, Wallet } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAgentContext } from '@/hooks/useAgentContext';
@@ -194,14 +195,10 @@ export function AddBrokerCreditNoteDialog({
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="bcn-date" className="text-xs">التاريخ</Label>
-              <Input
-                id="bcn-date"
-                type="date"
+              <Label className="text-xs">التاريخ</Label>
+              <ArabicDatePicker
                 value={issueDate}
-                onChange={(e) => setIssueDate(e.target.value)}
-                className="ltr-nums"
-                dir="ltr"
+                onChange={setIssueDate}
               />
             </div>
           </div>
