@@ -266,11 +266,18 @@ export function SinglePolicyPaymentModal({
     try {
       const { data, error } = await supabase
         .from('customer_wallet_transactions')
-        .select('amount, transaction_type')
-        .eq('client_id', cid);
+        .select('amount, transaction_type, settled_at')
+        .eq('client_id', cid)
+        .is('settled_at', null);
 
       if (error) throw error;
 
+      // Net the live wallet: refunds the office still owes minus what
+      // the customer owes back (transfer-fee + credit_consumed). The
+      // credit_consumed subtraction is what stops an already-applied
+      // credit from showing as a still-available balance on the next
+      // payment dialog. Mirrors fetchPaymentSummary on ClientDetails
+      // and fetchCreditBalance on DebtPaymentModal + PackagePaymentModal.
       const weOwe = (data || [])
         .filter(t =>
           t.transaction_type === 'refund' ||
@@ -280,7 +287,10 @@ export function SinglePolicyPaymentModal({
         .reduce((sum, t) => sum + (t.amount || 0), 0);
 
       const customerOwes = (data || [])
-        .filter(t => t.transaction_type === 'transfer_adjustment_due')
+        .filter(t =>
+          t.transaction_type === 'transfer_adjustment_due' ||
+          t.transaction_type === 'credit_consumed'
+        )
         .reduce((sum, t) => sum + (t.amount || 0), 0);
 
       setCreditBalance(Math.max(0, weOwe - customerOwes));

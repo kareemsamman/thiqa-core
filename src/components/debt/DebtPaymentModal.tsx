@@ -353,11 +353,21 @@ export function DebtPaymentModal({
     try {
       const { data, error } = await supabase
         .from('customer_wallet_transactions')
-        .select('amount, transaction_type')
-        .eq('client_id', clientId);
+        .select('amount, transaction_type, settled_at')
+        .eq('client_id', clientId)
+        .is('settled_at', null);
 
       if (error) throw error;
 
+      // refund / transfer_refund_owed / manual_refund = office owes
+      // the customer (live credit available)
+      // transfer_adjustment_due                       = customer owes
+      // credit_consumed                                = credit already
+      //   applied to a new transaction (settled side, but until the
+      //   wallet trigger marks settled_at we still need to net it out
+      //   here so the available balance never shows a credit that's
+      //   already been used). Mirrors fetchPaymentSummary on the
+      //   client page so the two surfaces never disagree.
       const weOwe = (data || [])
         .filter(t =>
           t.transaction_type === 'refund' ||
@@ -367,7 +377,10 @@ export function DebtPaymentModal({
         .reduce((sum, t) => sum + (t.amount || 0), 0);
 
       const customerOwes = (data || [])
-        .filter(t => t.transaction_type === 'transfer_adjustment_due')
+        .filter(t =>
+          t.transaction_type === 'transfer_adjustment_due' ||
+          t.transaction_type === 'credit_consumed'
+        )
         .reduce((sum, t) => sum + (t.amount || 0), 0);
 
       setCreditBalance(Math.max(0, weOwe - customerOwes));
