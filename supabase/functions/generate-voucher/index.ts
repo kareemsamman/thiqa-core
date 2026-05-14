@@ -937,13 +937,20 @@ serve(async (req) => {
           if (r.refused) continue;
           const amt = Number(r.amount || 0);
           voucherTotal += amt;
+          // For cheques the wizard stores due date in three places that
+          // should always agree: cheque_due_date (canonical), cheque_date
+          // (legacy mirror), and payment_date (universal date column the
+          // validator + cheques page key off). Use them as a fallback
+          // chain so any of them filled rescues the row from printing
+          // a "—" — covers data written by every wizard / settlement /
+          // import path the codebase has ever shipped.
+          const isCheque = r.payment_type === 'cheque';
           lines.push({
             payment_type: (r.payment_type as string) || 'cash',
             cheque_number: r.cheque_number ?? null,
-            // Prefer the new canonical column (migration 20260509200000).
-            // Fall back to the legacy cheque_date for pre-migration rows
-            // that never got backfilled.
-            cheque_due_date: r.cheque_due_date ?? r.cheque_date ?? null,
+            cheque_due_date: isCheque
+              ? (r.cheque_due_date ?? r.cheque_date ?? r.payment_date ?? null)
+              : (r.cheque_due_date ?? r.cheque_date ?? null),
             cheque_issue_date: r.cheque_issue_date ?? null,
             payment_date: r.payment_date ?? null,
             bank_code: r.bank_code ?? null,
