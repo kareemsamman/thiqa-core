@@ -697,7 +697,8 @@ serve(async (req) => {
         amount, payment_method, cheque_number, card_last_four, notes,
         client_id, client_name, broker_id, broker_settlement_id,
         company_id, company_settlement_id,
-        policy_id, payment_id, client_settlement_id, created_at
+        policy_id, payment_id, client_settlement_id, cancels_receipt_id,
+        created_at
       `)
       .eq('id', voucher_receipt_id)
       .maybeSingle();
@@ -947,10 +948,84 @@ serve(async (req) => {
           voucherNumber = String(anchorPayment.receipt_number);
         }
 
-        let filterCol: string;
-        let filterVal: string;
+        // ─── Scope resolution ─────────────────────────────────────
+        // قاعدتان للسند الإلغاء:
+        //
+        //   (أ) إلغاء فردي (من صفحة الشيكات: المستخدم رجّع شيك واحد)
+        //       → بيظهر فقط الشيك الملغى (+ splits لو مقسوم).
+        //
+        //   (ب) إلغاء سند كامل (من صفحة الإيصالات: "إلغاء السند")
+        //       → بيظهر كل دفعات السند (شيكات + كاش + تحويلات).
+        //
+        // إشارة التفريق: الـ frontend بـ "إلغاء السند" بيعمل UPDATE
+        // واحد لكل صفوف الـ session دفعة وحدة → كلهم بيشاركوا نفس
+        // الـ `cancelled_at` على السندات الأصلية (لأن NOW() داخل
+        // transaction واحدة بترجع نفس القيمة). الإلغاء الفردي بيكون
+        // transaction منفصلة → cancelled_at مختلف.
+        //
+        // الـ logic: نجيب الـ original receipt الي هاد السند بيلغيه،
+        // نقرأ cancelled_at تبعه، وندوّر على أصول إخوة بنفس الـ session
+        // عندها نفس cancelled_at (down to microsecond). لو لقينا أكثر
+        // من واحد → إلغاء سند كامل، فبنحضّر payment_ids لكلهم. لو لقينا
+        // واحد فقط → إلغاء فردي.
+        let siblingPaymentIds: string[] | null = null;
         if (receiptType === 'cancellation') {
-          // سند إلغاء: حصراً الشيك الملغى نفسه (+ splits لو مقسوم).
+          let originalCancelledAt: string | null = null;
+          if (receiptRow.cancels_receipt_id) {
+            const { data: originalRow } = await supabase
+              .from('receipts')
+              .select('cancelled_at')
+              .eq('id', receiptRow.cancels_receipt_id)
+              .maybeSingle();
+            originalCancelledAt = (originalRow?.cancelled_at as string | null) ?? null;
+          }
+          // Fallback: legacy data without cancels_receipt_id — find
+          // the original via payment_id + cancelled_at NOT NULL.
+          if (!originalCancelledAt) {
+            const { data: originalRow } = await supabase
+              .from('receipts')
+              .select('cancelled_at')
+              .eq('payment_id', receiptRow.payment_id)
+              .eq('receipt_type', 'payment')
+              .not('cancelled_at', 'is', null)
+              .order('cancelled_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            originalCancelledAt = (originalRow?.cancelled_at as string | null) ?? null;
+          }
+
+          if (originalCancelledAt && anchorPayment.payment_session_id) {
+            // Find all session siblings with the same cancelled_at →
+            // these were cancelled together in one "إلغاء السند" action.
+            const { data: sessionPaymentIds } = await supabase
+              .from('policy_payments')
+              .select('id')
+              .eq('payment_session_id', anchorPayment.payment_session_id);
+            const allSessionIds = (sessionPaymentIds ?? []).map((p: any) => p.id);
+            if (allSessionIds.length > 0) {
+              const { data: cancelledOriginals } = await supabase
+                .from('receipts')
+                .select('payment_id')
+                .in('payment_id', allSessionIds)
+                .eq('receipt_type', 'payment')
+                .eq('cancelled_at', originalCancelledAt);
+              const ids = (cancelledOriginals ?? [])
+                .map((r: any) => r.payment_id as string | null)
+                .filter((v): v is string => !!v);
+              if (ids.length > 0) siblingPaymentIds = ids;
+            }
+          }
+        }
+
+        let filterCol: string;
+        let filterVal: string | string[];
+        if (receiptType === 'cancellation' && siblingPaymentIds && siblingPaymentIds.length > 1) {
+          // إلغاء سند كامل — نجيب كل المدفوعات الي اتلغت بنفس الوقت.
+          // بنفتح على id IN [...] بدل eq.
+          filterCol = 'id';
+          filterVal = siblingPaymentIds;
+        } else if (receiptType === 'cancellation') {
+          // إلغاء فردي — حصراً الشيك الملغى نفسه (+ splits لو مقسوم).
           if (anchorPayment.batch_id) {
             filterCol = 'batch_id';
             filterVal = anchorPayment.batch_id as string;
@@ -965,14 +1040,19 @@ serve(async (req) => {
           filterVal = (sessionId ?? receiptRow.payment_id) as string;
         }
 
-        const { data: siblings } = await supabase
+        let siblingsQuery = supabase
           .from('policy_payments')
           .select(`
             id, batch_id, payment_session_id, created_at,
             payment_type, cheque_number, cheque_due_date, cheque_date, cheque_issue_date,
             payment_date, bank_code, branch_code, notes, amount, refused
-          `)
-          .eq(filterCol, filterVal);
+          `);
+        if (Array.isArray(filterVal)) {
+          siblingsQuery = siblingsQuery.in(filterCol, filterVal);
+        } else {
+          siblingsQuery = siblingsQuery.eq(filterCol, filterVal);
+        }
+        const { data: siblings } = await siblingsQuery;
 
         // ─── Physical-instrument collapse ──────────────────────────
         // قاعدة مطلقة من المستخدم (memory: feedback_no_splits_on_receipt):
