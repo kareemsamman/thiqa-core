@@ -1452,7 +1452,12 @@ function buildStatementHtml(args: BuildArgs): string {
         if (r.card_last_four) detailLines.push(`<div class="ledger-detail">بطاقة تنتهي بـ ${escapeHtml(r.card_last_four)}</div>`);
       }
     }
-    if (r.cancellation_reason) {
+    // سبب الإلغاء بيتعرض بس على صف سند الإلغاء (الأحمر)، مش على
+    // سند القبض الأصلي. سند القبض وثيقة مجمّدة — لما الـ trigger
+    // بيستعمل cancelled_at + cancellation_reason على الصف الأصلي،
+    // كنا نطبع السبب على الاثنين (القبض + الإلغاء) فبيطلع كأن سند
+    // القبض اتغيّر. السبب راح يبقى مرئي على صف سند الإلغاء فقط.
+    if (r.cancellation_reason && r.receipt_type === 'cancellation') {
       detailLines.push(`<div class="reason-line reason-cancel"><strong>سبب الإلغاء:</strong> ${escapeHtml(r.cancellation_reason)}</div>`);
     }
     if (r.notes) {
