@@ -475,7 +475,13 @@ function ClientPicker({ agentId, value, onChange }: ClientPickerProps) {
                         onChange(c);
                         setOpen(false);
                       }}
-                      className="flex items-center gap-2"
+                      // Soften the default accent (which renders as a
+                      // heavy near-black tint in this theme) into a
+                      // light muted hover state, and force the row text
+                      // to stay on `foreground` so the muted ID/phone
+                      // line keeps its readable greyscale instead of
+                      // inverting against the selection background.
+                      className="flex items-center gap-2 data-[selected=true]:bg-muted/60 data-[selected=true]:text-foreground"
                     >
                       <div className="flex-1 min-w-0">
                         <div className="font-semibold truncate">{c.full_name}</div>
