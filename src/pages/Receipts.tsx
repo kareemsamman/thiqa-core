@@ -679,10 +679,15 @@ export default function Receipts() {
   // Pagination
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(false);
-  // Total receipts matching current filters — drives the "عدد الإيصالات"
-  // tile and the printed report header so they reflect the whole set,
-  // not just the current page (which is capped at PAGE_SIZE).
+  // Total سندات (grouped by session) matching current filters — drives
+  // the "عدد الإيصالات" tile and the printed report header. Both reflect
+  // the same one-row-per-سند view as the printed report, so the screen
+  // and the print can never disagree on the count.
   const [totalCount, setTotalCount] = useState(0);
+  // Sum of every amount across the full filtered set (every page).
+  // Drives the "المجموع" tile. Computed in fetchReceipts alongside the
+  // grouped count so both stay in sync with the table + print.
+  const [aggregateTotal, setAggregateTotal] = useState(0);
 
   // Switching tabs resets the cursor — otherwise the user lands on
   // a page that may not exist in the new tab's smaller result set.
@@ -858,9 +863,12 @@ export default function Receipts() {
       const policyJoinFull = needsPolicyInnerJoin
         ? "policy:policies!inner(id, client_id, document_number, group_id, company_id, policy_type_parent, policy_type_child, insurance_price, insurance_companies(id, name, name_ar), clients(id, id_number))"
         : "policy:policies(id, client_id, document_number, group_id, company_id, policy_type_parent, policy_type_child, insurance_price, insurance_companies(id, name, name_ar), clients(id, id_number))";
-      const policyJoinCount = needsPolicyInnerJoin
-        ? "policy:policies!inner(id)"
-        : "policy:policies(id)";
+      // Aggregate join — minimal columns needed for the grouped-count
+      // tile + isElzamiPassthrough filter. Same `policy` alias so the
+      // foreign-table filters in applyShared resolve identically.
+      const policyJoinAgg = needsPolicyInnerJoin
+        ? "policy:policies!inner(id, group_id, policy_type_parent, insurance_price)"
+        : "policy:policies(id, group_id, policy_type_parent, insurance_price)";
 
       // Sort by created_at DESC first, so the receipt that was just
       // entered surfaces at the top even if the user back-dated it.
@@ -874,12 +882,26 @@ export default function Receipts() {
         .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
       if (activeTab !== 'all') query = query.eq("receipt_type", activeTab);
 
-      let countQuery = (supabase as any)
+      // Aggregate query — drives the "عدد الإيصالات" + "المجموع" tiles.
+      // Two reasons we can't use a head-only DB count here:
+      //   1. The grouped count (one row per سند) must mirror what the
+      //      print produces — same session-id collapsing logic, run
+      //      client-side over the full filtered set.
+      //   2. The visa_external + ELZAMI passthrough filters live in
+      //      JS (not DB), so a head:true count would over-report by
+      //      including rows the UI hides.
+      // Fetches every matching receipt with the minimum fields needed
+      // for grouping + the office-collected filter. No pagination.
+      let aggQuery = (supabase as any)
         .from("receipts")
-        .select(`id, ${policyJoinCount}`, { count: "exact", head: true })
+        .select(`
+          id, amount, payment_id, policy_id, receipt_type,
+          client_name, car_number, created_at, payment_method,
+          ${policyJoinAgg}
+        `)
         .eq("agent_id", agentId)
         .eq("is_imported", false);
-      if (activeTab !== 'all') countQuery = countQuery.eq("receipt_type", activeTab);
+      if (activeTab !== 'all') aggQuery = aggQuery.eq("receipt_type", activeTab);
 
       // Pre-resolve the search term across fields the receipts table
       // doesn't hold directly. The user wants to search by:
@@ -951,14 +973,14 @@ export default function Receipts() {
       };
 
       query = applyShared(query);
-      countQuery = applyShared(countQuery);
+      aggQuery = applyShared(aggQuery);
 
-      const [{ data, error }, { count: total, error: countErr }] = await Promise.all([
+      const [{ data, error }, { data: aggData, error: aggErr }] = await Promise.all([
         query,
-        countQuery,
+        aggQuery,
       ]);
       if (error) throw error;
-      if (countErr) throw countErr;
+      if (aggErr) throw aggErr;
 
       const rows = (data || []) as ReceiptRecord[];
       // Always drop the payments the office never actually collected:
@@ -984,7 +1006,52 @@ export default function Receipts() {
       const trimmed = filtered.length > PAGE_SIZE ? filtered.slice(0, PAGE_SIZE) : filtered;
       setHasMore(filtered.length > PAGE_SIZE);
       setReceipts(trimmed);
-      setTotalCount(total ?? 0);
+
+      // Compute grouped count + total across the FULL filtered set
+      // (not just the current page). Same office-collected filter the
+      // table view applies, then same session-id grouping the print
+      // uses — so the on-screen tiles, the table view, and the printed
+      // report all converge on the same numbers.
+      const aggRows = (aggData || []) as ReceiptRecord[];
+      const aggOfficeCollected = aggRows.filter(
+        (r) => r.payment_method !== 'visa_external' && !isElzamiPassthrough(r),
+      );
+      const aggFiltered = hideElzamiPayments
+        ? aggOfficeCollected.filter((r) => !isElzamiPassthrough(r))
+        : aggOfficeCollected;
+      const aggPaymentIds = aggFiltered
+        .map((r) => r.payment_id)
+        .filter((id): id is string => typeof id === "string" && id.length > 0);
+      const aggSessionMap: Record<string, string> = {};
+      if (aggPaymentIds.length > 0) {
+        const { data: aggSessionRows } = await supabase
+          .from('policy_payments')
+          .select('id, payment_session_id')
+          .in('id', aggPaymentIds);
+        for (const row of (aggSessionRows ?? []) as Array<{ id: string; payment_session_id: string | null }>) {
+          if (row.payment_session_id) aggSessionMap[row.id] = row.payment_session_id;
+        }
+      }
+      const aggGroupKeys = new Set<string>();
+      for (const r of aggFiltered) {
+        const rawPolicy = (r as any).policy;
+        const policy = Array.isArray(rawPolicy) ? rawPolicy[0] ?? null : rawPolicy ?? null;
+        const sessionId = r.payment_id ? aggSessionMap[r.payment_id] : null;
+        const typePrefix = (r as any).receipt_type || 'payment';
+        let key: string;
+        if (sessionId) key = `${typePrefix}:sess:${sessionId}`;
+        else if (policy?.group_id) key = `${typePrefix}:grp:${policy.group_id}`;
+        else if (policy?.id) key = `${typePrefix}:pol:${policy.id}`;
+        else {
+          const minute = roundToMinute(r.created_at);
+          key = `${typePrefix}:manual:${r.client_name}||${r.car_number || ""}||${minute}`;
+        }
+        aggGroupKeys.add(key);
+      }
+      setTotalCount(aggGroupKeys.size);
+      setAggregateTotal(
+        aggFiltered.reduce((s, r) => s + Number(r.amount || 0), 0),
+      );
 
       // Build the cancellation cross-reference. Two relationships,
       // both keyed by receipt.id → the OTHER side's receipt_number:
@@ -2146,13 +2213,6 @@ export default function Receipts() {
     toast.info('هذا النوع رح يكون متاح قريباً');
   };
 
-  // ─── Summary ───────────────────────────────────────────────────
-
-  const totalAmount = useMemo(
-    () => receipts.reduce((sum, r) => sum + r.amount, 0),
-    [receipts]
-  );
-
   // ─── Print all (active filter set) ─────────────────────────────
   //
   // Builds the same accounting-style branded report used on /accounting
@@ -2588,8 +2648,13 @@ export default function Receipts() {
 
           <div>
 
-            {/* Summary card */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
+            {/* Summary card — two tiles only. The old "مجموعات طباعة"
+                card counted groups on the current PAGE (so 28 of 88),
+                which contradicted "عدد الإيصالات" (which counted raw
+                DB rows, 210). Both numbers are now the same metric:
+                grouped count + total across the full filtered set,
+                matching exactly what gets printed. */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
               <Card>
                 <CardContent className="p-4 flex items-center gap-3">
                   <div className="rounded-lg bg-primary/10 p-2.5">
@@ -2609,19 +2674,8 @@ export default function Receipts() {
                   <div>
                     <p className="text-sm text-muted-foreground">المجموع</p>
                     <p className="text-xl font-bold">
-                      ₪{Math.round(totalAmount).toLocaleString("en-US")}
+                      ₪{Math.round(aggregateTotal).toLocaleString("en-US")}
                     </p>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-4 flex items-center gap-3">
-                  <div className="rounded-lg bg-blue-500/10 p-2.5">
-                    <Printer className="h-5 w-5 text-blue-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">مجموعات طباعة</p>
-                    <p className="text-xl font-bold">{groups.length}</p>
                   </div>
                 </CardContent>
               </Card>
