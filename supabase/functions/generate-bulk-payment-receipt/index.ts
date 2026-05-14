@@ -880,17 +880,14 @@ serve(async (req) => {
     //     keeps a real cash إلزامي payment — collected by the office
     //     via the "دفع" button — visible on the printed receipt; only
     //     the system-stamped passthrough records are filtered out.
-    //  3. Ghost rows: refused=true AND printed_at=null. Per the
-    //     user's accounting rule a سند قبض that was never printed
-    //     was never handed to the customer, so "cancelling" it is
-    //     just throwing away a draft — no سند إلغاء should exist.
-    //     New cancellations on unprinted drafts now DELETE cleanly,
-    //     but pre-fix data left these orphans behind; filtering them
-    //     here keeps them out of any reprint without rewriting the
-    //     historical rows.
+    //
+    // Refused rows are NOT filtered. Per the user's accounting rule
+    // (feedback_payment_receipt_immutable.md), a سند قبض is a frozen
+    // historical document: cancelling a cheque later doesn't erase
+    // it from the original receipt. The matching سند إلغاء carries
+    // the reversal separately.
     payments = payments.filter((p: any) => {
       if (p.payment_type === 'visa_external') return false;
-      if (p.refused && !p.printed_at) return false;
       if (p.locked !== true) return true;
       const pol = Array.isArray(p.policy) ? p.policy[0] : p.policy;
       if (!pol || pol.policy_type_parent !== 'ELZAMI') return true;
