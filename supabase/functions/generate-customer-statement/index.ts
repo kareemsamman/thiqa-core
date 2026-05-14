@@ -601,59 +601,20 @@ serve(async (req: Request) => {
     }
 
     // ── Year totals ───────────────────────────────────────────
-    // Match the unified ledger rows below: cancellation / transfer
-    // rows are notation unless the user explicitly records a refund
-    // or a transfer adjustment. A cancelled policy with "لا يوجد"
-    // مرتجع should not leave its original price as a balance.
-    const policyOfficeAmount = (p: any): number => {
+    // Mirror the unified ledger rows: every transaction the customer
+    // signed up for counts toward إجمالي معاملات, regardless of
+    // whether it was later cancelled or transferred. Cancelling
+    // doesn't erase what the customer agreed to owe — it just flips
+    // the status. The refund rows (إشعار دائن / سند صرف) credit the
+    // balance separately when money was actually returned.
+    // إلزامي base price is excluded (paid directly to the insurance
+    // company); only its office_commission contributes.
+    const totalYearAmount = policies.reduce((s, p) => {
+      if (p.transferred_from_policy_id) return s; // destination of a transfer — folded into source's تحويل row
       const commission = Number(p.office_commission || 0);
-      if (p.policy_type_parent === 'ELZAMI') return commission;
-      return Number(p.insurance_price || 0) + commission;
-    };
-
-    const packageMapForTotals = new Map<string, any[]>();
-    const singletonPackagesForTotals: any[][] = [];
-    for (const p of policies) {
-      if (p.group_id) {
-        if (!packageMapForTotals.has(p.group_id)) packageMapForTotals.set(p.group_id, []);
-        packageMapForTotals.get(p.group_id)!.push(p);
-      } else {
-        singletonPackagesForTotals.push([p]);
-      }
-    }
-
-    const refundTotalForPackage = (pkg: any[]): number => {
-      const ids = new Set(pkg.map((p) => p.id));
-      return (ledgerForEvents as any[])
-        .filter((r) =>
-          ids.has(r.policy_id) &&
-          (r.receipt_type === 'credit_note' || r.receipt_type === 'disbursement')
-        )
-        .reduce((s, r) => s + Math.abs(Number(r.amount || 0)), 0);
-    };
-
-    const totalYearBaseAmount = [
-      ...Array.from(packageMapForTotals.values()),
-      ...singletonPackagesForTotals,
-    ].reduce((sum, pkg) => {
-      const mainPolicy =
-        pkg.find((p) => p.policy_type_parent === 'THIRD_FULL') ||
-        pkg.find((p) => p.policy_type_parent === 'ELZAMI') ||
-        pkg[0];
-
-      if (pkg.every((p) => p.transferred_from_policy_id)) return sum;
-
-      const baseAmount = pkg.reduce((s, p) => s + policyOfficeAmount(p), 0);
-      const refundTotal = refundTotalForPackage(pkg);
-      // Mirror the per-row rule above: zero out ONLY for cancelled-
-      // no-refund. Transferred policies keep their original amount
-      // because the value moved, not vanished.
-      const skipBaseAmount = mainPolicy.cancelled && refundTotal <= 0.01;
-
-      return sum + (skipBaseAmount ? 0 : baseAmount);
-    }, 0);
-
-    const totalYearAmount = totalYearBaseAmount
+      if (p.policy_type_parent === 'ELZAMI') return s + commission;
+      return s + Number(p.insurance_price || 0) + commission;
+    }, 0)
       // Add transfer adjustments that fall on the customer — the
       // تكلفة التحويل the agent set when moving a policy.
       + Array.from(transfersByOriginPolicy.values()).reduce((s, t: any) => {
@@ -1134,24 +1095,13 @@ function buildStatementHtml(args: BuildArgs): string {
       ? pkgCreatedAt
       : new Date(mainPolicy.start_date).getTime();
 
-    // Money side of the new-transaction row. We zero the debit ONLY
-    // when cancelled with no refund (the customer agreed to walk
-    // away with nothing changing — per the user's rule "لما نلغي
-    // وما في مرتجع ولا اشي بتغير بالمبلغ"). Transferred policies
-    // KEEP their original debit because the insurance value didn't
-    // disappear — it just moved to a new car (the destination row is
-    // skipped to avoid double-counting). The تحويل row below adds
-    // only the adjustment delta on top.
-    let pkgRefundTotal = 0;
-    for (const r of ledger as any[]) {
-      if (!pkg.some((p) => p.id === r.policy_id)) continue;
-      if (r.receipt_type === 'credit_note' || r.receipt_type === 'disbursement') {
-        pkgRefundTotal += Math.abs(Number(r.amount || 0));
-      }
-    }
-    const newTxnSkipBalance = mainPolicy.cancelled && pkgRefundTotal <= 0.01;
-    const newTxnDebit = newTxnSkipBalance ? 0 : totalDebit;
-
+    // Per the user's rule: "إلغاء المعاملة ≠ إلغاء الدين". Cancelling
+    // a transaction does NOT remove what the customer owes — it just
+    // marks the transaction as cancelled. If money was refunded, a
+    // separate إشعار دائن / سند صرف row credits the balance. So the
+    // new-transaction row ALWAYS shows the full debit, regardless of
+    // status (cancelled/transferred). The destination of a transfer
+    // is the only row we skip (handled above).
     events.push({
       date: mainPolicy.start_date,
       timestamp: pkgTimestamp,
@@ -1160,9 +1110,9 @@ function buildStatementHtml(args: BuildArgs): string {
       voucherUrl: null, // transactions don't have a printable HTML voucher yet
       description,
       subLines,
-      debit: newTxnDebit,
+      debit: totalDebit,
       credit: 0,
-      balanceDelta: newTxnDebit, // bill the customer
+      balanceDelta: totalDebit, // bill the customer
       rowClass: 'event-transaction',
       directionHint: 'مستحق على العميل',
     });
