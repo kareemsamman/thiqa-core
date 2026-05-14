@@ -611,12 +611,13 @@ serve(async (req: Request) => {
     // balance separately when money was actually returned.
     // إلزامي base price is excluded (paid directly to the insurance
     // company); only its office_commission contributes.
-    const totalYearAmount = policies.reduce((s, p) => {
+    const totalYearBaseAmount = policies.reduce((s, p) => {
       if (p.transferred_from_policy_id) return s; // destination of a transfer — folded into source's تحويل row
       const commission = Number(p.office_commission || 0);
       if (p.policy_type_parent === 'ELZAMI') return s + commission;
       return s + Number(p.insurance_price || 0) + commission;
-    }, 0)
+    }, 0);
+    const totalYearAmount = totalYearBaseAmount
       // Add transfer adjustments that fall on the customer — the
       // تكلفة التحويل the agent set when moving a policy.
       + Array.from(transfersByOriginPolicy.values()).reduce((s, t: any) => {
@@ -665,25 +666,42 @@ serve(async (req: Request) => {
     // المرتجع line should only carry what's still on the books.
     const { data: consumedRows } = await userClient
       .from('customer_wallet_transactions')
-      .select('amount, created_at')
+      .select('amount, created_at, policy_id')
       .eq('client_id', client_id)
       .eq('transaction_type', 'credit_consumed')
       .gte('created_at', `${year}-01-01`)
       .lte('created_at', `${year}-12-31T23:59:59`);
     const yearCreditConsumed = (consumedRows || [])
       .reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
+    // Map each consuming policy to the amount it absorbed. The kashf
+    // ledger renders the consuming transaction with its EFFECTIVE
+    // debit (gross − consumed), so the running balance never dips
+    // for the إشعار دائن (it was applied straight to the new policy
+    // at sale time — the customer never had an "owed back" balance
+    // for it).
+    const creditConsumedByPolicy = new Map<string, number>();
+    for (const r of (consumedRows || []) as any[]) {
+      if (!r.policy_id) continue;
+      creditConsumedByPolicy.set(
+        r.policy_id,
+        (creditConsumedByPolicy.get(r.policy_id) || 0) + Number(r.amount || 0),
+      );
+    }
     const yearOutstandingRefund = Math.max(0, yearCreditNotesIssued - yearCreditConsumed);
     const yearCustomerCredit = yearOutstandingRefund + yearTransferOfficeOwes;
+
+    // Subtract credit that was applied directly to a new policy at
+    // sale time. The policy's gross price is in totalYearAmount, but
+    // the customer effectively only owes (gross − consumed) for that
+    // transaction — the إشعار دائن row never reaches the customer's
+    // hand, it slides straight into the new transaction.
+    const totalYearAmountEffective = totalYearAmount - yearCreditConsumed;
 
     // Year balance — signed so the kashf can flip direction:
     //   positive → customer still owes the office
     //   negative → office still owes the customer
     //   zero     → settled
-    // Everything is gross now: every transaction (cancelled or not),
-    // every payment, every refund. The cancellation/transfer rows
-    // themselves are notation-only on the ledger, so the math has to
-    // close out via the refund rows.
-    const yearBalance = totalYearAmount - totalYearPaid - yearCustomerCredit;
+    const yearBalance = totalYearAmountEffective - totalYearPaid - yearCustomerCredit;
     const totalYearRemaining = Math.max(0, yearBalance);
     const totalYearOwedToCustomer = Math.max(0, -yearBalance);
 
@@ -759,12 +777,13 @@ serve(async (req: Request) => {
       ledger: ledgerForEvents,
       chequeMeta,
       voucherUrlByReceipt,
-      totalYearAmount,
+      totalYearAmount: totalYearAmountEffective,
       totalYearPaid,
       totalYearRemaining,
       totalYearOwedToCustomer,
       overallNet,
       branding,
+      creditConsumedByPolicy,
     });
 
     // ── Upload to BunnyCDN ────────────────────────────────────
@@ -863,6 +882,12 @@ interface BuildArgs {
   totalYearOwedToCustomer: number;
   overallNet: number;
   branding: AgentBranding;
+  // Per-policy amount that was applied straight from the customer's
+  // wallet credit at sale time (a 'credit_consumed' wallet entry).
+  // The kashf reduces that policy's effective debit and hides the
+  // corresponding credit_note row so the customer doesn't see the
+  // credit cycle through twice.
+  creditConsumedByPolicy: Map<string, number>;
 }
 
 // Mirrors src/lib/packageDocumentNumber.ts — picks the canonical
@@ -907,7 +932,30 @@ function buildStatementHtml(args: BuildArgs): string {
     totalYearOwedToCustomer,
     overallNet,
     branding,
+    creditConsumedByPolicy,
   } = args;
+
+  // Which credit_note receipts to hide from the ledger because they
+  // were applied straight to a new transaction. We hide credit_notes
+  // up to the consumed-per-policy amount; any remainder stays visible
+  // as an outstanding credit row.
+  const hideCreditNoteIds = new Set<string>();
+  {
+    const totalConsumed = Array.from(creditConsumedByPolicy.values())
+      .reduce((s, v) => s + v, 0);
+    let creditLeftToHide = totalConsumed;
+    const creditNotesSorted = (ledger as any[])
+      .filter((r) => r.receipt_type === 'credit_note')
+      .sort((a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime());
+    for (const r of creditNotesSorted) {
+      if (creditLeftToHide < 0.01) break;
+      const amt = Math.abs(Number(r.amount || 0));
+      if (amt <= creditLeftToHide + 0.01) {
+        hideCreditNoteIds.add(r.id);
+        creditLeftToHide -= amt;
+      }
+    }
+  }
 
   // ── Header meta block ────────────────────────────────────────
   // Prefer the Arabic branch name so a customer reading the kashf
@@ -1061,7 +1109,14 @@ function buildStatementHtml(args: BuildArgs): string {
       }
     }
 
-    const totalDebit = officePart;
+    // If wallet credit was applied to this package at sale time
+    // (credit_consumed wallet entry), reduce the displayed debit by
+    // that amount and surface a note. The credit_note row itself is
+    // hidden from the ledger (see hideCreditNoteIds above), so the
+    // running balance never dips for an obligation the customer
+    // never actually held.
+    const pkgConsumed = creditConsumedByPolicy.get(mainPolicy.id) || 0;
+    const totalDebit = Math.max(0, officePart - pkgConsumed);
     const carNumber = mainPolicy.car?.car_number;
     const period = `${formatDate(mainPolicy.start_date)} ← ${formatDate(mainPolicy.end_date)}`;
 
@@ -1102,6 +1157,11 @@ function buildStatementHtml(args: BuildArgs): string {
 
     const subLines: string[] = [...lineItems];
     for (const r of reasonLines) subLines.push(`<div class="reason-line">${r}</div>`);
+    if (pkgConsumed > 0.01) {
+      subLines.push(
+        `<div class="reason-line reason-credit-applied"><strong>تم تطبيق رصيد دائن:</strong> −${formatMoney(pkgConsumed)}</div>`,
+      );
+    }
 
     // Earliest creation timestamp in the package — this is when the
     // package was actually entered in the system, so events stamped
@@ -1308,6 +1368,10 @@ function buildStatementHtml(args: BuildArgs): string {
   const paymentGroups = new Map<ReceiptGroupKey, ReceiptGroup>();
   const standaloneReceipts: any[] = [];
   for (const r of ledger) {
+    // Skip credit_notes whose obligation was consumed at sale time —
+    // they're already accounted for in the consuming package's debit
+    // reduction; rendering them here would double-subtract.
+    if (hideCreditNoteIds.has(r.id)) continue;
     const key = groupKeyFor(r);
     if (!key) {
       standaloneReceipts.push(r);
@@ -1837,6 +1901,10 @@ function buildStatementHtml(args: BuildArgs): string {
     .ledger-table .reason-adjust {
       background: #f5f3ff; color: #5b21b6;
       border-right: 3px solid #7c3aed;
+    }
+    .ledger-table .reason-credit-applied {
+      background: #ecfdf5; color: #047857;
+      border-right: 3px solid #10b981;
     }
     .ledger-table .amt-balance-zero {
       color: #6b7280; font-weight: 700;
