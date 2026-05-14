@@ -783,6 +783,17 @@ export default function Receipts() {
   const [reasonTargetSum, setReasonTargetSum] = useState<number>(0);
   const [reasonResolving, setReasonResolving] = useState(false);
 
+  // Cancel-a-single-non-payment-voucher dialog. The existing
+  // reason dialog above is wired to the customer-scope payment
+  // cancellation (cancels every open payment for a client), which
+  // doesn't fit credit_note / disbursement / broker vouchers —
+  // those each represent one independent voucher and need a
+  // per-row cancel. Keep state separate so the two flows don't
+  // entangle.
+  const [singleCancelTarget, setSingleCancelTarget] = useState<ReceiptRow | null>(null);
+  const [singleCancelReason, setSingleCancelReason] = useState('');
+  const [singleCancelSubmitting, setSingleCancelSubmitting] = useState(false);
+
   // Add / edit dialog
   const [dialogOpen, setDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -1729,6 +1740,140 @@ export default function Receipts() {
       toast.error(err?.message || 'فشل في إلغاء السند');
     } finally {
       setReasonSubmitting(false);
+    }
+  };
+
+  // Cancel a single non-payment voucher (إشعار دائن / سند صرف /
+  // broker قبض / broker صرف). Different shape from the
+  // confirmCancelReceipt path above:
+  //   • Only ONE original is affected (no customer-scope expansion)
+  //   • A cancellation receipt is inserted with cancels_receipt_id
+  //     pointing back; voucher_number prefixes "إلغاء" so the
+  //     printed سند reads naturally without needing a per-type
+  //     allocator wired up just for cancellations
+  //   • Source-side cleanup: credit_note → settle the wallet
+  //     transaction; disbursement / broker → mark the
+  //     settlement row(s) refused — those flags propagate to the
+  //     accounting page so the entity's balance updates correctly
+  // The original row's cancelled_at + cancellation_reason are
+  // stamped at the same time so /receipts shows the "ملغي" badge
+  // immediately.
+  const confirmSingleCancel = async () => {
+    if (!singleCancelTarget) return;
+    const target = singleCancelTarget;
+    const reason = singleCancelReason.trim();
+    const wasPrinted = !!(target as any).printed_at;
+    if (wasPrinted && !reason) {
+      toast.error('سبب الإلغاء مطلوب لإلغاء سند مطبوع');
+      return;
+    }
+    setSingleCancelSubmitting(true);
+    try {
+      const nowIso = new Date().toISOString();
+      const todayIso = nowIso.split('T')[0];
+
+      // Unprinted voucher → delete it entirely. The user's rule
+      // mirrors the payment family: anything not yet handed to the
+      // counterparty is just torn up, no paper trail. Source-side
+      // cleanup still runs so wallet / settlements don't keep
+      // stale obligations.
+      if (!wasPrinted) {
+        if (target.receipt_type === 'credit_note' && (target as any).wallet_transaction_id) {
+          await supabase
+            .from('customer_wallet_transactions')
+            .delete()
+            .eq('id', (target as any).wallet_transaction_id);
+        }
+        if (target.receipt_type === 'disbursement' && (target as any).client_settlement_id) {
+          await supabase
+            .from('client_settlements')
+            .delete()
+            .eq('id', (target as any).client_settlement_id);
+        }
+        if ((target as any).broker_settlement_id) {
+          // Multi-line broker saves wrote N broker_settlements
+          // sharing a created_at window. Wipe them all.
+          const { data: anchor } = await supabase
+            .from('broker_settlements')
+            .select('broker_id, created_at')
+            .eq('id', (target as any).broker_settlement_id)
+            .maybeSingle();
+          if (anchor) {
+            const ts = new Date(anchor.created_at as string).getTime();
+            await supabase
+              .from('broker_settlements')
+              .delete()
+              .eq('broker_id', anchor.broker_id)
+              .gte('created_at', new Date(ts - 30_000).toISOString())
+              .lte('created_at', new Date(ts + 30_000).toISOString());
+          }
+        }
+        await supabase.from('receipts').delete().eq('id', target.id);
+        toast.success('تم حذف السند');
+      } else {
+        // Printed voucher → preserve the original (stamped
+        // cancelled_at) and insert a cancellation سند that the
+        // /receipts table renders alongside it. Source-side
+        // entries get cancelled/settled too so accounting stays
+        // consistent.
+        const cancelVoucherNumber = `إلغاء ${(target as any).voucher_number ?? `R${target.receipt_number ?? ''}`}`;
+        await supabase.from('receipts').update({
+          cancelled_at: nowIso,
+          cancellation_reason: reason,
+        }).eq('id', target.id);
+        await supabase.from('receipts').insert({
+          receipt_type: 'cancellation',
+          source: 'auto',
+          voucher_number: cancelVoucherNumber,
+          cancels_receipt_id: target.id,
+          client_id: (target as any).client_id ?? null,
+          client_name: target.client_name,
+          broker_id: (target as any).broker_id ?? null,
+          amount: target.amount,
+          receipt_date: todayIso,
+          cancellation_reason: reason,
+          notes: `إلغاء ${(target as any).voucher_number ?? ''}: ${reason}`,
+          agent_id: (target as any).agent_id,
+          branch_id: (target as any).branch_id ?? null,
+        });
+        if (target.receipt_type === 'credit_note' && (target as any).wallet_transaction_id) {
+          await supabase
+            .from('customer_wallet_transactions')
+            .update({ settled_at: nowIso })
+            .eq('id', (target as any).wallet_transaction_id);
+        }
+        if (target.receipt_type === 'disbursement' && (target as any).client_settlement_id) {
+          await supabase
+            .from('client_settlements')
+            .update({ refused: true })
+            .eq('id', (target as any).client_settlement_id);
+        }
+        if ((target as any).broker_settlement_id) {
+          const { data: anchor } = await supabase
+            .from('broker_settlements')
+            .select('broker_id, created_at')
+            .eq('id', (target as any).broker_settlement_id)
+            .maybeSingle();
+          if (anchor) {
+            const ts = new Date(anchor.created_at as string).getTime();
+            await supabase
+              .from('broker_settlements')
+              .update({ refused: true })
+              .eq('broker_id', anchor.broker_id)
+              .gte('created_at', new Date(ts - 30_000).toISOString())
+              .lte('created_at', new Date(ts + 30_000).toISOString());
+          }
+        }
+        toast.success('تم إلغاء السند');
+      }
+      setSingleCancelTarget(null);
+      setSingleCancelReason('');
+      await fetchReceipts();
+    } catch (err: any) {
+      console.error('[Receipts] singleCancel error:', err);
+      toast.error(err?.message || 'فشل في إلغاء السند');
+    } finally {
+      setSingleCancelSubmitting(false);
     }
   };
 
@@ -2798,6 +2943,86 @@ export default function Receipts() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Single-voucher cancel dialog — for إشعار دائن / سند صرف /
+          broker قبض/صرف. Reuses the same printed-vs-unprinted
+          rule the payment cancel does: printed vouchers can't be
+          deleted (only marked cancelled with a سند إلغاء); unprinted
+          vouchers get wiped clean. */}
+      <Dialog
+        open={!!singleCancelTarget}
+        onOpenChange={(o) => {
+          if (!o) {
+            setSingleCancelTarget(null);
+            setSingleCancelReason('');
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {(singleCancelTarget as any)?.printed_at
+                ? 'إلغاء السند'
+                : 'حذف السند (لم يُطبع)'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 pt-2">
+            {singleCancelTarget && (
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                {(singleCancelTarget as any).printed_at ? (
+                  <>
+                    سيُنشأ سند إلغاء لهذا السند بقيمة{' '}
+                    <span className="font-bold ltr-nums">
+                      ₪{Math.round(Number(singleCancelTarget.amount)).toLocaleString('en-US')}
+                    </span>
+                    {' '}والسند الأصلي سيُعلَّم كملغي. سيتم تسوية أي حركة محفظة / سند تسوية مرتبطة.
+                  </>
+                ) : (
+                  <>
+                    السند لم يُطبع بعد، لذا سيُحذف نهائياً بدون سند إلغاء. أي حركة محفظة / سند تسوية مرتبطة ستُحذف أيضاً.
+                  </>
+                )}
+              </p>
+            )}
+            {(singleCancelTarget as any)?.printed_at && (
+              <>
+                <Label htmlFor="single-cancel-reason">
+                  سبب الإلغاء<span className="text-destructive mr-1">*</span>
+                </Label>
+                <Textarea
+                  id="single-cancel-reason"
+                  value={singleCancelReason}
+                  onChange={(e) => setSingleCancelReason(e.target.value)}
+                  placeholder="مثال: خطأ في الإصدار، طلب الجهة..."
+                  rows={3}
+                  autoFocus
+                  disabled={singleCancelSubmitting}
+                />
+              </>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setSingleCancelTarget(null)}
+              disabled={singleCancelSubmitting}
+            >
+              تراجع
+            </Button>
+            <Button
+              variant={(singleCancelTarget as any)?.printed_at ? 'default' : 'destructive'}
+              onClick={confirmSingleCancel}
+              disabled={
+                singleCancelSubmitting ||
+                ((singleCancelTarget as any)?.printed_at && !singleCancelReason.trim())
+              }
+            >
+              {singleCancelSubmitting ? <Loader2 className="h-4 w-4 animate-spin ml-2" /> : null}
+              {(singleCancelTarget as any)?.printed_at ? 'تأكيد الإلغاء' : 'حذف نهائي'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </MainLayout>
   );
 
@@ -2911,13 +3136,31 @@ export default function Receipts() {
                     rowType === 'payment' &&
                     !allCancelled &&
                     group.receipts.some((r) => r.source === 'auto' && r.payment_id);
-                  // Lock تعديل once any underlying policy_payment has
-                  // been printed — matches the agent-side سجل الدفعات
-                  // rule. إلغاء is still permitted (it's the documented
-                  // out for printed receipts).
-                  const isPrinted = group.receipts.some(
-                    (r) => r.payment_id && printedPaymentIds.has(r.payment_id),
-                  );
+                  // Non-payment vouchers (إشعار دائن / سند صرف /
+                  // broker قبض/صرف) get their own per-row cancel
+                  // flow — driven by confirmSingleCancel. Hidden on
+                  // the cancellation tab (those rows ARE the cancel
+                  // record) and on already-cancelled rows.
+                  const canCancelSingle =
+                    (rowType === 'credit_note' ||
+                      rowType === 'disbursement') &&
+                    !firstReceipt?.cancelled_at;
+                  const isBrokerRowCancelable =
+                    !!(firstReceipt as any)?.broker_id &&
+                    !firstReceipt?.cancelled_at;
+                  // Lock تعديل once the voucher has been printed. Two
+                  // independent sources both count: the legacy
+                  // policy_payments.printed_at stamp (still active for
+                  // customer سند قبض via the bulk-receipt path) and
+                  // the new receipts.printed_at column stamped by
+                  // generate-voucher for every voucher kind (migration
+                  // 20260514160000). إلغاء stays available as the
+                  // documented out for printed receipts.
+                  const isPrinted =
+                    group.receipts.some(
+                      (r) => r.payment_id && printedPaymentIds.has(r.payment_id),
+                    ) ||
+                    group.receipts.some((r) => !!(r as any).printed_at);
                   // Cheque number for the row — only meaningful when the
                   // group is a single cheque receipt.
                   const chequeNumber =
@@ -3105,38 +3348,46 @@ export default function Receipts() {
                                   إلغاء السند
                                 </DropdownMenuItem>
                               )}
-                              {/* Edit / delete are only meaningful on
-                                  the payment tab. سندات الإلغاء rows are
-                                  cancellation vouchers — they're a
-                                  ledger of what was voided, not editable
-                                  records, so hide both actions there. */}
-                              {rowType === 'payment' && !allCancelled && (
+                              {(canCancelSingle || isBrokerRowCancelable) && (
+                                <DropdownMenuItem
+                                  className="text-amber-700 focus:text-amber-800"
+                                  onClick={() => {
+                                    setSingleCancelTarget(firstReceipt);
+                                    setSingleCancelReason('');
+                                  }}
+                                >
+                                  <Ban className="h-4 w-4 ml-2" />
+                                  إلغاء السند
+                                </DropdownMenuItem>
+                              )}
+                              {/* تعديل — only available on UNPRINTED
+                                  customer سند قبض. The moment the
+                                  voucher is printed (either via the
+                                  legacy policy_payments stamp or the
+                                  new receipts.printed_at column) we
+                                  hide it entirely, leaving إلغاء as
+                                  the only path forward. سندات الإلغاء
+                                  / إشعار دائن / سند صرف rows aren't
+                                  editable in-place either; cancel +
+                                  re-issue is the supported flow. */}
+                              {rowType === 'payment' && !allCancelled && !isPrinted && (
                                 firstReceipt.source === 'auto'
                                   ? (
                                     <DropdownMenuItem
-                                      disabled={debtModalResolving || isPrinted}
+                                      disabled={debtModalResolving}
                                       onClick={() => openSessionEditModal(group)}
-                                      title={isPrinted ? 'السند مطبوع — استخدم إلغاء بدلاً من التعديل' : undefined}
                                     >
                                       <Pencil className="h-4 w-4 ml-2" />
                                       تعديل
-                                      {isPrinted && (
-                                        <span className="ms-auto text-[10px] text-muted-foreground">مطبوع</span>
-                                      )}
                                     </DropdownMenuItem>
                                   )
                                   : group.receipts.length === 1
                                     ? (
                                       <DropdownMenuItem
-                                        disabled={isPrinted}
                                         onClick={() => handleEditReceipt(group.receipts[0])}
-                                        title={isPrinted ? 'السند مطبوع — استخدم إلغاء بدلاً من التعديل' : undefined}
                                       >
                                         <Pencil className="h-4 w-4 ml-2" />
                                         تعديل
-                                        {isPrinted && (
-                                          <span className="ms-auto text-[10px] text-muted-foreground">مطبوع</span>
-                                        )}
                                       </DropdownMenuItem>
                                     )
                                     : null

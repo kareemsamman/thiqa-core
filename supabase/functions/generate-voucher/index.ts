@@ -1064,6 +1064,19 @@ serve(async (req) => {
     }
 
     const receiptUrl = `${bunnyCdnUrl}/${storagePath}`;
+
+    // Stamp receipts.printed_at the moment the PDF lands on the CDN.
+    // The Receipts page reads this flag to swap تعديل out for
+    // إلغاء — printed vouchers are immutable. We don't fail the
+    // response on stamp-error since the PDF is already in hand;
+    // the user can retry the print and the .is('printed_at', null)
+    // guard makes the UPDATE idempotent.
+    await supabase
+      .from('receipts')
+      .update({ printed_at: new Date().toISOString() })
+      .eq('id', voucher_receipt_id)
+      .is('printed_at', null);
+
     return new Response(
       JSON.stringify({ success: true, receipt_url: receiptUrl }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
