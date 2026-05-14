@@ -826,6 +826,29 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
         .is('transferred_from_policy_id', null)
         .is('deleted_at', null);
 
+      // Per-policy refund total (credit_note + disbursement amounts
+      // mirrored to this policy). The kashf treats a cancelled policy
+      // with NO refund as "skip from debt" (because no money moved on
+      // either side; the customer never paid and the office never owes
+      // back). We mirror that so the in-app card matches the kashf.
+      // A cancelled policy WITH a refund stays in the debt total at
+      // full price; the refund amount is netted out via wallet/
+      // disbursement logic below — same as the kashf's ledger.
+      const everyPolicyIdForRefunds = (policiesData || []).map((p: any) => p.id);
+      let refundByPolicy = new Map<string, number>();
+      if (everyPolicyIdForRefunds.length > 0) {
+        const { data: refundRows } = await supabase
+          .from('receipts')
+          .select('policy_id, amount, receipt_type')
+          .in('policy_id', everyPolicyIdForRefunds)
+          .in('receipt_type', ['credit_note', 'disbursement']);
+        for (const r of (refundRows || []) as any[]) {
+          if (!r.policy_id) continue;
+          const cur = refundByPolicy.get(r.policy_id) || 0;
+          refundByPolicy.set(r.policy_id, cur + Math.abs(Number(r.amount || 0)));
+        }
+      }
+
       if (!policiesData || policiesData.length === 0) {
         setPaymentSummary({ total_paid: 0, total_remaining: 0, total_profit: 0 });
         setBrokerDebts([]);
@@ -911,11 +934,32 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
         if (p.policy_type_parent === 'ELZAMI') return commission;
         return Number(p.insurance_price || 0) + commission;
       };
+      // Mirror the kashf skip rule per package: skip transferred
+      // packages (they only contribute via the transfer fee, added
+      // below) and cancelled packages with NO refund (no money owed
+      // either way — neither the customer nor the office). Cancelled
+      // with refund stays in the claim and the refund nets it out
+      // through totalCreditConsumed / disbursement accounting.
+      const refundTotalForPackage = (pkg: any[]): number =>
+        pkg.reduce((s, p) => s + (refundByPolicy.get(p.id) || 0), 0);
       groupMap.forEach(groupPolicies => {
         const nonBrokerInGroup = groupPolicies.filter(p => !(p as any).broker_id);
         const brokerInGroup = groupPolicies.filter(p => (p as any).broker_id);
 
-        const nonBrokerClaim = nonBrokerInGroup.reduce(
+        // Skip-test against the package's main policy (THIRD_FULL >
+        // ELZAMI > first), same key the kashf uses. Transferred
+        // mains → skip entire package (transfer fee handled below).
+        // Cancelled-no-refund mains → skip too.
+        const mainPolicy =
+          groupPolicies.find((p: any) => p.policy_type_parent === 'THIRD_FULL') ||
+          groupPolicies.find((p: any) => p.policy_type_parent === 'ELZAMI') ||
+          groupPolicies[0];
+        const pkgRefund = refundTotalForPackage(groupPolicies);
+        const skipPackage =
+          (mainPolicy as any)?.transferred ||
+          ((mainPolicy as any)?.cancelled && pkgRefund <= 0.01);
+
+        const nonBrokerClaim = skipPackage ? 0 : nonBrokerInGroup.reduce(
           (sum, p) => sum + officeClaimFor(p),
           0,
         );
@@ -929,7 +973,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
         clientOwed += nonBrokerClaim;
         clientPaid += paidTowardClient;
 
-        if (brokerInGroup.length > 0) {
+        if (brokerInGroup.length > 0 && !skipPackage) {
           const brokerOwed = brokerInGroup.reduce(
             (sum, p) => sum + officeClaimFor(p),
             0,
