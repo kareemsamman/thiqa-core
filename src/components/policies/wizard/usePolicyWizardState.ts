@@ -467,11 +467,16 @@ export function usePolicyWizardState({ open, instanceId, defaultBrokerId, defaul
   const displayTotal = pricing.totalPrice + pricing.officeCommission;
   // Effective amount the customer actually has to settle in cash. An
   // outstanding wallet credit (إشعار دائن minus any earlier
-  // credit_consumed offsets) gets applied automatically — the
-  // remaining cash due is what's left after that. Capped at 0 so a
-  // customer whose credit exceeds the new transaction can save
-  // without entering any payment.
-  const effectiveTotal = Math.max(0, displayTotal - outstandingCredit);
+  // credit_consumed offsets) gets applied — but ONLY against money
+  // the office actually receives. ELZAMI premium is external (paid
+  // directly to the insurer via visa_external), so it has no overlap
+  // with the office's wallet. payablePrice already excludes the ELZAMI
+  // passthrough portion; we cap the applied credit at that. For a
+  // pure ELZAMI transaction payablePrice=0 → no credit applies and
+  // the user must enter the full ELZAMI premium as a visa_external
+  // line (the credit stays untouched for next time).
+  const creditApplied = Math.min(outstandingCredit, pricing.payablePrice);
+  const effectiveTotal = Math.max(0, displayTotal - creditApplied);
   const remainingToPay = effectiveTotal - totalPaidPayments;
   // Block save when payments overshoot the EFFECTIVE total — i.e. the
   // user typed more than the customer actually needs to hand over
@@ -1216,6 +1221,7 @@ export function usePolicyWizardState({ open, instanceId, defaultBrokerId, defaul
     remainingToPay,
     paymentsExceedPrice,
     outstandingCredit,
+    creditApplied,
 
     // Files
     insuranceFiles,

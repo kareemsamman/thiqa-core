@@ -36,9 +36,14 @@ interface Step4Props {
   /** Customer's outstanding wallet credit (إشعار دائن balance not yet
    *  consumed). When > 0 the wizard automatically subtracts it from
    *  the cash المتبقي, and on save records a credit_consumed wallet
-   *  entry equal to min(credit, displayTotal). 0 when the customer
+   *  entry equal to min(credit, payablePrice). 0 when the customer
    *  has no open credits. */
   outstandingCredit?: number;
+  /** How much of the outstanding credit is actually being applied to
+   *  THIS transaction. Equals min(outstandingCredit, payablePrice) —
+   *  for a pure ELZAMI policy this is 0 because the office never
+   *  receives the premium (visa_external direct to insurer). */
+  creditApplied?: number;
 }
 
 interface PreviewItem {
@@ -64,6 +69,7 @@ export function Step4Payments({
   tempPolicyId,
   isElzami = false,
   outstandingCredit = 0,
+  creditApplied = 0,
 }: Step4Props) {
   const { toast } = useToast();
   const [showTranzilaModal, setShowTranzilaModal] = useState(false);
@@ -272,13 +278,25 @@ export function Step4Payments({
                 ₪{Math.round(outstandingCredit).toLocaleString('en-US')}
               </span>
             </div>
-            <p className="text-xs text-amber-700/80 dark:text-amber-300/80 mt-0.5">
-              تم خصمه تلقائياً من قيمة المعاملة — حدّ الدفعات أصبح{' '}
-              <span className="font-mono ltr-nums">
-                ₪{Math.round(Math.max(0, (pricing.totalPrice + pricing.officeCommission) - outstandingCredit)).toLocaleString('en-US')}
-              </span>
-              . الرصيد بيتقفل تلقائياً عند حفظ المعاملة.
-            </p>
+            {creditApplied > 0.01 ? (
+              <p className="text-xs text-amber-700/80 dark:text-amber-300/80 mt-0.5">
+                تم خصم{' '}
+                <span className="font-mono ltr-nums">
+                  ₪{Math.round(creditApplied).toLocaleString('en-US')}
+                </span>
+                {' '}من قيمة المعاملة — حدّ الدفعات أصبح{' '}
+                <span className="font-mono ltr-nums">
+                  ₪{Math.round(Math.max(0, (pricing.totalPrice + pricing.officeCommission) - creditApplied)).toLocaleString('en-US')}
+                </span>
+                . الرصيد بيتقفل تلقائياً عند حفظ المعاملة.
+              </p>
+            ) : (
+              <p className="text-xs text-amber-700/80 dark:text-amber-300/80 mt-0.5">
+                هاي المعاملة إلزامي فقط — الرصيد ما بيخصم لأن مبلغ
+                الإلزامي بيتدفع للشركة مباشرة وما بيمر على المكتب.
+                الرصيد بيضل محفوظ للمعاملة الجاية.
+              </p>
+            )}
           </div>
         </div>
       )}

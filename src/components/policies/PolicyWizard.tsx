@@ -198,6 +198,7 @@ export function PolicyWizard({
     remainingToPay,
     paymentsExceedPrice,
     outstandingCredit,
+    creditApplied,
     resetCarData,
     resetPolicyData,
     resetPayments,
@@ -1817,7 +1818,12 @@ export function PolicyWizard({
       // Failure is non-fatal: the policy and payments already saved,
       // so we surface a toast and continue rather than rolling back.
       if (outstandingCredit > 0 && selectedClient?.id) {
-        const consumed = Math.min(outstandingCredit, pricing.totalPrice + pricing.officeCommission);
+        // Only consume what we actually netted. ELZAMI passthrough
+        // sits outside payablePrice — the credit can't cover money
+        // that never enters the office's books. For pure ELZAMI
+        // transactions payablePrice=0 so nothing is consumed and the
+        // full credit stays outstanding.
+        const consumed = Math.min(outstandingCredit, pricing.payablePrice);
         if (consumed > 0.01) {
           const { error: walletErr } = await supabase
             .from('customer_wallet_transactions')
@@ -2232,6 +2238,7 @@ export function PolicyWizard({
                 tempPolicyId={tempPolicyId}
                 isElzami={policy.policy_type_parent === 'ELZAMI'}
                 outstandingCredit={outstandingCredit}
+                creditApplied={creditApplied}
               />
             )}
           </div>
