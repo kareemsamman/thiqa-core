@@ -127,6 +127,7 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { useShortcutAction } from '@/hooks/useShortcutAction';
 import { useAgentLimits } from '@/hooks/useAgentLimits';
 import { useUpgradePrompt } from '@/components/pricing/UpgradePromptProvider';
+import { usePolicyWizardController } from '@/hooks/usePolicyWizardController';
 import type { RenewalData } from '@/components/policies/wizard/types';
 
 interface Client {
@@ -473,6 +474,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   const [policyWizardOpen, setPolicyWizardOpen] = useState(false);
   const { policies: policiesLimit, loading: limitsLoading } = useAgentLimits();
   const { showUpgradePrompt } = useUpgradePrompt();
+  const { openWizard } = usePolicyWizardController();
   // Only commit to the locked variant once limits resolve, matching the
   // flash-free pattern used on the header "معاملة جديدة" button.
   const policiesLocked = !limitsLoading && policiesLimit.exceeded;
@@ -487,7 +489,13 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       });
       return;
     }
-    setPolicyWizardOpen(true);
+    // Route through the global wizard controller (same path as the
+    // header "معاملة جديدة" button). Using the local PolicyWizard
+    // here was losing the client preselection because two wizard
+    // instances were mounted at once and they fought over state.
+    // The controller spawns a fresh instance with our client id and
+    // the GlobalPolicyWizardHost renders it cleanly.
+    openWizard({ clientId: client.id });
   };
   const [clientDrawerOpen, setClientDrawerOpen] = useState(false);
   const [reportModalOpen, setReportModalOpen] = useState(false);
