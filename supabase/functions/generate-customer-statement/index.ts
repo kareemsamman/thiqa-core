@@ -1359,22 +1359,32 @@ function buildStatementHtml(args: BuildArgs): string {
   // instrument by keying on (session, method, cheque#-or-card-last4).
   type ReceiptGroupKey = string;
   const groupKeyFor = (r: any): ReceiptGroupKey | null => {
-    // Only payment-type rows get bucketed. Every payment row in the
-    // same session collapses into ONE ledger entry — one سند قبض =
-    // one row, regardless of how many cheques / cash splits / cards
-    // it contains. The user doesn't want per-payment-instrument
-    // detail on the kashf; the bulk receipt voucher carries those.
-    // Cancellations / credit notes / disbursements stay as their
-    // own events because each represents a distinct accounting
-    // transaction.
-    if (r.receipt_type !== 'payment') return null;
+    // Both سند قبض (payment) and سند إلغاء (cancellation) collapse
+    // into ONE ledger row per physical session. The auto-trigger
+    // mirrors each refused policy_payment into its own cancellation
+    // receipt — so a سند قبض that bundled 4 instruments (cash +
+    // cash + cheque + transfer) produces 4 cancellation rows when
+    // voided, all sharing the original session_id / batch_id.
+    // Without grouping the kashf prints those 4 cancellations as
+    // separate lines with separate R-numbers, which is exactly what
+    // the user flagged. Group by (type, session) so the round-trip
+    // reads as: one سند قبض line in → one سند إلغاء line out, at
+    // the bulk total, linking to the matching merged document. The
+    // type prefix keeps the original payment and its later
+    // cancellation in distinct groups — they're two events on the
+    // same session, not one.
+    //
+    // Credit notes / disbursements stay un-grouped: each one is an
+    // explicit accounting decision the agent took, not a slice of a
+    // bigger physical instrument.
+    if (r.receipt_type !== 'payment' && r.receipt_type !== 'cancellation') return null;
     const meta = r.payment_id ? chequeMeta.get(r.payment_id) : null;
     const sessionKey = meta?.payment_session_id || meta?.batch_id || r.payment_id || r.id;
-    return `session:${sessionKey}`;
+    return `${r.receipt_type}:${sessionKey}`;
   };
 
   type ReceiptGroup = { representative: any; rows: any[]; totalAmount: number };
-  const paymentGroups = new Map<ReceiptGroupKey, ReceiptGroup>();
+  const groupedReceipts = new Map<ReceiptGroupKey, ReceiptGroup>();
   const standaloneReceipts: any[] = [];
   for (const r of ledger) {
     // Skip credit_notes whose obligation was consumed at sale time —
@@ -1386,7 +1396,7 @@ function buildStatementHtml(args: BuildArgs): string {
       standaloneReceipts.push(r);
       continue;
     }
-    const existing = paymentGroups.get(key);
+    const existing = groupedReceipts.get(key);
     if (existing) {
       existing.rows.push(r);
       existing.totalAmount += Math.abs(Number(r.amount || 0));
@@ -1398,7 +1408,7 @@ function buildStatementHtml(args: BuildArgs): string {
       const cand = r.created_at ? new Date(r.created_at).getTime() : Infinity;
       if (cand < cur) existing.representative = r;
     } else {
-      paymentGroups.set(key, {
+      groupedReceipts.set(key, {
         representative: r,
         rows: [r],
         totalAmount: Math.abs(Number(r.amount || 0)),
@@ -1511,16 +1521,17 @@ function buildStatementHtml(args: BuildArgs): string {
     });
   };
 
-  // Emit one event per physical-instrument group, using the SUM of
-  // its split rows as the amount. Sub-row notes vary rarely (the UI
-  // captures one note per instrument), so the representative's
-  // notes cell carries the full text without losing information.
-  for (const group of paymentGroups.values()) {
+  // Emit one event per (type, session) group, using the SUM of its
+  // split rows as the amount. Sub-row notes vary rarely (the UI
+  // captures one note per instrument / one reason per cancellation
+  // action), so the representative's row carries the full text
+  // without losing information.
+  for (const group of groupedReceipts.values()) {
     emitReceiptEvent(group.representative, group.totalAmount, group.rows.length > 1);
   }
-  // Non-payment receipts (cancellation / credit_note / disbursement
-  // / accident_fee) emit per-row because each one represents a
-  // distinct accounting transaction.
+  // Credit notes / disbursements / accident fees emit per-row —
+  // each is a standalone accounting transaction, not a slice of a
+  // bigger session.
   for (const r of standaloneReceipts) {
     emitReceiptEvent(r, Math.abs(Number(r.amount || 0)));
   }
