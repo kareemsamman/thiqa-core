@@ -928,7 +928,7 @@ serve(async (req) => {
         const { data: siblings } = await supabase
           .from('policy_payments')
           .select(`
-            payment_type, cheque_number, cheque_date, cheque_issue_date,
+            payment_type, cheque_number, cheque_due_date, cheque_date, cheque_issue_date,
             payment_date, bank_code, branch_code, notes, amount, refused
           `)
           .eq(filterCol, filterVal);
@@ -940,7 +940,10 @@ serve(async (req) => {
           lines.push({
             payment_type: (r.payment_type as string) || 'cash',
             cheque_number: r.cheque_number ?? null,
-            cheque_due_date: r.cheque_date ?? null,
+            // Prefer the new canonical column (migration 20260509200000).
+            // Fall back to the legacy cheque_date for pre-migration rows
+            // that never got backfilled.
+            cheque_due_date: r.cheque_due_date ?? r.cheque_date ?? null,
             cheque_issue_date: r.cheque_issue_date ?? null,
             payment_date: r.payment_date ?? null,
             bank_code: r.bank_code ?? null,
