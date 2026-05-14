@@ -601,20 +601,58 @@ serve(async (req: Request) => {
     }
 
     // ── Year totals ───────────────────────────────────────────
-    // The "إجمالي معاملات السنة" follows the same rule the in-app
-    // إجمالي معاملات — ALL transactions for the year, including
-    // cancelled and transferred ones. Per the user: "بشطبش اشي لما
-    // الغي" — cancelling is an agreement, not a deletion. The
-    // cancelled transaction stays on the books at its original price
-    // and the refund row (إشعار دائن / سند صرف) is what reverses it.
-    // إلزامي base price is still excluded (paid directly to the
-    // insurance company); only its office_commission contributes.
-    const totalYearAmount = policies.reduce((s, p) => {
-      if (p.transferred_from_policy_id) return s; // destination of a transfer — folded into source's تحويل row
+    // Match the unified ledger rows below: cancellation / transfer
+    // rows are notation unless the user explicitly records a refund
+    // or a transfer adjustment. A cancelled policy with "لا يوجد"
+    // مرتجع should not leave its original price as a balance.
+    const policyOfficeAmount = (p: any): number => {
       const commission = Number(p.office_commission || 0);
-      if (p.policy_type_parent === 'ELZAMI') return s + commission;
-      return s + Number(p.insurance_price || 0) + commission;
-    }, 0)
+      if (p.policy_type_parent === 'ELZAMI') return commission;
+      return Number(p.insurance_price || 0) + commission;
+    };
+
+    const packageMapForTotals = new Map<string, any[]>();
+    const singletonPackagesForTotals: any[][] = [];
+    for (const p of policies) {
+      if (p.group_id) {
+        if (!packageMapForTotals.has(p.group_id)) packageMapForTotals.set(p.group_id, []);
+        packageMapForTotals.get(p.group_id)!.push(p);
+      } else {
+        singletonPackagesForTotals.push([p]);
+      }
+    }
+
+    const refundTotalForPackage = (pkg: any[]): number => {
+      const ids = new Set(pkg.map((p) => p.id));
+      return (ledgerForEvents as any[])
+        .filter((r) =>
+          ids.has(r.policy_id) &&
+          (r.receipt_type === 'credit_note' || r.receipt_type === 'disbursement')
+        )
+        .reduce((s, r) => s + Math.abs(Number(r.amount || 0)), 0);
+    };
+
+    const totalYearBaseAmount = [
+      ...Array.from(packageMapForTotals.values()),
+      ...singletonPackagesForTotals,
+    ].reduce((sum, pkg) => {
+      const mainPolicy =
+        pkg.find((p) => p.policy_type_parent === 'THIRD_FULL') ||
+        pkg.find((p) => p.policy_type_parent === 'ELZAMI') ||
+        pkg[0];
+
+      if (pkg.every((p) => p.transferred_from_policy_id)) return sum;
+
+      const baseAmount = pkg.reduce((s, p) => s + policyOfficeAmount(p), 0);
+      const refundTotal = refundTotalForPackage(pkg);
+      const skipBaseAmount =
+        mainPolicy.transferred ||
+        (mainPolicy.cancelled && refundTotal <= 0.01);
+
+      return sum + (skipBaseAmount ? 0 : baseAmount);
+    }, 0);
+
+    const totalYearAmount = totalYearBaseAmount
       // Add transfer adjustments that fall on the customer — the
       // تكلفة التحويل the agent set when moving a policy.
       + Array.from(transfersByOriginPolicy.values()).reduce((s, t: any) => {
@@ -1095,6 +1133,26 @@ function buildStatementHtml(args: BuildArgs): string {
       ? pkgCreatedAt
       : new Date(mainPolicy.start_date).getTime();
 
+    // Money side of the new-transaction row. We zero out the debit
+    // when the transaction never really stuck with the customer —
+    // i.e. transferred (handed off to a new car, only the تكلفة
+    // التحويل matters) or cancelled without any refund (the customer
+    // never owed anything since the office didn't return money
+    // either, per the user's "ما حطيت بدنا مصاري" rule). The row
+    // still renders so the customer sees what was attempted, but the
+    // balance is unaffected.
+    let pkgRefundTotal = 0;
+    for (const r of ledger as any[]) {
+      if (!pkg.some((p) => p.id === r.policy_id)) continue;
+      if (r.receipt_type === 'credit_note' || r.receipt_type === 'disbursement') {
+        pkgRefundTotal += Math.abs(Number(r.amount || 0));
+      }
+    }
+    const newTxnSkipBalance =
+      mainPolicy.transferred ||
+      (mainPolicy.cancelled && pkgRefundTotal <= 0.01);
+    const newTxnDebit = newTxnSkipBalance ? 0 : totalDebit;
+
     events.push({
       date: mainPolicy.start_date,
       timestamp: pkgTimestamp,
@@ -1103,9 +1161,9 @@ function buildStatementHtml(args: BuildArgs): string {
       voucherUrl: null, // transactions don't have a printable HTML voucher yet
       description,
       subLines,
-      debit: totalDebit,
+      debit: newTxnDebit,
       credit: 0,
-      balanceDelta: totalDebit, // bill the customer
+      balanceDelta: newTxnDebit, // bill the customer
       rowClass: 'event-transaction',
       directionHint: 'مستحق على العميل',
     });
@@ -1188,15 +1246,6 @@ function buildStatementHtml(args: BuildArgs): string {
             `<div class="reason-line"><strong>تكلفة التحويل:</strong> ${formatMoney(adjAmount)} ${dirLabel}${noteSuffix}</div>`,
           );
         }
-      }
-      // The original transaction price stays informational on the
-      // reversal row so a customer reading the kashf sees the value
-      // of "what was cancelled" without scrolling back to the
-      // معاملة جديدة line above. Balance is still unaffected.
-      if (totalDebit > 0.01) {
-        reasonSubLines.push(
-          `<div class="reason-line"><strong>سعر الإلغاء:</strong> ${formatMoney(totalDebit)}</div>`,
-        );
       }
       // Refund summary: spell out whether the office returned any
       // money for this cancellation/transfer (via إشعار دائن or سند
@@ -1479,7 +1528,7 @@ function buildStatementHtml(args: BuildArgs): string {
     ? `
         <div class="totals-row totals-credit-row">
           <span class="totals-label">
-            المرتجع (رصيد للعميل)
+            المرتجع
             <span class="totals-hint">— مبلغ أصدره المكتب باسمك من إلغاءات / تحويلات</span>
           </span>
           <span class="totals-value credit">−${formatMoney(yearCustomerCredit)}</span>
