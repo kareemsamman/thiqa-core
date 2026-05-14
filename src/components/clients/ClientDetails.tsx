@@ -971,13 +971,25 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
           .reduce((s: number, t: any) => s + Number(t.adjustment_amount || 0), 0);
       }
 
+      // Wallet credit consumed by a new transaction at sale time
+      // ('credit_consumed' wallet entry). The policy's gross price is
+      // already in clientOwed, but the customer effectively only owes
+      // (gross − consumed) — same netting the kashf does.
+      const { data: consumedRows } = await supabase
+        .from('customer_wallet_transactions')
+        .select('amount')
+        .eq('client_id', client.id)
+        .eq('transaction_type', 'credit_consumed');
+      const totalCreditConsumed = (consumedRows || [])
+        .reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
+
       setPaymentSummary({
         // Display the gross cash collected from the customer (matches
         // the kashf). total_remaining still uses the active-only
         // clientPaid so the outstanding-debt math doesn't get fooled
         // by payments that landed on a now-cancelled transaction.
         total_paid: grossPaid,
-        total_remaining: Math.max(0, clientOwed - clientPaid + transferCustomerPaysTotal),
+        total_remaining: Math.max(0, clientOwed - clientPaid + transferCustomerPaysTotal - totalCreditConsumed),
         total_profit: totalProfit,
       });
       setBrokerDebts(Array.from(brokerTotals.values()));
