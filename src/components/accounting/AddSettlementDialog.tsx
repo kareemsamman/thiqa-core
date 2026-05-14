@@ -327,6 +327,24 @@ export function AddSettlementDialog({
   const targetExceeded =
     mode === 'client' && targetCap !== null && total > targetCap + 0.005;
 
+  // Broker cap — the relevant pill amount is the hard ceiling. On a
+  // سند قبض the user can't collect more than the broker still owes
+  // us; on a سند صرف they can't pay out more than we owe the broker.
+  // When the relevant side is zero the dialog refuses to save at all
+  // (no balance → no voucher to record). brokerBalance is null until
+  // the fetch resolves, so caps are NULL during the loading window —
+  // the user can't trigger save anyway until they enter an amount.
+  const brokerCap =
+    mode === 'broker' && brokerBalance
+      ? kind === 'receipt'
+        ? brokerBalance.owesUs
+        : brokerBalance.weOwe
+      : null;
+  const brokerCapExceeded =
+    mode === 'broker' && brokerCap !== null && total > brokerCap + 0.005;
+  const brokerCapZero =
+    mode === 'broker' && brokerCap !== null && brokerCap <= 0.005 && total > 0;
+
   // Per-line validation surfaced up-front so the Save button stays
   // disabled until every started line is complete. Lines that look
   // like an untouched placeholder (no amount, no cheque number, no
@@ -788,7 +806,7 @@ export function AddSettlementDialog({
             <div
               className={cn(
                 'flex items-center justify-between rounded-lg px-4 py-2.5',
-                targetMismatch
+                targetMismatch || brokerCapExceeded || brokerCapZero
                   ? 'bg-destructive/10 border border-destructive/30'
                   : 'bg-muted',
               )}
@@ -798,7 +816,7 @@ export function AddSettlementDialog({
                 <span
                   className={cn(
                     'text-lg font-bold tabular-nums',
-                    targetMismatch && 'text-destructive',
+                    (targetMismatch || brokerCapExceeded || brokerCapZero) && 'text-destructive',
                   )}
                 >
                   ₪{total.toLocaleString('en-US')}
@@ -810,6 +828,20 @@ export function AddSettlementDialog({
                       : `أقل من المطلوب ₪${targetCap!.toLocaleString('en-US')}`}
                   </span>
                 )}
+                {brokerCapExceeded && !brokerCapZero && (
+                  <span className="text-[11px] text-destructive font-medium">
+                    {kind === 'receipt'
+                      ? `يتجاوز ما عليه — أقصى ₪${Math.round(brokerCap!).toLocaleString('en-US')}`
+                      : `يتجاوز ما له — أقصى ₪${Math.round(brokerCap!).toLocaleString('en-US')}`}
+                  </span>
+                )}
+                {brokerCapZero && (
+                  <span className="text-[11px] text-destructive font-medium">
+                    {kind === 'receipt'
+                      ? 'الوسيط ما عليه شي — لا يمكن تسجيل سند قبض'
+                      : 'ما إله شي عند المكتب — لا يمكن تسجيل سند صرف'}
+                  </span>
+                )}
               </div>
             </div>
 
@@ -817,7 +849,7 @@ export function AddSettlementDialog({
                 blocking save without having to hover the button. Hidden
                 when the only issue is target mismatch (already shown
                 above) so the warnings don't stack. */}
-            {linesIncomplete && !targetMismatch && (
+            {linesIncomplete && !targetMismatch && !brokerCapExceeded && !brokerCapZero && (
               <div className="text-[11px] text-destructive font-medium px-1">
                 ⚠ {firstLineError}
               </div>
@@ -830,14 +862,28 @@ export function AddSettlementDialog({
             </Button>
             <Button
               onClick={handleSave}
-              disabled={saving || targetMismatch || linesIncomplete}
+              disabled={
+                saving ||
+                targetMismatch ||
+                linesIncomplete ||
+                brokerCapExceeded ||
+                brokerCapZero
+              }
               className="gap-2"
               title={
-                targetMismatch
-                  ? targetExceeded
-                    ? `المجموع يتجاوز المبلغ المطلوب ₪${targetCap!.toLocaleString('en-US')}`
-                    : `المجموع أقل من المبلغ المطلوب ₪${targetCap!.toLocaleString('en-US')}`
-                  : firstLineError ?? undefined
+                brokerCapZero
+                  ? kind === 'receipt'
+                    ? 'الوسيط ما عليه رصيد — لا يمكن تسجيل سند قبض'
+                    : 'ما إله رصيد عند المكتب — لا يمكن تسجيل سند صرف'
+                  : brokerCapExceeded
+                    ? kind === 'receipt'
+                      ? `المجموع يتجاوز ما على الوسيط (₪${Math.round(brokerCap!).toLocaleString('en-US')})`
+                      : `المجموع يتجاوز ما له عند المكتب (₪${Math.round(brokerCap!).toLocaleString('en-US')})`
+                    : targetMismatch
+                      ? targetExceeded
+                        ? `المجموع يتجاوز المبلغ المطلوب ₪${targetCap!.toLocaleString('en-US')}`
+                        : `المجموع أقل من المبلغ المطلوب ₪${targetCap!.toLocaleString('en-US')}`
+                      : firstLineError ?? undefined
               }
             >
               {saving && <Loader2 className="h-4 w-4 animate-spin" />}
