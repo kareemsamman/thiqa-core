@@ -661,31 +661,21 @@ export function PolicyYearTimeline({
         packages[newestPkgIndex].isNewest = true;
       }
 
-      // Sort packages within year:
-      // 1. Status first: active → ended → transferred → cancelled.
-      //    After a تحويل the freshly-created target package is active
-      //    while the source flips to transferred — surfacing the
-      //    active one at the top so the agent sees the current state
-      //    without scrolling. "isNewest" used to come first here,
-      //    which let the transferred-out source keep the top slot
-      //    just because it had the older created_at among
-      //    non-transfer-target packages.
-      // 2. Then by "isNewest" (the جديدة flag, fresh-creation hint)
-      // 3. Then by newest start date
-      packages.sort((a, b) => {
-        const priorityA = getStatusPriority(a.status);
-        const priorityB = getStatusPriority(b.status);
-        if (priorityA !== priorityB) return priorityA - priorityB;
-
-        if (a.isNewest && !b.isNewest) return -1;
-        if (!a.isNewest && b.isNewest) return 1;
-
-        const policyA = a.mainPolicy || a.addons[0];
-        const policyB = b.mainPolicy || b.addons[0];
-        const dateA = policyA?.start_date || '';
-        const dateB = policyB?.start_date || '';
-        return new Date(dateB).getTime() - new Date(dateA).getTime();
-      });
+      // Sort packages within year: strictly by created_at descending
+      // (newest at the top). Per the user's rule: "الترتيب لازم يكون
+      // دايما الجديدة فوق مش مهم اذا الغاء اذا تحويل" — chronological
+      // order so the agent can always tell what happened last,
+      // regardless of cancel / transfer / active status.
+      const packageCreatedAt = (pkg: PolicyPackage): number => {
+        const polys = [pkg.mainPolicy, ...pkg.addons].filter(
+          (x): x is PolicyRecord => !!x,
+        );
+        return polys.reduce((acc, x) => {
+          const t = x.created_at ? new Date(x.created_at).getTime() : 0;
+          return t > acc ? t : acc;
+        }, 0);
+      };
+      packages.sort((a, b) => packageCreatedAt(b) - packageCreatedAt(a));
 
       const sampleStartDate = yearPolicies[0]?.start_date || '';
       groups.push({
