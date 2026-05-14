@@ -761,7 +761,6 @@ serve(async (req: Request) => {
       voucherUrlByReceipt,
       totalYearAmount,
       totalYearPaid,
-      yearCustomerCredit,
       totalYearRemaining,
       totalYearOwedToCustomer,
       overallNet,
@@ -860,7 +859,6 @@ interface BuildArgs {
   voucherUrlByReceipt: Map<string, string>;
   totalYearAmount: number;
   totalYearPaid: number;
-  yearCustomerCredit: number;
   totalYearRemaining: number;
   totalYearOwedToCustomer: number;
   overallNet: number;
@@ -905,7 +903,6 @@ function buildStatementHtml(args: BuildArgs): string {
     voucherUrlByReceipt,
     totalYearAmount,
     totalYearPaid,
-    yearCustomerCredit,
     totalYearRemaining,
     totalYearOwedToCustomer,
     overallNet,
@@ -1533,22 +1530,10 @@ function buildStatementHtml(args: BuildArgs): string {
     : '';
 
   // ── Totals + overall note ───────────────────────────────────
-  // Layout matches the in-app debt tile so a customer cross-checking
-  // sees identical arithmetic: إجمالي معاملات − المدفوع − المرتجع =
-  // المتبقي. The "مرتجع" line only renders when there's actually a
-  // customer credit for the year — otherwise the row is suppressed
-  // so the totals stay compact for the common case.
-  const showCreditLine = yearCustomerCredit > 0.01;
-  const creditRowHtml = showCreditLine
-    ? `
-        <div class="totals-row totals-credit-row">
-          <span class="totals-label">
-            المرتجع
-            <span class="totals-hint">— مبلغ أصدره المكتب باسمك من إلغاءات / تحويلات</span>
-          </span>
-          <span class="totals-value credit">−${formatMoney(yearCustomerCredit)}</span>
-        </div>`
-    : '';
+  // Per user request: drop the standalone "المرتجع" totals row — it
+  // was confusing customers. The math still nets refunds correctly
+  // inside المتبقي; we just don't surface the breakdown here.
+  const creditRowHtml = '';
   const totalsHtml = `
     <div class="totals">
       <div class="totals-box">

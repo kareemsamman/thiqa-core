@@ -2829,12 +2829,6 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                 }
                 return null;
               })()}
-              {walletBalance.total_refunds > 0 && paymentSummary.total_remaining > 0 && (
-                <div className="text-[9px] sm:text-[10px] text-muted-foreground space-y-0.5 mt-1">
-                  <p className="truncate">المطلوب: ₪{paymentSummary.total_remaining.toLocaleString()}</p>
-                  <p className="text-amber-600 truncate">المرتجع: -₪{walletBalance.total_refunds.toLocaleString()}</p>
-                </div>
-              )}
             </div>
             {/* DebtIndicator only shown from lg up; at sm/md the card
                 already competes with the remaining-amount number for
