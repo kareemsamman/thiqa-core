@@ -190,9 +190,13 @@ export function Step4Payments({
       });
     }
     
-    // Keep locked payments, remove unlocked ones, add new split payments
+    // Keep locked payments, remove unlocked ones, add new split payments.
+    // The list is rendered with .reverse() so the topmost row is the
+    // most recently appended item. To show the earliest installment
+    // (closest date) at the top, push them in reverse-chronological
+    // order — the display flip then lands them earliest-first.
     const lockedPayments = payments.filter(p => p.locked === true);
-    setPayments([...lockedPayments, ...newPayments]);
+    setPayments([...lockedPayments, ...newPayments.slice().reverse()]);
     setSplitPopoverOpen(false);
   };
 
