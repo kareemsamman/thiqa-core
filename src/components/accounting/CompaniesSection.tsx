@@ -484,20 +484,18 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
     const profitOnly = overlayed.reduce((s, r) => s + Number(r.profit || 0), 0);
     const commissionOnly = overlayed.reduce((s, r) => s + Number(r.office_commission || 0), 0);
     const profitSum = profitOnly + commissionOnly;
-    // Returns adjustments — a cancelled policy with payed_for_company
-    // entered as a negative number represents money the company refunds
-    // to us (per the QuickIssuanceDialog convention). Summing returns'
-    // payed_for_company directly into totalDue therefore reduces the
-    // net debt naturally. Same idea for profit/commission on returns —
-    // they fold into الأرباح الصافية so the user sees their effect.
-    const returnsDueDelta = returns.reduce(
-      (s, r) => s + Number(r.payed_for_company || 0),
-      0,
-    );
-    const returnsProfitDelta = returns.reduce(
-      (s, r) => s + Number(r.profit || 0) + Number(r.office_commission || 0),
-      0,
-    );
+    // Returns adjustments are intentionally NOT folded into the pills.
+    // Per the canonical RPC get_company_outstanding_summary, cancelled
+    // policies are excluded from total_payable entirely — only active
+    // policies count. The legacy "summer returns' payed_for_company"
+    // logic inflated dueGrossSum by every cancelled policy's historical
+    // obligation (e.g. ₪9,100 of returns showing up as extra debt when
+    // the user filtered to الإصدارات tab), so the manual sum of the
+    // active rows didn't equal the pill. Cancellation refunds should
+    // be tracked via سند قبض (incoming) or إشعار مدين على الشركة, not
+    // by sign-flipping payed_for_company on the cancelled row.
+    const returnsDueDelta = 0;
+    const returnsProfitDelta = 0;
     // Disbursed = money we actually paid the companies (outgoing
     // settlements only, refused excluded).
     const disbursedSum = companySettlements
@@ -677,13 +675,6 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
                 title="المستحق للشركات (إجمالي)"
                 lines={[
                   { label: 'إجمالي مستحق من البوالص النشطة', value: fmt(totals.totalDue) },
-                  {
-                    label: 'تعديل المرتجعات',
-                    value:
-                      totals.returnsDueDelta >= 0
-                        ? `+ ${fmt(totals.returnsDueDelta)}`
-                        : `− ${fmt(Math.abs(totals.returnsDueDelta))}`,
-                  },
                   ...(totals.companyCreditNotesTotal > 0
                     ? [{ label: 'إشعار دائن للشركة', value: `− ${fmt(totals.companyCreditNotesTotal)}` }]
                     : []),
@@ -693,7 +684,7 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
                   { label: 'الإجمالي قبل المدفوعات', value: fmt(totals.dueGrossSum), strong: true },
                   {
                     label: 'ملاحظة',
-                    value: 'لا يطرح ما تم دفعه — راجع pill "صافي"',
+                    value: 'الإصدارات الملغية لا تُحسب — راجع سند قبض/إشعار مدين للاسترداد',
                     muted: true,
                   },
                 ]}
@@ -711,13 +702,6 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
                 title="المستحق للشركات (صافي)"
                 lines={[
                   { label: 'إجمالي مستحق من البوالص النشطة', value: fmt(totals.totalDue) },
-                  {
-                    label: 'تعديل المرتجعات',
-                    value:
-                      totals.returnsDueDelta >= 0
-                        ? `+ ${fmt(totals.returnsDueDelta)}`
-                        : `− ${fmt(Math.abs(totals.returnsDueDelta))}`,
-                  },
                   { label: 'مدفوع للشركات', value: `− ${fmt(totals.disbursedSum)}` },
                   ...(totals.companyCreditNotesTotal > 0
                     ? [{ label: 'إشعار دائن للشركة', value: `− ${fmt(totals.companyCreditNotesTotal)}` }]
@@ -779,13 +763,6 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
                   { label: 'ربح الشركات', value: fmt(totals.profitOnly) },
                   { label: 'عمولة المكتب', value: `+ ${fmt(totals.commissionOnly)}` },
                   { label: 'ربح الوسطاء', value: `+ ${fmt(totals.brokerProfit)}` },
-                  {
-                    label: 'المرتجع من الشركات',
-                    value:
-                      totals.returnsProfitDelta >= 0
-                        ? `+ ${fmt(totals.returnsProfitDelta)}`
-                        : `− ${fmt(Math.abs(totals.returnsProfitDelta))}`,
-                  },
                   { label: 'المصاريف', value: `− ${fmt(data.expensesTotal)}` },
                   { label: 'الصافي', value: fmt(totals.netProfitSum), strong: true },
                 ]}
