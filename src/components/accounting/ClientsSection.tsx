@@ -45,6 +45,14 @@ import {
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { AccountingFilters, AccountingFiltersValue } from './AccountingFilters';
+import { ManageColumnsDropdown } from './ManageColumnsDropdown';
+import { useTableColumnVisibility } from '@/hooks/useTableColumnVisibility';
+import {
+  CLIENT_ISSUANCE_COLUMNS,
+  CLIENT_ISSUANCE_DEFAULT_OFF,
+  CLIENT_RECEIPT_COLUMNS,
+  CLIENT_RECEIPT_DEFAULT_OFF,
+} from './columnDefs';
 import { PAYMENT_METHOD_LABELS, POLICY_TYPE_DISPLAY, type IssuanceRow } from './accountingTypes';
 import {
   matchesClientReceiptSearch,
@@ -195,6 +203,38 @@ export function ClientsSection({ branchId }: ClientsSectionProps = {}) {
   const [viewVoucherRow, setViewVoucherRow] = useState<ClientReceiptRow | null>(null);
 
   const data = useAccountingData(filters, branchId);
+
+  // Per-tab-family column visibility — one set for all receipt-style
+  // tabs (payment / cancellation / disbursement / إشعار) since they
+  // share the same row shape, one for the issuances tab which has a
+  // different schema. The user explicitly asked for this:
+  // "اولا لازم ادارة الاعمدة... نقدر نعمل زي كيف شركات التامين".
+  const receiptColKeys = useMemo(
+    () => CLIENT_RECEIPT_COLUMNS.map((c) => c.key),
+    [],
+  );
+  const issuanceColKeys = useMemo(
+    () => CLIENT_ISSUANCE_COLUMNS.map((c) => c.key),
+    [],
+  );
+  const receiptColDefaults = useMemo(
+    () => receiptColKeys.filter((k) => !CLIENT_RECEIPT_DEFAULT_OFF.has(k)),
+    [receiptColKeys],
+  );
+  const issuanceColDefaults = useMemo(
+    () => issuanceColKeys.filter((k) => !CLIENT_ISSUANCE_DEFAULT_OFF.has(k)),
+    [issuanceColKeys],
+  );
+  const receiptCols = useTableColumnVisibility(
+    'accounting-clients-receipts-v1',
+    receiptColDefaults,
+    receiptColKeys,
+  );
+  const issuanceCols = useTableColumnVisibility(
+    'accounting-clients-issuances-v1',
+    issuanceColDefaults,
+    issuanceColKeys,
+  );
 
   // ── Combine issuances + returns into ONE customer-perspective
   //    package list. Each row is a معاملة (group_id-keyed); cancelled
@@ -406,6 +446,24 @@ export function ClientsSection({ branchId }: ClientsSectionProps = {}) {
             paymentMethodOptions={[]}
             show={{ dateRange: true, companies: false, types: false, paymentMethods: false }}
           />
+          {/* Column visibility — the list switches by active tab so
+              the issuances tab manages package columns and the
+              receipt tabs share one customer-voucher schema. */}
+          {tab === 'issuances' ? (
+            <ManageColumnsDropdown
+              columns={CLIENT_ISSUANCE_COLUMNS}
+              visible={issuanceCols.visible}
+              onToggle={issuanceCols.toggle}
+              onReset={issuanceCols.reset}
+            />
+          ) : (
+            <ManageColumnsDropdown
+              columns={CLIENT_RECEIPT_COLUMNS}
+              visible={receiptCols.visible}
+              onToggle={receiptCols.toggle}
+              onReset={receiptCols.reset}
+            />
+          )}
         </div>
       </div>
 
@@ -472,42 +530,42 @@ export function ClientsSection({ branchId }: ClientsSectionProps = {}) {
               everything visible, grouped by section. Each block uses
               the same table as its dedicated tab. */}
           <AllTabSection title="الإصدارات" count={filteredPackages.length}>
-            <IssuancesTable rows={filteredPackages} loading={data.loading} />
+            <IssuancesTable rows={filteredPackages} loading={data.loading} visibleCols={issuanceCols.visible} />
           </AllTabSection>
           <AllTabSection title="سند قبض" count={payments.length}>
-            <ReceiptsTable rows={payments} loading={data.loading} kind="payments" onVoucherClick={setViewVoucherRow} />
+            <ReceiptsTable rows={payments} loading={data.loading} kind="payments" onVoucherClick={setViewVoucherRow} visibleCols={receiptCols.visible} />
           </AllTabSection>
           <AllTabSection title="سند صرف" count={disbursements.length}>
-            <ReceiptsTable rows={disbursements} loading={data.loading} kind="disbursements" onVoucherClick={setViewVoucherRow} />
+            <ReceiptsTable rows={disbursements} loading={data.loading} kind="disbursements" onVoucherClick={setViewVoucherRow} visibleCols={receiptCols.visible} />
           </AllTabSection>
           <AllTabSection title="سند إلغاء" count={cancellations.length}>
-            <ReceiptsTable rows={cancellations} loading={data.loading} kind="cancellations" onVoucherClick={setViewVoucherRow} />
+            <ReceiptsTable rows={cancellations} loading={data.loading} kind="cancellations" onVoucherClick={setViewVoucherRow} visibleCols={receiptCols.visible} />
           </AllTabSection>
           <AllTabSection title="إشعار مدين" count={debitNotes.length}>
-            <ReceiptsTable rows={debitNotes} loading={data.loading} kind="debit_notes" onVoucherClick={setViewVoucherRow} />
+            <ReceiptsTable rows={debitNotes} loading={data.loading} kind="debit_notes" onVoucherClick={setViewVoucherRow} visibleCols={receiptCols.visible} />
           </AllTabSection>
           <AllTabSection title="إشعار دائن" count={creditNotes.length}>
-            <ReceiptsTable rows={creditNotes} loading={data.loading} kind="credit_notes" onVoucherClick={setViewVoucherRow} />
+            <ReceiptsTable rows={creditNotes} loading={data.loading} kind="credit_notes" onVoucherClick={setViewVoucherRow} visibleCols={receiptCols.visible} />
           </AllTabSection>
         </TabsContent>
 
         <TabsContent value="issuances" className="mt-3">
-          <IssuancesTable rows={filteredPackages} loading={data.loading} />
+          <IssuancesTable rows={filteredPackages} loading={data.loading} visibleCols={issuanceCols.visible} />
         </TabsContent>
         <TabsContent value="payments" className="mt-3">
-          <ReceiptsTable rows={payments} loading={data.loading} kind="payments" onVoucherClick={setViewVoucherRow} />
+          <ReceiptsTable rows={payments} loading={data.loading} kind="payments" onVoucherClick={setViewVoucherRow} visibleCols={receiptCols.visible} />
         </TabsContent>
         <TabsContent value="disbursements" className="mt-3">
-          <ReceiptsTable rows={disbursements} loading={data.loading} kind="disbursements" onVoucherClick={setViewVoucherRow} />
+          <ReceiptsTable rows={disbursements} loading={data.loading} kind="disbursements" onVoucherClick={setViewVoucherRow} visibleCols={receiptCols.visible} />
         </TabsContent>
         <TabsContent value="cancellations" className="mt-3">
-          <ReceiptsTable rows={cancellations} loading={data.loading} kind="cancellations" onVoucherClick={setViewVoucherRow} />
+          <ReceiptsTable rows={cancellations} loading={data.loading} kind="cancellations" onVoucherClick={setViewVoucherRow} visibleCols={receiptCols.visible} />
         </TabsContent>
         <TabsContent value="debit_notes" className="mt-3">
-          <ReceiptsTable rows={debitNotes} loading={data.loading} kind="debit_notes" onVoucherClick={setViewVoucherRow} />
+          <ReceiptsTable rows={debitNotes} loading={data.loading} kind="debit_notes" onVoucherClick={setViewVoucherRow} visibleCols={receiptCols.visible} />
         </TabsContent>
         <TabsContent value="credit_notes" className="mt-3">
-          <ReceiptsTable rows={creditNotes} loading={data.loading} kind="credit_notes" onVoucherClick={setViewVoucherRow} />
+          <ReceiptsTable rows={creditNotes} loading={data.loading} kind="credit_notes" onVoucherClick={setViewVoucherRow} visibleCols={receiptCols.visible} />
         </TabsContent>
       </Tabs>
 
@@ -762,9 +820,11 @@ function AllTabSection({
 function IssuancesTable({
   rows,
   loading,
+  visibleCols,
 }: {
   rows: IssuanceRow[];
   loading: boolean;
+  visibleCols: string[];
 }) {
   if (loading) {
     return (
@@ -782,19 +842,42 @@ function IssuancesTable({
       </div>
     );
   }
+  const show = (key: string) => visibleCols.includes(key);
   return (
     <div className="rounded-md border bg-card overflow-x-auto">
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="whitespace-nowrap text-right">رقم المعاملة</TableHead>
-            <TableHead className="whitespace-nowrap text-right">التاريخ</TableHead>
-            <TableHead className="whitespace-nowrap text-right">العميل</TableHead>
-            <TableHead className="whitespace-nowrap text-right">السيارة</TableHead>
-            <TableHead className="whitespace-nowrap text-right">الأنواع</TableHead>
-            <TableHead className="whitespace-nowrap text-left">المبلغ المستحق</TableHead>
-            <TableHead className="whitespace-nowrap text-left">المدفوع</TableHead>
-            <TableHead className="whitespace-nowrap text-right">الحالة</TableHead>
+            {show('document_number') && (
+              <TableHead className="whitespace-nowrap text-right">رقم المعاملة</TableHead>
+            )}
+            {show('date') && (
+              <TableHead className="whitespace-nowrap text-right">التاريخ</TableHead>
+            )}
+            {show('client_name') && (
+              <TableHead className="whitespace-nowrap text-right">العميل</TableHead>
+            )}
+            {show('client_id_number') && (
+              <TableHead className="whitespace-nowrap text-right">رقم الهوية</TableHead>
+            )}
+            {show('client_phone') && (
+              <TableHead className="whitespace-nowrap text-right">الهاتف</TableHead>
+            )}
+            {show('car_number') && (
+              <TableHead className="whitespace-nowrap text-right">السيارة</TableHead>
+            )}
+            {show('types') && (
+              <TableHead className="whitespace-nowrap text-right">الأنواع</TableHead>
+            )}
+            {show('billed') && (
+              <TableHead className="whitespace-nowrap text-left">المبلغ المستحق</TableHead>
+            )}
+            {show('paid') && (
+              <TableHead className="whitespace-nowrap text-left">المدفوع</TableHead>
+            )}
+            {show('status') && (
+              <TableHead className="whitespace-nowrap text-right">الحالة</TableHead>
+            )}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -821,56 +904,82 @@ function IssuancesTable({
                 key={pkg.id}
                 className={`text-sm ${isCancelled ? 'opacity-70' : ''}`}
               >
-                <TableCell className="font-mono ltr-nums whitespace-nowrap">
-                  {pkg.document_number ?? '—'}
-                </TableCell>
-                <TableCell className="whitespace-nowrap ltr-nums">
-                  {formatDate(pkg.main.issue_date ?? pkg.main.start_date)}
-                </TableCell>
-                <TableCell className="whitespace-nowrap">
-                  {pkg.client_name ?? '—'}
-                </TableCell>
-                <TableCell className="whitespace-nowrap font-mono ltr-nums text-xs">
-                  {pkg.main.car_number ?? '—'}
-                </TableCell>
-                <TableCell>
-                  <div className="flex flex-wrap gap-1">
-                    {pkg.sub_policies.map((s) => (
-                      <Badge
-                        key={s.id}
-                        variant="outline"
-                        className="text-[10px] font-normal"
-                      >
-                        {POLICY_TYPE_DISPLAY[
-                          (s.policy_type_child as string | null) ?? s.policy_type_parent
-                        ] ??
-                          POLICY_TYPE_DISPLAY[s.policy_type_parent] ??
-                          s.policy_type_parent}
+                {show('document_number') && (
+                  <TableCell className="font-mono ltr-nums whitespace-nowrap">
+                    {pkg.document_number ?? '—'}
+                  </TableCell>
+                )}
+                {show('date') && (
+                  <TableCell className="whitespace-nowrap ltr-nums">
+                    {formatDate(pkg.main.issue_date ?? pkg.main.start_date)}
+                  </TableCell>
+                )}
+                {show('client_name') && (
+                  <TableCell className="whitespace-nowrap">
+                    {pkg.client_name ?? '—'}
+                  </TableCell>
+                )}
+                {show('client_id_number') && (
+                  <TableCell className="whitespace-nowrap font-mono ltr-nums text-xs">
+                    {pkg.client_id_number ?? '—'}
+                  </TableCell>
+                )}
+                {show('client_phone') && (
+                  <TableCell className="whitespace-nowrap font-mono ltr-nums text-xs">
+                    {pkg.client_phone ?? '—'}
+                  </TableCell>
+                )}
+                {show('car_number') && (
+                  <TableCell className="whitespace-nowrap font-mono ltr-nums text-xs">
+                    {pkg.main.car_number ?? '—'}
+                  </TableCell>
+                )}
+                {show('types') && (
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1">
+                      {pkg.sub_policies.map((s) => (
+                        <Badge
+                          key={s.id}
+                          variant="outline"
+                          className="text-[10px] font-normal"
+                        >
+                          {POLICY_TYPE_DISPLAY[
+                            (s.policy_type_child as string | null) ?? s.policy_type_parent
+                          ] ??
+                            POLICY_TYPE_DISPLAY[s.policy_type_parent] ??
+                            s.policy_type_parent}
+                        </Badge>
+                      ))}
+                    </div>
+                  </TableCell>
+                )}
+                {show('billed') && (
+                  <TableCell className="text-left ltr-nums font-semibold tabular-nums whitespace-nowrap">
+                    {formatMoney(billed)}
+                  </TableCell>
+                )}
+                {show('paid') && (
+                  <TableCell className="text-left ltr-nums tabular-nums whitespace-nowrap">
+                    {paid > 0 ? (
+                      <span className="text-emerald-700">{formatMoney(paid)}</span>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                )}
+                {show('status') && (
+                  <TableCell>
+                    {isCancelled ? (
+                      <Badge variant="outline" className="bg-rose-50 text-rose-700 border-rose-200 text-xs">
+                        ملغاة
                       </Badge>
-                    ))}
-                  </div>
-                </TableCell>
-                <TableCell className="text-left ltr-nums font-semibold tabular-nums whitespace-nowrap">
-                  {formatMoney(billed)}
-                </TableCell>
-                <TableCell className="text-left ltr-nums tabular-nums whitespace-nowrap">
-                  {paid > 0 ? (
-                    <span className="text-emerald-700">{formatMoney(paid)}</span>
-                  ) : (
-                    <span className="text-muted-foreground">—</span>
-                  )}
-                </TableCell>
-                <TableCell>
-                  {isCancelled ? (
-                    <Badge variant="outline" className="bg-rose-50 text-rose-700 border-rose-200 text-xs">
-                      ملغاة
-                    </Badge>
-                  ) : (
-                    <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-xs">
-                      سارية
-                    </Badge>
-                  )}
-                </TableCell>
+                    ) : (
+                      <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-xs">
+                        سارية
+                      </Badge>
+                    )}
+                  </TableCell>
+                )}
               </TableRow>
             );
           })}
@@ -924,11 +1033,13 @@ function ReceiptsTable({
   loading,
   kind,
   onVoucherClick,
+  visibleCols,
 }: {
   rows: ClientReceiptRow[];
   loading: boolean;
   kind: ReceiptKind;
   onVoucherClick?: (row: ClientReceiptRow) => void;
+  visibleCols: string[];
 }) {
   const labels = RECEIPT_LABELS[kind];
   if (loading) {
@@ -947,58 +1058,103 @@ function ReceiptsTable({
       </div>
     );
   }
+  const show = (key: string) => visibleCols.includes(key);
   return (
     <div className="rounded-md border bg-card overflow-x-auto">
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="whitespace-nowrap text-right">{labels.number}</TableHead>
-            <TableHead className="whitespace-nowrap text-right">التاريخ</TableHead>
-            <TableHead className="whitespace-nowrap text-right">العميل</TableHead>
-            <TableHead className="whitespace-nowrap text-right">المعاملة</TableHead>
-            <TableHead className="whitespace-nowrap text-right">طريقة الدفع</TableHead>
-            <TableHead className="whitespace-nowrap text-left">المبلغ</TableHead>
-            <TableHead className="whitespace-nowrap text-right">ملاحظات</TableHead>
+            {show('voucher_number') && (
+              <TableHead className="whitespace-nowrap text-right">{labels.number}</TableHead>
+            )}
+            {show('date') && (
+              <TableHead className="whitespace-nowrap text-right">التاريخ</TableHead>
+            )}
+            {show('client_name') && (
+              <TableHead className="whitespace-nowrap text-right">العميل</TableHead>
+            )}
+            {show('client_id_number') && (
+              <TableHead className="whitespace-nowrap text-right">رقم الهوية</TableHead>
+            )}
+            {show('client_phone') && (
+              <TableHead className="whitespace-nowrap text-right">الهاتف</TableHead>
+            )}
+            {show('car_number') && (
+              <TableHead className="whitespace-nowrap text-right">السيارة</TableHead>
+            )}
+            {show('payment_method') && (
+              <TableHead className="whitespace-nowrap text-right">طريقة الدفع</TableHead>
+            )}
+            {show('amount') && (
+              <TableHead className="whitespace-nowrap text-left">المبلغ</TableHead>
+            )}
+            {show('notes') && (
+              <TableHead className="whitespace-nowrap text-right">ملاحظات</TableHead>
+            )}
           </TableRow>
         </TableHeader>
         <TableBody>
           {rows.map((r) => (
             <TableRow key={r.id} className="text-sm">
-              <TableCell className="font-mono ltr-nums whitespace-nowrap">
-                {r.voucher_number && onVoucherClick ? (
-                  <button
-                    type="button"
-                    onClick={() => onVoucherClick(r)}
-                    className="text-primary underline-offset-2 hover:underline focus:outline-none focus-visible:underline"
-                  >
-                    {r.voucher_number}
-                  </button>
-                ) : (
-                  r.voucher_number ?? '—'
-                )}
-              </TableCell>
-              <TableCell className="whitespace-nowrap ltr-nums">
-                {formatDate(r.receipt_date)}
-              </TableCell>
-              <TableCell className="whitespace-nowrap">
-                {r.client_name ?? '—'}
-              </TableCell>
-              <TableCell className="whitespace-nowrap font-mono ltr-nums text-xs text-muted-foreground">
-                {r.policy_document_number ?? r.policy_number ?? '—'}
-              </TableCell>
-              <TableCell>
-                <Badge variant="outline" className="text-xs">
-                  {paymentLabel(r.payment_method)}
-                </Badge>
-              </TableCell>
-              <TableCell
-                className={`text-left ltr-nums font-semibold tabular-nums whitespace-nowrap ${labels.amountColor}`}
-              >
-                {formatMoney(r.amount)}
-              </TableCell>
-              <TableCell className="max-w-[240px] truncate text-xs text-muted-foreground">
-                {r.notes ?? '—'}
-              </TableCell>
+              {show('voucher_number') && (
+                <TableCell className="font-mono ltr-nums whitespace-nowrap">
+                  {r.voucher_number && onVoucherClick ? (
+                    <button
+                      type="button"
+                      onClick={() => onVoucherClick(r)}
+                      className="text-primary underline-offset-2 hover:underline focus:outline-none focus-visible:underline"
+                    >
+                      {r.voucher_number}
+                    </button>
+                  ) : (
+                    r.voucher_number ?? '—'
+                  )}
+                </TableCell>
+              )}
+              {show('date') && (
+                <TableCell className="whitespace-nowrap ltr-nums">
+                  {formatDate(r.receipt_date)}
+                </TableCell>
+              )}
+              {show('client_name') && (
+                <TableCell className="whitespace-nowrap">
+                  {r.client_name ?? '—'}
+                </TableCell>
+              )}
+              {show('client_id_number') && (
+                <TableCell className="whitespace-nowrap font-mono ltr-nums text-xs">
+                  {r.client_id_number ?? '—'}
+                </TableCell>
+              )}
+              {show('client_phone') && (
+                <TableCell className="whitespace-nowrap font-mono ltr-nums text-xs">
+                  {r.client_phone ?? '—'}
+                </TableCell>
+              )}
+              {show('car_number') && (
+                <TableCell className="whitespace-nowrap font-mono ltr-nums text-xs">
+                  {r.car_number ?? '—'}
+                </TableCell>
+              )}
+              {show('payment_method') && (
+                <TableCell>
+                  <Badge variant="outline" className="text-xs">
+                    {paymentLabel(r.payment_method)}
+                  </Badge>
+                </TableCell>
+              )}
+              {show('amount') && (
+                <TableCell
+                  className={`text-left ltr-nums font-semibold tabular-nums whitespace-nowrap ${labels.amountColor}`}
+                >
+                  {formatMoney(r.amount)}
+                </TableCell>
+              )}
+              {show('notes') && (
+                <TableCell className="max-w-[240px] truncate text-xs text-muted-foreground">
+                  {r.notes ?? '—'}
+                </TableCell>
+              )}
             </TableRow>
           ))}
         </TableBody>

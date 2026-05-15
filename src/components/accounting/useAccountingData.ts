@@ -40,6 +40,16 @@ export interface ClientReceiptRow {
   notes: string | null;
   client_id: string | null;
   client_name: string | null;
+  /** Customer fields surfaced as optional columns on the accounting
+   *  tables (per user: "اكتر معلومات الزبون"). Mirrored client_name
+   *  on the receipts row stays authoritative; the joined values fill
+   *  in everything else. */
+  client_id_number: string | null;
+  client_phone: string | null;
+  /** Linked policy's car number, when the receipt was tied to a
+   *  specific policy. Optional column the user toggles on when
+   *  reconciling against a paper file. */
+  car_number: string | null;
   policy_id: string | null;
   /** policy_payments.id — only set for payment + cancellation rows
    *  mirrored from policy_payments. Used to print the bulk receipt
@@ -184,8 +194,16 @@ interface RawClientReceipt {
   client_name: string | null;
   policy_id: string | null;
   payment_id: string | null;
+  car_number: string | null;
   cancelled_at: string | null;
-  policies: { document_number: string | null; policy_number: string | null } | null;
+  clients: { id_number: string | null; phone_number: string | null } | null;
+  policies:
+    | {
+        document_number: string | null;
+        policy_number: string | null;
+        cars: { car_number: string | null } | null;
+      }
+    | null;
 }
 
 interface RawBrokerSettlement {
@@ -538,8 +556,10 @@ export function useAccountingData(
         .select(
           `id, receipt_date, amount, payment_method, voucher_number,
            receipt_number, cheque_number, notes, client_id, client_name,
-           broker_id, policy_id, payment_id, cancelled_at, receipt_type,
-           policies(document_number, policy_number)`,
+           broker_id, policy_id, payment_id, car_number, cancelled_at,
+           receipt_type,
+           clients(id_number, phone_number),
+           policies(document_number, policy_number, cars(car_number))`,
         )
         .in('receipt_type', ['payment', 'cancellation', 'disbursement', 'credit_note', 'debit_note'])
         .eq('is_imported', false)
@@ -558,6 +578,15 @@ export function useAccountingData(
         notes: r.notes,
         client_id: r.client_id,
         client_name: r.client_name,
+        // Customer detail joined from `clients` so the optional
+        // columns on the accounting page don't require a second fetch.
+        client_id_number: r.clients?.id_number ?? null,
+        client_phone: r.clients?.phone_number ?? null,
+        // Car number comes from either the denormalized column on
+        // `receipts` (set by the cancellation flow) or the linked
+        // policy's `cars` join. Prefer the denormalized value first
+        // since refused-cheque rows null out the policy link.
+        car_number: r.car_number ?? r.policies?.cars?.car_number ?? null,
         policy_id: r.policy_id,
         payment_id: r.payment_id ?? null,
         policy_document_number: r.policies?.document_number ?? null,

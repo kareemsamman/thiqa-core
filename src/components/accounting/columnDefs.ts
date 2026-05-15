@@ -58,3 +58,48 @@ export const SETTLEMENT_COLUMNS: ColumnOption[] = [
 ];
 
 export const SETTLEMENT_DEFAULT_OFF = new Set(['notes']);
+
+// Customer-side accounting columns. Per user feedback the receipt
+// tables don't surface cheque/bank detail (that lives on /receipts);
+// they emphasize CUSTOMER context — id number, phone, car — so the
+// agent reading the accounting page can tie an unfamiliar voucher
+// number back to the person/vehicle without leaving the screen.
+// The "المعاملة" column was intentionally dropped: per the user,
+// "ما في اشي ببين انوا السند للمعاملة" — a سند can span multiple
+// معاملات, so showing one document number was misleading.
+export const CLIENT_RECEIPT_COLUMNS: ColumnOption[] = [
+  { key: 'voucher_number', label: 'رقم السند', required: true },
+  { key: 'date', label: 'التاريخ', required: true },
+  { key: 'client_name', label: 'العميل', required: true },
+  { key: 'client_id_number', label: 'رقم الهوية' },
+  { key: 'client_phone', label: 'الهاتف' },
+  { key: 'car_number', label: 'رقم السيارة' },
+  { key: 'payment_method', label: 'طريقة الدفع' },
+  { key: 'amount', label: 'المبلغ', required: true },
+  { key: 'notes', label: 'ملاحظات' },
+];
+
+export const CLIENT_RECEIPT_DEFAULT_OFF = new Set([
+  'client_id_number',
+  'client_phone',
+  'car_number',
+  'notes',
+]);
+
+export const CLIENT_ISSUANCE_COLUMNS: ColumnOption[] = [
+  { key: 'document_number', label: 'رقم المعاملة', required: true },
+  { key: 'date', label: 'التاريخ', required: true },
+  { key: 'client_name', label: 'العميل', required: true },
+  { key: 'client_id_number', label: 'رقم الهوية' },
+  { key: 'client_phone', label: 'الهاتف' },
+  { key: 'car_number', label: 'رقم السيارة' },
+  { key: 'types', label: 'الأنواع' },
+  { key: 'billed', label: 'المبلغ المستحق', required: true },
+  { key: 'paid', label: 'المدفوع' },
+  { key: 'status', label: 'الحالة' },
+];
+
+export const CLIENT_ISSUANCE_DEFAULT_OFF = new Set([
+  'client_id_number',
+  'client_phone',
+]);
