@@ -1040,17 +1040,27 @@ export default function Receipts() {
       const aggFiltered = hideElzamiPayments
         ? aggOfficeCollected.filter((r) => !isElzamiPassthrough(r))
         : aggOfficeCollected;
+      // Pull policy_payments metadata for the FULL aggregate set in
+      // one query — both the session-id grouping (used here for the
+      // tile count) and the printed_at lock (used below for the row
+      // dropdown's تعديل state) come off the same payload. Before,
+      // we fired this query once with just session_id, then a second
+      // query for the trimmed subset to pick up printed_at. The
+      // aggregate already covers every payment_id on the page, so
+      // the second round-trip was pure waste.
       const aggPaymentIds = aggFiltered
         .map((r) => r.payment_id)
         .filter((id): id is string => typeof id === "string" && id.length > 0);
       const aggSessionMap: Record<string, string> = {};
+      const aggPrintedSet = new Set<string>();
       if (aggPaymentIds.length > 0) {
         const { data: aggSessionRows } = await supabase
           .from('policy_payments')
-          .select('id, payment_session_id')
+          .select('id, payment_session_id, printed_at')
           .in('id', aggPaymentIds);
-        for (const row of (aggSessionRows ?? []) as Array<{ id: string; payment_session_id: string | null }>) {
+        for (const row of (aggSessionRows ?? []) as Array<{ id: string; payment_session_id: string | null; printed_at: string | null }>) {
           if (row.payment_session_id) aggSessionMap[row.id] = row.payment_session_id;
+          if (row.printed_at) aggPrintedSet.add(row.id);
         }
       }
       const aggGroupKeys = new Set<string>();
@@ -1085,69 +1095,63 @@ export default function Receipts() {
       //   • cancelled payment row → its cancellation voucher #
       //   • cancellation voucher  → the original receipt #
       // The 'all' tab can have both kinds of rows on screen at once,
-      // so we always run both lookups. Single-type tabs naturally
-      // short-circuit because only one set has matching rows.
+      // so we run both lookups in parallel via Promise.all — they
+      // hit disjoint row sets so there's nothing to share between
+      // them, but they used to await sequentially for no reason.
       const xref: Record<string, number | string> = {};
       const cancelledPaymentIds = trimmed
         .filter((r) => (r as any).receipt_type === 'payment' && r.cancelled_at)
         .map((r) => r.id);
-      if (cancelledPaymentIds.length > 0) {
-        const { data: vouchers } = await supabase
-          .from('receipts')
-          .select('receipt_number, cancels_receipt_id')
-          .eq('receipt_type', 'cancellation')
-          .in('cancels_receipt_id', cancelledPaymentIds);
-        for (const v of (vouchers ?? []) as Array<{ receipt_number: number | string | null; cancels_receipt_id: string | null }>) {
-          if (v.cancels_receipt_id && v.receipt_number != null) {
-            xref[v.cancels_receipt_id] = v.receipt_number;
-          }
-        }
-      }
       const voucherOriginalIds = trimmed
         .filter((r) => (r as any).receipt_type === 'cancellation')
         .map((r) => r.cancels_receipt_id)
         .filter((id): id is string => !!id);
-      if (voucherOriginalIds.length > 0) {
-        const { data: originals } = await supabase
-          .from('receipts')
-          .select('id, receipt_number')
-          .in('id', voucherOriginalIds);
-        const byId = new Map<string, number | string>();
-        for (const o of (originals ?? []) as Array<{ id: string; receipt_number: number | string | null }>) {
-          if (o.receipt_number != null) byId.set(o.id, o.receipt_number);
+
+      const [vouchersRes, originalsRes] = await Promise.all([
+        cancelledPaymentIds.length > 0
+          ? supabase
+              .from('receipts')
+              .select('receipt_number, cancels_receipt_id')
+              .eq('receipt_type', 'cancellation')
+              .in('cancels_receipt_id', cancelledPaymentIds)
+          : Promise.resolve({ data: [] as Array<{ receipt_number: number | string | null; cancels_receipt_id: string | null }> }),
+        voucherOriginalIds.length > 0
+          ? supabase
+              .from('receipts')
+              .select('id, receipt_number')
+              .in('id', voucherOriginalIds)
+          : Promise.resolve({ data: [] as Array<{ id: string; receipt_number: number | string | null }> }),
+      ]);
+
+      for (const v of ((vouchersRes as any).data ?? []) as Array<{ receipt_number: number | string | null; cancels_receipt_id: string | null }>) {
+        if (v.cancels_receipt_id && v.receipt_number != null) {
+          xref[v.cancels_receipt_id] = v.receipt_number;
         }
-        for (const r of trimmed) {
-          if ((r as any).receipt_type === 'cancellation' && r.cancels_receipt_id && byId.has(r.cancels_receipt_id)) {
-            xref[r.id] = byId.get(r.cancels_receipt_id)!;
-          }
+      }
+      const byId = new Map<string, number | string>();
+      for (const o of ((originalsRes as any).data ?? []) as Array<{ id: string; receipt_number: number | string | null }>) {
+        if (o.receipt_number != null) byId.set(o.id, o.receipt_number);
+      }
+      for (const r of trimmed) {
+        if ((r as any).receipt_type === 'cancellation' && r.cancels_receipt_id && byId.has(r.cancels_receipt_id)) {
+          xref[r.id] = byId.get(r.cancels_receipt_id)!;
         }
       }
       setCancelXref(xref);
 
-      // Resolve payment_session_id for every auto receipt on this
-      // page so the grouping memo can collapse a multi-line
-      // collection event (cash + cheque entered together via تسديد
-      // المبلغ) into one سند قبض row. Legacy rows without a
-      // session_id (predate the 20260511180000 migration) fall back
-      // to the old policy.group_id key.
-      const autoPaymentIds = trimmed
-        .map((r) => r.payment_id)
-        .filter((id): id is string => !!id);
+      // Session-id grouping + printed-at lock for the visible page
+      // both come off the aggregate query above (aggSessionMap +
+      // aggPrintedSet) — no second round-trip needed. Filter to the
+      // payment_ids actually on this page so the state stays narrow.
+      const trimmedPaymentIds = new Set(
+        trimmed.map((r) => r.payment_id).filter((id): id is string => !!id),
+      );
       const sessionMap: Record<string, string> = {};
       const printedSet = new Set<string>();
-      if (autoPaymentIds.length > 0) {
-        const { data: sessionRows } = await supabase
-          .from('policy_payments')
-          .select('id, payment_session_id, printed_at')
-          .in('id', autoPaymentIds);
-        for (const row of (sessionRows ?? []) as Array<{ id: string; payment_session_id: string | null; printed_at: string | null }>) {
-          if (row.payment_session_id) {
-            sessionMap[row.id] = row.payment_session_id;
-          }
-          if (row.printed_at) {
-            printedSet.add(row.id);
-          }
-        }
+      for (const id of trimmedPaymentIds) {
+        const sess = aggSessionMap[id];
+        if (sess) sessionMap[id] = sess;
+        if (aggPrintedSet.has(id)) printedSet.add(id);
       }
       setSessionByPaymentId(sessionMap);
       setPrintedPaymentIds(printedSet);
