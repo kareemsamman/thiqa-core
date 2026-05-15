@@ -318,7 +318,7 @@ serve(async (req: Request) => {
       if (p.payment_type !== 'visa_external') return false;
       const pol = policyById.get(p.policy_id);
       if (!pol) return false;
-      return pol.policy_type_parent === 'ELZAMI' && Number(pol.office_commission || 0) <= 0;
+      return pol.policy_type_parent === 'ELZAMI';
     };
 
     const paidByPolicy = new Map<string, number>();
@@ -511,7 +511,7 @@ serve(async (req: Request) => {
       if (!paymentId) return false;
       const meta = paymentMeta.get(paymentId);
       if (!meta) return false;
-      return meta.policy_type_parent === 'ELZAMI' && meta.policy_office_commission <= 0;
+      return meta.policy_type_parent === 'ELZAMI';
     };
     const filteredLedger = ledger.filter((r: any) => {
       if (r.receipt_type === 'payment' || r.receipt_type === 'cancellation') {
