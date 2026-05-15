@@ -6,22 +6,17 @@
 // name and picks a category from a fixed list (with "أخرى" + free
 // text fallback for custom categories).
 //
-// Schema-wise these rows live in `receipts` like every other voucher:
-//   client_id / broker_id / company_id ← null
-//   recipient_name                     ← typed
-//   recipient_category                 ← chosen (or custom text when
-//                                         category === 'other')
-//   receipt_type                       ← payment | disbursement |
-//                                         credit_note | debit_note
-//   voucher_number                     ← R/D/C/M{n}/{year}
+// Layout mirrors DebtPaymentModal's payment-line editor: a single
+// "إضافة دفعة" button + per-line cards with grid-cols-3 (المبلغ /
+// طريقة الدفع / التاريخ) and a cheque sub-row (البنك / الفرع /
+// رقم الشيك / تاريخ الاستحقاق) when the line type is cheque. Per-
+// line notes textarea. مجموع الدفعات tally at the bottom.
 //
-// For قبض/صرف vouchers the form mirrors AddSettlementDialog's multi-
-// line payment editor: نقداً / شيك جديد / تحويل بنكي / فيزا quick-add
-// buttons, one row per line, total at the bottom. Multi-line saves
-// land as ONE receipts row with payment_method='multiple' and the
-// breakdown in `notes` — same pattern company settlements use, kept
-// minimal because /آخر vouchers don't need customer-cheque
-// integration or installment splitter.
+// Schema-wise the dialog still writes ONE row to `receipts`:
+//   • 1 line   → payment_method = that line's type, single row.
+//   • N lines  → payment_method = 'multiple', total amount, the
+//                breakdown gets prepended into notes.
+// (No new table needed; matches the company-settlements pattern.)
 
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -46,6 +41,7 @@ import {
 import { ArabicDatePicker } from '@/components/ui/arabic-date-picker';
 import {
   Banknote,
+  Copy,
   CreditCard,
   FileText,
   Loader2,
@@ -61,7 +57,7 @@ import { useAgentContext } from '@/hooks/useAgentContext';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import { BankBranchPicker } from '@/components/shared/BankBranchPicker';
+import { BankPicker } from '@/components/shared/BankPicker';
 import type { VoucherKind } from './AddVoucherDialog';
 
 interface Props {
@@ -138,40 +134,42 @@ const CATEGORY_OPTIONS: { value: string; label: string }[] = [
   { value: 'other', label: 'أخرى' },
 ];
 
-// Payment-line types we support for "آخر" vouchers. Customer-cheque
-// + installment splitter intentionally omitted — they're entity-tied
-// flows that don't apply when the counterparty is a free-text label.
-type LineType = 'cash' | 'cheque' | 'bank_transfer' | 'visa';
+// Payment-line types supported for "آخر" vouchers. Customer-cheque
+// + visa intentionally omitted — they need an entity link.
+type LineType = 'cash' | 'cheque' | 'transfer' | 'visa';
 
 interface PaymentLine {
   id: string;
   type: LineType;
   amount: number;
   date: string;
-  // Cheque-specific fields, only populated when type === 'cheque'.
+  // Cheque-specific fields. cheque_due_date holds the maturity (when
+  // the cheque can be cashed); the row's `date` holds the issue date
+  // for cheque rows so the layout matches DebtPaymentModal.
   cheque_number?: string;
   bank_code?: string | null;
   branch_code?: string | null;
   cheque_due_date?: string;
+  notes?: string;
 }
 
-const LINE_LABEL: Record<LineType, string> = {
+const TYPE_LABEL: Record<LineType, string> = {
   cash: 'نقداً',
-  cheque: 'شيك جديد',
-  bank_transfer: 'تحويل بنكي',
+  cheque: 'شيك',
+  transfer: 'تحويل بنكي',
   visa: 'فيزا',
 };
 
-const LINE_ICON: Record<LineType, typeof Banknote> = {
+const TYPE_ICON: Record<LineType, typeof Banknote> = {
   cash: Banknote,
   cheque: FileText,
-  bank_transfer: Receipt,
+  transfer: Receipt,
   visa: CreditCard,
 };
 
 const today = () => format(new Date(), 'yyyy-MM-dd');
 
-function makeLine(type: LineType): PaymentLine {
+function makeLine(type: LineType = 'cash'): PaymentLine {
   const base: PaymentLine = {
     id: crypto.randomUUID(),
     type,
@@ -191,23 +189,17 @@ export function AddOtherVoucherDialog({ open, onOpenChange, kind, onSaved }: Pro
   const { user } = useAuth();
   const config = KIND_CONFIG[kind];
   const Icon = config.icon;
-  // قبض / صرف move cash → multi-line editor. إشعار دائن / مدين are
-  // paper-only adjustments → single amount input, no payment lines.
   const supportsCashFlow = kind === 'payment' || kind === 'disbursement';
 
   const [recipientName, setRecipientName] = useState('');
   const [category, setCategory] = useState<string>('other');
   const [customCategory, setCustomCategory] = useState('');
-  // Paper-voucher single amount (used when supportsCashFlow is false).
   const [paperAmount, setPaperAmount] = useState('');
   const [issueDate, setIssueDate] = useState(today());
-  // Multi-line payments (used when supportsCashFlow is true).
   const [lines, setLines] = useState<PaymentLine[]>([makeLine('cash')]);
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
 
-  // Reset everything when the dialog closes so the next opening starts
-  // fresh.
   useEffect(() => {
     if (!open) {
       setRecipientName('');
@@ -246,13 +238,17 @@ export function AddOtherVoucherDialog({ open, onOpenChange, kind, onSaved }: Pro
     (!supportsCashFlow || validLineCount > 0) &&
     !saving;
 
-  // Update a field on one line — keeps the other lines untouched and
-  // the array order stable.
   const updateLine = (id: string, patch: Partial<PaymentLine>) =>
     setLines((prev) => prev.map((l) => (l.id === id ? { ...l, ...patch } : l)));
 
-  const addLine = (type: LineType) =>
-    setLines((prev) => [...prev, makeLine(type)]);
+  const addLine = () => setLines((prev) => [...prev, makeLine('cash')]);
+
+  const duplicateLine = (id: string) =>
+    setLines((prev) => {
+      const src = prev.find((l) => l.id === id);
+      if (!src) return prev;
+      return [...prev, { ...src, id: crypto.randomUUID() }];
+    });
 
   const removeLine = (id: string) =>
     setLines((prev) => (prev.length > 1 ? prev.filter((l) => l.id !== id) : prev));
@@ -272,11 +268,6 @@ export function AddOtherVoucherDialog({ open, onOpenChange, kind, onSaved }: Pro
       const trimmedRecipient = recipientName.trim();
       const trimmedNotes = notes.trim();
 
-      // Build the breakdown block + decide payment_method.
-      //  • 1 line   → payment_method = that line's type, single row.
-      //  • N lines  → payment_method = 'multiple', total amount, the
-      //                line breakdown gets prepended to the notes.
-      //  • paper    → no payment_method (إشعار دائن/مدين).
       let paymentMethod: string | null = null;
       let chequeNumber: string | null = null;
       let breakdownText = '';
@@ -292,7 +283,7 @@ export function AddOtherVoucherDialog({ open, onOpenChange, kind, onSaved }: Pro
           paymentMethod = 'multiple';
           breakdownText = nonZero
             .map((l) => {
-              const label = LINE_LABEL[l.type];
+              const label = TYPE_LABEL[l.type];
               const amt = `₪${Number(l.amount).toLocaleString('en-US')}`;
               if (l.type === 'cheque' && l.cheque_number) {
                 return `${label} ${l.cheque_number}: ${amt}`;
@@ -349,7 +340,10 @@ export function AddOtherVoucherDialog({ open, onOpenChange, kind, onSaved }: Pro
 
   return (
     <Dialog open={open} onOpenChange={(o) => !saving && onOpenChange(o)}>
-      <DialogContent dir="rtl" className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent
+        dir="rtl"
+        className="max-w-5xl w-[95vw] max-h-[92vh] sm:max-h-[90vh] overflow-y-auto p-4 sm:p-6"
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Icon className={cn('h-5 w-5', config.iconColor)} />
@@ -380,8 +374,6 @@ export function AddOtherVoucherDialog({ open, onOpenChange, kind, onSaved }: Pro
             />
           </div>
 
-          {/* Category — full-width so the dropdown + custom textarea
-              read cleanly on long category labels. */}
           <div className="space-y-1.5">
             <Label className="text-xs">التصنيف</Label>
             <Select value={category} onValueChange={setCategory}>
@@ -412,9 +404,6 @@ export function AddOtherVoucherDialog({ open, onOpenChange, kind, onSaved }: Pro
             <ArabicDatePicker value={issueDate} onChange={setIssueDate} />
           </div>
 
-          {/* Paper-voucher single-amount input (إشعار دائن / إشعار مدين).
-              These flows don't move cash so a single amount field is
-              all the user needs. */}
           {!supportsCashFlow && (
             <div className="space-y-1.5">
               <Label htmlFor="other-paper-amount" className="text-xs">
@@ -435,35 +424,192 @@ export function AddOtherVoucherDialog({ open, onOpenChange, kind, onSaved }: Pro
             </div>
           )}
 
-          {/* Multi-line payment editor (قبض / صرف). Matches the
-              AddSettlementDialog layout: quick-add buttons row,
-              one card per line, total + warning at the bottom. */}
+          {/* Multi-line payment editor — same layout pattern as
+              DebtPaymentModal: single "إضافة دفعة" button on the
+              right, per-line card with grid-cols-3 primary row, a
+              cheque sub-row when type === 'cheque', and a notes
+              textarea per line. */}
           {supportsCashFlow && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <span className="text-sm font-semibold">الدفعات</span>
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <QuickAddButton type="cash" onClick={() => addLine('cash')} />
-                  <QuickAddButton type="cheque" onClick={() => addLine('cheque')} />
-                  <QuickAddButton type="bank_transfer" onClick={() => addLine('bank_transfer')} />
-                  <QuickAddButton type="visa" onClick={() => addLine('visa')} />
-                </div>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-base font-semibold">الدفعات</Label>
+                <Button variant="outline" size="sm" onClick={addLine}>
+                  <Plus className="h-4 w-4 ml-2" />
+                  إضافة دفعة
+                </Button>
               </div>
 
-              <div className="space-y-2">
-                {lines.map((line, idx) => (
-                  <PaymentLineCard
-                    key={line.id}
-                    index={idx}
-                    line={line}
-                    onChange={(patch) => updateLine(line.id, patch)}
-                    onRemove={lines.length > 1 ? () => removeLine(line.id) : undefined}
-                  />
-                ))}
-              </div>
+              {lines.map((line, index) => {
+                const TypeIcon = TYPE_ICON[line.type];
+                return (
+                  <Card key={line.id} className="p-3">
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-muted-foreground flex items-center gap-1.5">
+                          <TypeIcon className="h-3.5 w-3.5" />
+                          دفعة {index + 1}
+                        </span>
+                        <div className="flex items-center gap-0.5">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-primary hover:bg-primary/10"
+                            onClick={() => duplicateLine(line.id)}
+                            title="تكرار الدفعة"
+                            aria-label="تكرار الدفعة"
+                          >
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                          {lines.length > 1 && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-destructive"
+                              onClick={() => removeLine(line.id)}
+                              title="حذف الدفعة"
+                              aria-label="حذف الدفعة"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Primary row: amount / type / date — same order
+                          DebtPaymentModal uses so the cashier types
+                          the most-changing fields together. */}
+                      <div className="grid grid-cols-3 gap-3">
+                        <div>
+                          <Label className="text-xs">المبلغ</Label>
+                          <Input
+                            type="number"
+                            inputMode="decimal"
+                            min="0"
+                            step="0.01"
+                            value={line.amount || ''}
+                            onChange={(e) =>
+                              updateLine(line.id, { amount: Number(e.target.value) || 0 })
+                            }
+                            placeholder="0"
+                            className="ltr-nums"
+                            dir="ltr"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">طريقة الدفع</Label>
+                          <Select
+                            value={line.type}
+                            onValueChange={(v) => updateLine(line.id, { type: v as LineType })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="cash">
+                                <span className="flex items-center gap-2">
+                                  <Banknote className="h-4 w-4" />
+                                  نقداً
+                                </span>
+                              </SelectItem>
+                              <SelectItem value="cheque">
+                                <span className="flex items-center gap-2">
+                                  <FileText className="h-4 w-4" />
+                                  شيك
+                                </span>
+                              </SelectItem>
+                              <SelectItem value="transfer">
+                                <span className="flex items-center gap-2">
+                                  <Receipt className="h-4 w-4" />
+                                  تحويل بنكي
+                                </span>
+                              </SelectItem>
+                              <SelectItem value="visa">
+                                <span className="flex items-center gap-2">
+                                  <CreditCard className="h-4 w-4" />
+                                  فيزا
+                                </span>
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label className="text-xs">
+                            {line.type === 'cheque' ? 'تاريخ الإصدار' : 'تاريخ الدفع'}
+                          </Label>
+                          <ArabicDatePicker
+                            value={line.date}
+                            onChange={(v) => updateLine(line.id, { date: v ?? '' })}
+                          />
+                        </div>
+                      </div>
+
+                      {line.type === 'cheque' && (
+                        <div className="grid grid-cols-4 gap-3">
+                          <div className="space-y-1.5 min-w-0">
+                            <Label className="text-xs font-semibold">البنك</Label>
+                            <BankPicker
+                              value={line.bank_code ?? null}
+                              onChange={(code) => updateLine(line.id, { bank_code: code })}
+                            />
+                          </div>
+                          <div className="space-y-1.5 min-w-0">
+                            <Label className="text-xs font-semibold">الفرع</Label>
+                            <Input
+                              type="text"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              maxLength={4}
+                              className="h-10 text-sm ltr-nums font-mono"
+                              placeholder="مثال: 305"
+                              value={line.branch_code || ''}
+                              onChange={(e) => {
+                                const v = e.target.value.replace(/\D/g, '');
+                                updateLine(line.id, { branch_code: v || null });
+                              }}
+                            />
+                          </div>
+                          <div className="space-y-1.5 min-w-0">
+                            <Label className="text-xs font-semibold">رقم الشيك</Label>
+                            <Input
+                              value={line.cheque_number || ''}
+                              onChange={(e) =>
+                                updateLine(line.id, { cheque_number: e.target.value })
+                              }
+                              placeholder="رقم الشيك"
+                              className="h-10 font-mono"
+                            />
+                          </div>
+                          <div className="space-y-1.5 min-w-0">
+                            <Label className="text-xs">تاريخ الاستحقاق</Label>
+                            <ArabicDatePicker
+                              value={line.cheque_due_date ?? ''}
+                              onChange={(v) =>
+                                updateLine(line.id, { cheque_due_date: v ?? '' })
+                              }
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      <div>
+                        <Label className="text-xs">ملاحظات (اختياري)</Label>
+                        <Textarea
+                          value={line.notes || ''}
+                          onChange={(e) =>
+                            updateLine(line.id, { notes: e.target.value })
+                          }
+                          placeholder="أضف ملاحظة لهذه الدفعة..."
+                          rows={1}
+                          className="resize-none text-sm min-h-9"
+                        />
+                      </div>
+                    </div>
+                  </Card>
+                );
+              })}
 
               <Card className="p-3 flex items-center justify-between">
-                <span className="text-sm font-semibold">إجمالي السند:</span>
+                <span className="text-sm font-semibold">مجموع الدفعات:</span>
                 <span className="text-base font-bold tabular-nums">
                   ₪{linesTotal.toLocaleString('en-US')}
                 </span>
@@ -479,7 +625,7 @@ export function AddOtherVoucherDialog({ open, onOpenChange, kind, onSaved }: Pro
 
           <div className="space-y-1.5">
             <Label htmlFor="other-notes" className="text-xs">
-              ملاحظات (اختياري)
+              ملاحظات عامة (اختياري)
             </Label>
             <Textarea
               id="other-notes"
@@ -497,156 +643,19 @@ export function AddOtherVoucherDialog({ open, onOpenChange, kind, onSaved }: Pro
             onClick={() => onOpenChange(false)}
             disabled={saving}
           >
-            إلغاء
+            رجوع
           </Button>
           <Button onClick={handleSave} disabled={!canSave}>
             {saving ? (
               <Loader2 className="h-4 w-4 animate-spin" />
+            ) : supportsCashFlow ? (
+              'تسديد المبلغ'
             ) : (
-              `حفظ${supportsCashFlow ? ` (${validLineCount})` : ''}`
+              'حفظ'
             )}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
-}
-
-// ──────────────────────────────────────────────────────────────
-// QuickAddButton — same visual the settlement dialog uses
-// ──────────────────────────────────────────────────────────────
-
-function QuickAddButton({
-  type,
-  onClick,
-}: {
-  type: LineType;
-  onClick: () => void;
-}) {
-  const Icon = LINE_ICON[type];
-  return (
-    <Button
-      type="button"
-      variant="outline"
-      size="sm"
-      onClick={onClick}
-      className="gap-1.5 h-8"
-    >
-      <Plus className="h-3 w-3" />
-      <Icon className="h-3.5 w-3.5" />
-      <span className="text-xs">{LINE_LABEL[type]}</span>
-    </Button>
-  );
-}
-
-// ──────────────────────────────────────────────────────────────
-// PaymentLineCard — one row per line
-// ──────────────────────────────────────────────────────────────
-
-function PaymentLineCard({
-  index,
-  line,
-  onChange,
-  onRemove,
-}: {
-  index: number;
-  line: PaymentLine;
-  onChange: (patch: Partial<PaymentLine>) => void;
-  onRemove?: () => void;
-}) {
-  const Icon = LINE_ICON[line.type];
-  return (
-    <Card className="p-3 space-y-2.5 bg-muted/30">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5">
-          <Icon className="h-3.5 w-3.5 text-muted-foreground" />
-          <span className="text-xs font-semibold">
-            دفعة {index + 1} · {LINE_LABEL[line.type]}
-          </span>
-        </div>
-        {onRemove && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-7 w-7 p-0 text-rose-600 hover:bg-rose-50"
-            onClick={onRemove}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
-        )}
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-        <div className="space-y-1">
-          <Label className="text-[10px] text-muted-foreground">طريقة الدفع</Label>
-          <Select
-            value={line.type}
-            onValueChange={(v) => onChange({ type: v as LineType })}
-          >
-            <SelectTrigger className="h-9">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="cash">نقداً</SelectItem>
-              <SelectItem value="cheque">شيك جديد</SelectItem>
-              <SelectItem value="bank_transfer">تحويل بنكي</SelectItem>
-              <SelectItem value="visa">فيزا</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1">
-          <Label className="text-[10px] text-muted-foreground">التاريخ</Label>
-          <ArabicDatePicker
-            value={line.date}
-            onChange={(v) => onChange({ date: v ?? '' })}
-          />
-        </div>
-        <div className="space-y-1">
-          <Label className="text-[10px] text-muted-foreground">المبلغ (₪)</Label>
-          <Input
-            type="number"
-            inputMode="decimal"
-            min="0"
-            step="0.01"
-            value={line.amount || ''}
-            onChange={(e) => onChange({ amount: Number(e.target.value) || 0 })}
-            placeholder="0"
-            className="ltr-nums h-9"
-            dir="ltr"
-          />
-        </div>
-      </div>
-
-      {line.type === 'cheque' && (
-        <div className="space-y-2 pt-1 border-t">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            <div className="space-y-1">
-              <Label className="text-[10px] text-muted-foreground">رقم الشيك</Label>
-              <Input
-                value={line.cheque_number ?? ''}
-                onChange={(e) => onChange({ cheque_number: e.target.value })}
-                placeholder="مثلاً: 1234567"
-                className="ltr-nums h-9"
-                dir="ltr"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-[10px] text-muted-foreground">تاريخ الاستحقاق</Label>
-              <ArabicDatePicker
-                value={line.cheque_due_date ?? ''}
-                onChange={(v) => onChange({ cheque_due_date: v ?? '' })}
-              />
-            </div>
-          </div>
-          <BankBranchPicker
-            bankCode={line.bank_code ?? null}
-            branchCode={line.branch_code ?? null}
-            onBankChange={(code) => onChange({ bank_code: code })}
-            onBranchChange={(code) => onChange({ branch_code: code })}
-          />
-        </div>
-      )}
-    </Card>
   );
 }
