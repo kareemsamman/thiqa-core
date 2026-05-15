@@ -388,7 +388,28 @@ export function usePolicyWizardState({ open, instanceId, defaultBrokerId, defaul
     }
     let cancelled = false;
     (async () => {
-      const { data } = await supabase
+      // Per user (2026-05-15): a credit_note auto-applies to a NEW
+      // transaction ONLY when the customer's existing debt is already
+      // 0 (or the office actually owes them surplus). Otherwise the
+      // credit is conceptually netting off the existing debt already
+      // — applying it again to the new transaction would double-count.
+      //
+      // Compute the customer's CURRENT outstanding (kashf-style,
+      // before the new transaction is added):
+      //   outstanding = office_claim
+      //               + transfer_customer_pays
+      //               - gross_paid
+      //               - credit_notes_issued (= wallet refunds)
+      //               - transfer_office_pays
+      //
+      // If outstanding > 0: customer owes more than credits cover →
+      //   auto-apply 0 (banner says "credit reserved for existing debt").
+      // If outstanding <= 0: customer has surplus = -outstanding,
+      //   capped at the wallet's live balance. That's the amount
+      //   that can be applied to the new transaction.
+
+      // 1. Wallet balance — live refunds vs consumed/transfer-fee.
+      const { data: walletRows } = await supabase
         .from('customer_wallet_transactions')
         .select('amount, transaction_type')
         .eq('client_id', selectedClient.id)
@@ -396,7 +417,7 @@ export function usePolicyWizardState({ open, instanceId, defaultBrokerId, defaul
       if (cancelled) return;
       let weOwe = 0;
       let custOwes = 0;
-      for (const t of (data ?? []) as Array<{ amount: number | string | null; transaction_type: string }>) {
+      for (const t of (walletRows ?? []) as Array<{ amount: number | string | null; transaction_type: string }>) {
         const amt = Number(t.amount || 0);
         if (
           t.transaction_type === 'refund' ||
@@ -411,7 +432,87 @@ export function usePolicyWizardState({ open, instanceId, defaultBrokerId, defaul
           custOwes += amt;
         }
       }
-      setOutstandingCredit(Math.max(0, weOwe - custOwes));
+      const walletBalance = Math.max(0, weOwe - custOwes);
+
+      // Fast path: no wallet credit at all → nothing to auto-apply.
+      if (walletBalance <= 0.01) {
+        setOutstandingCredit(0);
+        return;
+      }
+
+      // 2. Customer's existing debt the kashf way.
+      const { data: policies } = await supabase
+        .from('policies')
+        .select('id, insurance_price, office_commission, policy_type_parent, broker_id, transferred_from_policy_id')
+        .eq('client_id', selectedClient.id)
+        .is('deleted_at', null);
+      if (cancelled) return;
+      const officeClaim = (policies ?? [])
+        .filter((p: any) => !p.transferred_from_policy_id && !p.broker_id)
+        .reduce((sum: number, p: any) => {
+          const commission = Number(p.office_commission || 0);
+          if (p.policy_type_parent === 'ELZAMI') return sum + commission;
+          return sum + Number(p.insurance_price || 0) + commission;
+        }, 0);
+
+      const allPolicyIds = (policies ?? []).map((p: any) => p.id);
+      let grossPaid = 0;
+      if (allPolicyIds.length > 0) {
+        const { data: paymentsData } = await supabase
+          .from('policy_payments')
+          .select('amount, refused, payment_type, policy_id')
+          .in('policy_id', allPolicyIds);
+        if (cancelled) return;
+        const policyById = new Map<string, any>(
+          (policies ?? []).map((p: any) => [p.id, p]),
+        );
+        for (const pay of (paymentsData ?? []) as any[]) {
+          if (pay.refused) continue;
+          if (pay.payment_type === 'visa_external') {
+            const pol = policyById.get(pay.policy_id);
+            if (pol?.policy_type_parent === 'ELZAMI' && Number(pol.office_commission || 0) <= 0) continue;
+          }
+          grossPaid += Number(pay.amount || 0);
+        }
+      }
+
+      let transferCustomerPays = 0;
+      let transferOfficePays = 0;
+      if (allPolicyIds.length > 0) {
+        const idsList = allPolicyIds.join(',');
+        const { data: transfers } = await supabase
+          .from('policy_transfers')
+          .select('adjustment_amount, adjustment_type, policy_id, new_policy_id')
+          .or(`policy_id.in.(${idsList}),new_policy_id.in.(${idsList})`);
+        if (cancelled) return;
+        for (const t of (transfers ?? []) as any[]) {
+          const amt = Number(t.adjustment_amount || 0);
+          if (amt <= 0.01) continue;
+          if (t.adjustment_type === 'customer_pays') transferCustomerPays += amt;
+          else if (t.adjustment_type === 'office_pays') transferOfficePays += amt;
+        }
+      }
+
+      // Existing debt without the wallet's credit applied again. The
+      // wallet's `weOwe` (credit_notes + refund types) already
+      // represents the credits issued; subtracting it gives the
+      // kashf's outstanding figure.
+      const existingDebt = officeClaim
+        + transferCustomerPays
+        - grossPaid
+        - weOwe
+        - transferOfficePays;
+
+      if (existingDebt > 0.01) {
+        // Customer still owes — credit is reserved for that debt.
+        setOutstandingCredit(0);
+      } else {
+        // Surplus available = how much the office owes the customer
+        // beyond their debt. Cap at wallet's live balance so we never
+        // apply more than the wallet actually holds.
+        const surplus = Math.min(walletBalance, -existingDebt);
+        setOutstandingCredit(Math.max(0, surplus));
+      }
     })();
     return () => { cancelled = true; };
   }, [selectedClient?.id]);
