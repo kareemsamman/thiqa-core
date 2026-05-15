@@ -417,25 +417,51 @@ export function BrokersSection({ focusSettlementId, branchId }: BrokersSectionPr
     const receivedSum = receipts
       .filter((r) => !r.refused)
       .reduce((s, r) => s + Number(r.total_amount || 0), 0);
-    // إشعار مدين للوسطاء — paper credits the office issued against
-    // broker debts. Per the user's model these write down what
-    // brokers still owe us, so they subtract from remainingFromBrokersSum
-    // just like a سند قبض would. Cancelled rows drop out.
+    // Split broker notes by receipt_type — they point in opposite
+    // directions and CANNOT be combined into one number:
+    //   • debit_note  → broker owes us  (paper credit toward what's
+    //                   already on the broker → REDUCES remaining)
+    //   • credit_note → we owe broker   (paper liability TO the broker
+    //                   → does NOT affect "remaining ON brokers")
+    // The previous code summed both into brokerCreditNotesSum and
+    // subtracted from remainingFromBrokersSum, which incorrectly
+    // pulled in credit_notes (the wrong direction) and dropped المتبقي
+    // by the full credit-note amount.
+    const brokerDebitNotesSum = data.brokerCreditNotes
+      .filter((r) => !r.cancelled_at && r.receipt_type === 'debit_note')
+      .reduce((s, r) => s + Math.abs(Number(r.amount || 0)), 0);
     const brokerCreditNotesSum = data.brokerCreditNotes
-      .filter((r) => !r.cancelled_at)
+      .filter((r) => !r.cancelled_at && r.receipt_type === 'credit_note')
       .reduce((s, r) => s + Number(r.amount || 0), 0);
     // المتبقي على الوسطاء — gross broker debt from to_broker policies
     // (broker sold our policy, owes us insurance_price), less سند قبض
     // already collected, less إشعار مدين paper credits. Capped at 0
     // so an over-collection / over-credit reads as settled, not as
-    // the broker owing us a negative amount.
+    // the broker owing us a negative amount. credit_notes belong to
+    // the OTHER ledger direction (what we owe the broker) and are
+    // tracked separately so they don't double-count here.
     const grossDueFromBrokers = overlayed.reduce((s, r) => {
       if (r.main.broker_direction !== 'to_broker') return s;
       return s + Number(r.insurance_price || 0);
     }, 0);
     const remainingFromBrokersSum = Math.max(
       0,
-      grossDueFromBrokers - receivedSum - brokerCreditNotesSum,
+      grossDueFromBrokers - receivedSum - brokerDebitNotesSum,
+    );
+    // What WE owe the brokers — separate ledger. Sums broker_buy_price
+    // across from_broker policies (we bought from broker, owe them),
+    // PLUS credit_notes (paper liability we acknowledged), MINUS
+    // disbursements (سند صرف we already paid out).
+    const grossDueToBrokers = overlayed.reduce((s, r) => {
+      if (r.main.broker_direction !== 'from_broker') return s;
+      return s + Number(r.broker_buy_price || 0);
+    }, 0);
+    const disbursedToBrokersSum = disbursements
+      .filter((r) => !r.refused)
+      .reduce((s, r) => s + Number(r.total_amount || 0), 0);
+    const remainingToBrokersSum = Math.max(
+      0,
+      grossDueToBrokers + brokerCreditNotesSum - disbursedToBrokersSum,
     );
     return {
       sellSum,
@@ -443,10 +469,14 @@ export function BrokersSection({ focusSettlementId, branchId }: BrokersSectionPr
       receivedSum,
       remainingFromBrokersSum,
       grossDueFromBrokers,
+      brokerDebitNotesSum,
       brokerCreditNotesSum,
+      grossDueToBrokers,
+      disbursedToBrokersSum,
+      remainingToBrokersSum,
       activeCount: overlayed.length,
     };
-  }, [issuancesActive, receipts, editLocal, data.brokerCreditNotes]);
+  }, [issuancesActive, receipts, disbursements, editLocal, data.brokerCreditNotes]);
 
   const fmt = (n: number) => `₪${n.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
 
@@ -500,12 +530,14 @@ export function BrokersSection({ focusSettlementId, branchId }: BrokersSectionPr
   return (
     <div className="space-y-2.5">
       {/* Summary card grid — same visual as the companies + customers
-          sections. Four pills for now (sell / remaining / received /
-          profit); each card carries an icon bubble in a tinted colour
-          + label + tabular value + hint subtitle, with a tooltip for
-          the breakdown math. */}
+          sections. Six pills covering both ledger directions:
+            • What brokers owe US (sell / remaining-from / received-from)
+            • What WE owe brokers (remaining-to / paid-to)
+            • Bottom-line profit
+          The two directions are separate ledgers — debit_notes belong
+          to "brokers owe us", credit_notes to "we owe brokers". */}
       <TooltipProvider delayDuration={150}>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
           <BrokerPillCard
             icon={FileText}
             tone="slate"
@@ -532,12 +564,17 @@ export function BrokersSection({ focusSettlementId, branchId }: BrokersSectionPr
               <BreakdownLines
                 title="المتبقي على الوسطاء (الصافي)"
                 lines={[
-                  { label: 'إجمالي مستحق', value: fmt(totals.grossDueFromBrokers) },
+                  { label: 'إجمالي مستحق من الوسطاء', value: fmt(totals.grossDueFromBrokers) },
                   { label: 'مقبوض من الوسطاء', value: `− ${fmt(totals.receivedSum)}` },
-                  ...(totals.brokerCreditNotesSum > 0
-                    ? [{ label: 'إشعار مدين', value: `− ${fmt(totals.brokerCreditNotesSum)}` }]
+                  ...(totals.brokerDebitNotesSum > 0
+                    ? [{ label: 'إشعار مدين (الوسيط مدين لنا)', value: `− ${fmt(totals.brokerDebitNotesSum)}` }]
                     : []),
                   { label: 'المتبقي', value: fmt(totals.remainingFromBrokersSum), strong: true },
+                  {
+                    label: 'ملاحظة',
+                    value: 'إشعار دائن (ما نحن مدينين به للوسيط) محسوب على pill منفصل',
+                    muted: true,
+                  },
                 ]}
               />
             }
@@ -557,6 +594,45 @@ export function BrokersSection({ focusSettlementId, branchId }: BrokersSectionPr
                     value: `${receipts.filter((r) => !r.refused).length}`,
                   },
                   { label: 'الإجمالي', value: fmt(totals.receivedSum), strong: true },
+                ]}
+              />
+            }
+          />
+          <BrokerPillCard
+            icon={ArrowUpRight}
+            tone="amber"
+            label="المستحق للوسطاء"
+            value={fmt(totals.remainingToBrokersSum)}
+            hint="ما نحن مدينين به للوسيط"
+            tooltip={
+              <BreakdownLines
+                title="المستحق للوسطاء (نحن المدينين)"
+                lines={[
+                  { label: 'إجمالي مستحق (من from_broker)', value: fmt(totals.grossDueToBrokers) },
+                  ...(totals.brokerCreditNotesSum > 0
+                    ? [{ label: 'إشعار دائن (الوسيط دائن عندنا)', value: `+ ${fmt(totals.brokerCreditNotesSum)}` }]
+                    : []),
+                  { label: 'مدفوع للوسطاء', value: `− ${fmt(totals.disbursedToBrokersSum)}` },
+                  { label: 'المتبقي علينا', value: fmt(totals.remainingToBrokersSum), strong: true },
+                ]}
+              />
+            }
+          />
+          <BrokerPillCard
+            icon={ArrowDownLeft}
+            tone="amber"
+            label="مدفوع للوسطاء"
+            value={fmt(totals.disbursedToBrokersSum)}
+            hint={`${disbursements.filter((r) => !r.refused).length} سند صرف`}
+            tooltip={
+              <BreakdownLines
+                title="مدفوع للوسطاء"
+                lines={[
+                  {
+                    label: 'سندات الصرف غير المرفوضة',
+                    value: `${disbursements.filter((r) => !r.refused).length}`,
+                  },
+                  { label: 'الإجمالي', value: fmt(totals.disbursedToBrokersSum), strong: true },
                 ]}
               />
             }
