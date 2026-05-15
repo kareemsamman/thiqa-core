@@ -223,9 +223,22 @@ export function AddSettlementDialog({
   // can surface the two-sided summary (broker owes us / we owe
   // broker) the user wants to see before recording a سند قبض or
   // سند صرف. Same math BrokersSection uses for its pills.
+  //
+  // The full breakdown is kept on the state so the card can render
+  // every component (مستحق إجمالي، سندات، إشعارات) the same way the
+  // companies card does. Without this, mismatches between the
+  // BrokersSection pill and this dialog's value are impossible to
+  // diagnose from the UI — the user sees a number and can't tell
+  // why it's different from what they expected.
   const [brokerBalance, setBrokerBalance] = useState<{
     owesUs: number;
     weOwe: number;
+    toBrokerGross: number;
+    fromBrokerGross: number;
+    collectedFromBroker: number;
+    paidToBroker: number;
+    brokerDebitNotesSum: number;
+    brokerCreditNotesSum: number;
   } | null>(null);
 
   // Company balance — the agent always owes companies (one-directional
@@ -315,6 +328,12 @@ export function AddSettlementDialog({
       setBrokerBalance({
         owesUs: Math.max(0, toBrokerGross - collectedFromBroker - brokerDebitNotesSum),
         weOwe: Math.max(0, fromBrokerGross + brokerCreditNotesSum - paidToBroker),
+        toBrokerGross,
+        fromBrokerGross,
+        collectedFromBroker,
+        paidToBroker,
+        brokerDebitNotesSum,
+        brokerCreditNotesSum,
       });
     })();
     return () => {
@@ -754,38 +773,64 @@ export function AddSettlementDialog({
               <div className="grid grid-cols-2 gap-2">
                 <div
                   className={cn(
-                    'rounded-lg border p-3 transition-colors',
+                    'rounded-lg border p-3 transition-colors space-y-2.5',
                     kind === 'receipt'
                       ? 'border-emerald-500/40 bg-emerald-50 dark:bg-emerald-950/20 ring-1 ring-emerald-500/30'
                       : 'border-border bg-muted/20',
                   )}
                 >
-                  <div className="text-[10px] text-emerald-700 dark:text-emerald-400 font-semibold mb-1">
-                    بدنا منه (الوسيط)
+                  <div>
+                    <div className="text-[10px] text-emerald-700 dark:text-emerald-400 font-semibold mb-1">
+                      بدنا منه (الوسيط)
+                    </div>
+                    <div className="text-lg font-bold text-emerald-800 dark:text-emerald-300 tabular-nums">
+                      ₪{Math.round(brokerBalance.owesUs).toLocaleString('en-US')}
+                    </div>
                   </div>
-                  <div className="text-lg font-bold text-emerald-800 dark:text-emerald-300 tabular-nums">
-                    ₪{Math.round(brokerBalance.owesUs).toLocaleString('en-US')}
-                  </div>
-                  <div className="text-[10px] text-muted-foreground mt-0.5">
-                    من معاملات الوسيط بعد خصم السنود المقبوضة
+                  <div className="space-y-1 text-[11px] tabular-nums border-t border-border/40 pt-2">
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>إجمالي معاملات to_broker</span>
+                      <span>₪{Math.round(brokerBalance.toBrokerGross).toLocaleString('en-US')}</span>
+                    </div>
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>− سندات القبض</span>
+                      <span>₪{Math.round(brokerBalance.collectedFromBroker).toLocaleString('en-US')}</span>
+                    </div>
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>− إشعارات مدين</span>
+                      <span>₪{Math.round(brokerBalance.brokerDebitNotesSum).toLocaleString('en-US')}</span>
+                    </div>
                   </div>
                 </div>
                 <div
                   className={cn(
-                    'rounded-lg border p-3 transition-colors',
+                    'rounded-lg border p-3 transition-colors space-y-2.5',
                     kind === 'disbursement'
                       ? 'border-amber-500/40 bg-amber-50 dark:bg-amber-950/20 ring-1 ring-amber-500/30'
                       : 'border-border bg-muted/20',
                   )}
                 >
-                  <div className="text-[10px] text-amber-700 dark:text-amber-400 font-semibold mb-1">
-                    بده مني (للمكتب)
+                  <div>
+                    <div className="text-[10px] text-amber-700 dark:text-amber-400 font-semibold mb-1">
+                      بده مني (للمكتب)
+                    </div>
+                    <div className="text-lg font-bold text-amber-800 dark:text-amber-300 tabular-nums">
+                      ₪{Math.round(brokerBalance.weOwe).toLocaleString('en-US')}
+                    </div>
                   </div>
-                  <div className="text-lg font-bold text-amber-800 dark:text-amber-300 tabular-nums">
-                    ₪{Math.round(brokerBalance.weOwe).toLocaleString('en-US')}
-                  </div>
-                  <div className="text-[10px] text-muted-foreground mt-0.5">
-                    سعر شراء معاملات الوسيط بعد خصم سندات الصرف
+                  <div className="space-y-1 text-[11px] tabular-nums border-t border-border/40 pt-2">
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>إجمالي معاملات from_broker</span>
+                      <span>₪{Math.round(brokerBalance.fromBrokerGross).toLocaleString('en-US')}</span>
+                    </div>
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>+ إشعارات دائن</span>
+                      <span>₪{Math.round(brokerBalance.brokerCreditNotesSum).toLocaleString('en-US')}</span>
+                    </div>
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>− سندات الصرف</span>
+                      <span>₪{Math.round(brokerBalance.paidToBroker).toLocaleString('en-US')}</span>
+                    </div>
                   </div>
                 </div>
               </div>
