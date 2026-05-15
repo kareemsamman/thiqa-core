@@ -297,21 +297,24 @@ export function AddSettlementDialog({
         .filter((s: any) => s.direction === 'we_owe' && !s.refused)
         .reduce((s: number, x: any) => s + Number(x.total_amount || 0), 0);
 
-      // إشعار مدين للوسيط — paper credit. Per the user's
-      // accounting model these write down what the broker still
-      // owes us; the relationship is one-sided (only reduces the
-      // owesUs side, never adds to weOwe).
-      // Both legacy 'credit_note' rows (from AddBrokerCreditNoteDialog,
-      // titled إشعار مدين but stored as credit_note for historical
-      // reasons) AND new 'debit_note' rows (from AddBrokerDebitNoteDialog)
-      // count here — they're semantically the same thing for brokers.
+      // Broker notes — two opposite directions, must NOT be lumped:
+      //   • debit_note  → الوسيط مدين لنا (paper credit toward what
+      //     he already owes) → REDUCES owesUs
+      //   • credit_note → نحن مدينين للوسيط (paper liability TO him)
+      //     → INCREASES weOwe
+      // Mirrors BrokersSection.tsx totals so the pills and this dialog
+      // reconcile. Lumping them caused سند صرف to read 0 even when an
+      // إشعار دائن was outstanding.
+      const brokerDebitNotesSum = (brokerCreditNotes ?? [])
+        .filter((r: any) => !r.cancelled_at && r.receipt_type === 'debit_note')
+        .reduce((s: number, r: any) => s + Math.abs(Number(r.amount || 0)), 0);
       const brokerCreditNotesSum = (brokerCreditNotes ?? [])
-        .filter((r: any) => !r.cancelled_at)
+        .filter((r: any) => !r.cancelled_at && r.receipt_type === 'credit_note')
         .reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
 
       setBrokerBalance({
-        owesUs: Math.max(0, toBrokerGross - collectedFromBroker - brokerCreditNotesSum),
-        weOwe: Math.max(0, fromBrokerGross - paidToBroker),
+        owesUs: Math.max(0, toBrokerGross - collectedFromBroker - brokerDebitNotesSum),
+        weOwe: Math.max(0, fromBrokerGross + brokerCreditNotesSum - paidToBroker),
       });
     })();
     return () => {
