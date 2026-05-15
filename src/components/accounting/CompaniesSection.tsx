@@ -202,6 +202,21 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
     });
   };
 
+  // Credit-note / debit-note rows are already receipts rows (no
+  // mirror lookup needed) — pass them straight to the same action
+  // dialog so the user gets print / SMS / WhatsApp on click. The
+  // dialog dispatches by receipt_type internally.
+  const openCreditNoteVoucher = (row: ClientReceiptRow) => {
+    setVoucherActionRow({
+      id: row.id,
+      receipt_type: row.receipt_type,
+      voucher_number: row.voucher_number,
+      payment_id: row.payment_id ?? null,
+      client_name: row.client_name,
+      client_phone: row.client_phone,
+    });
+  };
+
   const data = useAccountingData(filters, branchId);
 
   // Auto-switch sub-tab when a deep-link points at a specific settlement
@@ -712,13 +727,13 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
           the search in the middle of the row. */}
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="relative w-full sm:w-80 md:w-96">
-          <Search className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+          <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           <Input
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="بحث بالاسم، رقم المعاملة، الهوية…"
-            className="h-8 w-full pr-8 text-sm"
+            className="w-full pr-9"
           />
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -871,6 +886,7 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
             loading={data.loading}
             kind="debit"
             visible={settlementCols.visible}
+            onVoucherClick={openCreditNoteVoucher}
           />
         </TabsContent>
         <TabsContent value="credit_notes" className="mt-3 m-0">
@@ -879,6 +895,7 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
             loading={data.loading}
             kind="credit"
             visible={settlementCols.visible}
+            onVoucherClick={openCreditNoteVoucher}
           />
         </TabsContent>
       </Tabs>
@@ -1065,7 +1082,7 @@ function CompanyPicker({
           role="combobox"
           aria-expanded={open}
           className={cn(
-            'h-8 gap-2 min-w-[180px] justify-between',
+            'gap-2 min-w-[180px] justify-between',
             value && 'border-primary/40',
           )}
         >
@@ -1143,13 +1160,12 @@ function CompanyPicker({
 // edit/delete actions) lives on the /receipts page where it
 // belongs — the accounting page is read-only on the receipt rows.
 
-function formatSettlementVoucher(row: SettlementRow): string {
-  if (row.cheque_number) return `شيك ${row.cheque_number}`;
-  if (row.settlement_date) {
-    const parts = row.settlement_date.split('-');
-    if (parts.length === 3) return `تسوية ${parts[2]}/${parts[1]}/${parts[0]}`;
-  }
-  return `تسوية ${row.id.slice(0, 6)}`;
+function formatSettlementVoucher(_row: SettlementRow): string {
+  // Per user: keep the voucher cell to just "تسوية" — the التاريخ
+  // column already carries the date, and cheque number was redundant
+  // alongside it. The clickable cell still opens the print/send
+  // dialog where the underlying receipt's voucher_number renders.
+  return 'تسوية';
 }
 
 function formatSettlementDate(iso: string): string {
@@ -1304,11 +1320,16 @@ function CompanyCreditNotesTable({
   loading,
   kind,
   visible,
+  onVoucherClick,
 }: {
   rows: ClientReceiptRow[];
   loading: boolean;
   kind: 'credit' | 'debit';
   visible: string[];
+  /** Click handler for the voucher cell — opens the shared print /
+   *  SMS / WhatsApp picker (ReceiptActionsDialog). Required per user:
+   *  every voucher row must be clickable, not just settlement rows. */
+  onVoucherClick: (row: ClientReceiptRow) => void;
 }) {
   if (loading) {
     return (
@@ -1374,7 +1395,13 @@ function CompanyCreditNotesTable({
               <TableRow key={r.id} className="text-sm">
                 {show('voucher_number') && (
                   <TableCell className="font-mono ltr-nums whitespace-nowrap">
-                    {r.voucher_number ?? '—'}
+                    <button
+                      type="button"
+                      onClick={() => onVoucherClick(r)}
+                      className="text-blue-600 underline-offset-2 hover:underline focus:outline-none focus-visible:underline"
+                    >
+                      {r.voucher_number ?? '—'}
+                    </button>
                   </TableCell>
                 )}
                 {show('date') && (
