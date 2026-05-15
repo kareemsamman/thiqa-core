@@ -77,14 +77,17 @@ const POLICY_TYPE_LABELS: Record<string, string> = {
 };
 
 // Per receipt_type, the user-facing voucher label rendered in the
-// ledger's "البيان" column. credit_note can also be an inbound note
-// to the agent ("إشعار مدين") when amount is negative, so we resolve
-// that case at row time and not here.
+// ledger's "البيان" column. Two ways to land an "إشعار مدين":
+//   • A first-class debit_note row (M-prefix voucher) written by
+//     AddDebitNoteDialog or its broker/company siblings.
+//   • Legacy: a credit_note row with NEGATIVE amount — kept for
+//     back-compat and resolved at row time below.
 const RECEIPT_TYPE_LABELS: Record<string, string> = {
   payment: 'سند قبض',
   cancellation: 'سند إلغاء',
   accident_fee: 'سند رسوم حادث',
   credit_note: 'إشعار دائن',
+  debit_note: 'إشعار مدين',
   disbursement: 'سند صرف',
 };
 
@@ -159,11 +162,13 @@ const formatVoucherNumber = (
     ? 'R'
     : receiptType === 'credit_note'
       ? 'C'
-      : receiptType === 'disbursement'
-        ? 'D'
-        : receiptType === 'accident_fee'
-          ? 'A'
-          : 'R';
+      : receiptType === 'debit_note'
+        ? 'M'
+        : receiptType === 'disbursement'
+          ? 'D'
+          : receiptType === 'accident_fee'
+            ? 'A'
+            : 'R';
   return `${prefix}${receiptNumber}/${year}`;
 };
 
@@ -176,22 +181,24 @@ const getPolicyTypeLabel = (parent: string, child: string | null): string => {
 
 // Direction rules for the ledger.
 //
-// Per the user's mental model, the "مدين / للعميل" column collects
-// every event where money / credit goes TO the customer (whether
-// cash actually moved or just a promise was recorded). The
-// "دائن / من العميل" column collects every event where money came
-// FROM the customer.
+// The "مدين" column collects every event that AFFECTS the customer's
+// balance from the office's side (billings, refunds, debt-side
+// adjustments). The "دائن" column collects payments that come FROM
+// the customer. Sign on balanceDelta determines whether the running
+// total grows or shrinks — the column placement is purely visual.
 //
-// • payment, accident_fee  → دائن (customer paid us / charge owed)
-// • cancellation           → مدين (refused cheque → we owe him back)
+// • payment, accident_fee  → دائن (customer paid us)
+// • cancellation           → مدين (refused cheque → debt grows back)
 // • disbursement           → مدين (we paid cash to customer)
-// • credit_note            → مدين (we OWE / credited the customer —
-//   same intent as سند صرف, just not yet paid out)
+// • credit_note            → مدين (we OWE / credited the customer)
+// • debit_note             → مدين (customer owes us — billing event,
+//   same column placement as cancellation since both push balance UP)
 const isDebitForCustomer = (receiptType: string): boolean => {
   return (
     receiptType === 'cancellation' ||
     receiptType === 'disbursement' ||
-    receiptType === 'credit_note'
+    receiptType === 'credit_note' ||
+    receiptType === 'debit_note'
   );
 };
 
@@ -626,6 +633,9 @@ serve(async (req: Request) => {
       if (p.policy_type_parent === 'ELZAMI') return s + commission;
       return s + Number(p.insurance_price || 0) + commission;
     }, 0);
+    const yearDebitNotesBilled = (ledger as any[])
+      .filter((r) => r.receipt_type === 'debit_note')
+      .reduce((s, r) => s + Math.abs(Number(r.amount || 0)), 0);
     const totalYearAmount = totalYearBaseAmount
       // Add transfer adjustments that fall on the customer — the
       // تكلفة التحويل the agent set when moving a policy.
@@ -633,7 +643,12 @@ serve(async (req: Request) => {
         const amt = Number(t?.adjustment_amount || 0);
         if (amt <= 0.01) return s;
         return t.adjustment_type === 'customer_pays' ? s + amt : s;
-      }, 0);
+      }, 0)
+      // Add إشعار مدين billings — the office charged the customer
+      // for an off-policy item (late fee, admin charge, etc.). Each
+      // event's balanceDelta already pushes the running total up;
+      // adding to totalYearAmount keeps the totals box in sync.
+      + yearDebitNotesBilled;
 
     // إجمالي المدفوع — gross cash collected from the customer
     // (excluding refused rows and إلزامي pass-through). Since the
@@ -1432,6 +1447,7 @@ function buildStatementHtml(args: BuildArgs): string {
         case 'cancellation': return 'إلغاء سند قبض سابق';
         case 'disbursement': return 'استلمه العميل';
         case 'credit_note': return 'رصيد للعميل';
+        case 'debit_note': return 'مستحق على العميل';
         case 'accident_fee': return 'استحق على العميل';
         default: return 'دفعه العميل';
       }
@@ -1442,6 +1458,7 @@ function buildStatementHtml(args: BuildArgs): string {
         case 'cancellation': return 'event-cancel-receipt';
         case 'disbursement': return 'event-disbursement';
         case 'credit_note': return 'event-credit-note';
+        case 'debit_note': return 'event-debit-note';
         default: return 'event-payment';
       }
     })();
@@ -1468,6 +1485,7 @@ function buildStatementHtml(args: BuildArgs): string {
         case 'cancellation':  return +displayedAmount; // refused cheque puts debt back
         case 'disbursement':  return 0;                // external cash, no wallet effect
         case 'credit_note':   return -displayedAmount; // wallet credit reduces debt
+        case 'debit_note':    return +displayedAmount; // billed amount → debt grows
         default:              return isDebit ? +displayedAmount : -displayedAmount;
       }
     })();
@@ -1839,6 +1857,7 @@ function buildStatementHtml(args: BuildArgs): string {
     .ledger-table .event-credit-note td       { background: #fef2f2; }
     .ledger-table .event-disbursement td      { background: #fef2f2; }
     .ledger-table .event-cancel-receipt td    { background: #fef2f2; }
+    .ledger-table .event-debit-note td        { background: #ffe4e6; }
     .ledger-table .event-headline {
       font-size: 12.5px; font-weight: 700; color: #1a1a1a;
       line-height: 1.5;
