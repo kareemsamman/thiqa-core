@@ -83,8 +83,10 @@ import {
   type ClientLite,
   type BrokerLite,
   type CompanyLite,
+  type VoucherKind,
   type VoucherPickResult,
 } from "@/components/receipts/AddVoucherDialog";
+import { AddOtherVoucherDialog } from "@/components/receipts/AddOtherVoucherDialog";
 import { AddCreditNoteDialog } from "@/components/receipts/AddCreditNoteDialog";
 import { AddBrokerCreditNoteDialog } from "@/components/receipts/AddBrokerCreditNoteDialog";
 import { AddCompanyCreditNoteDialog } from "@/components/receipts/AddCompanyCreditNoteDialog";
@@ -788,6 +790,11 @@ export default function Receipts() {
   const [debitNoteClient, setDebitNoteClient] = useState<ClientLite | null>(null);
   const [brokerDebitNoteTarget, setBrokerDebitNoteTarget] = useState<BrokerLite | null>(null);
   const [companyDebitNoteTarget, setCompanyDebitNoteTarget] = useState<CompanyLite | null>(null);
+  // "آخر" voucher dialog — one dialog handles all four kinds (قبض /
+  // صرف / إشعار دائن / إشعار مدين) for external parties. The state
+  // simply carries the chosen kind so the dialog renders the right
+  // header / hero / voucher-number allocator.
+  const [otherVoucherKind, setOtherVoucherKind] = useState<VoucherKind | null>(null);
 
   // After a voucher is created, hand the agent the print / SMS / WhatsApp
   // popup the rest of the app already uses. Two flavours:
@@ -2170,6 +2177,7 @@ export default function Receipts() {
     setCompanySettlement(null);
     setCompanyCreditNoteTarget(null);
     setCompanyDebitNoteTarget(null);
+    setOtherVoucherKind(null);
 
     if (result.counterparty === 'client' && result.client) {
       const c = result.client;
@@ -2233,6 +2241,14 @@ export default function Receipts() {
           setCompanySettlement({ company, kind });
         }
       }, 100);
+      return;
+    }
+
+    if (result.counterparty === 'other') {
+      // "آخر" — external party. No entity FK; the dedicated dialog
+      // captures recipient_name + category + amount inline and writes
+      // a receipts row without client/broker/company links.
+      setTimeout(() => setOtherVoucherKind(result.kind), 100);
       return;
     }
 
@@ -2982,6 +2998,30 @@ export default function Receipts() {
         onOpenChange={setAddVoucherOpen}
         onPicked={handleVoucherPicked}
       />
+
+      {/* "آخر" external-party voucher — one dialog covers all four
+          kinds (قبض / صرف / إشعار دائن / إشعار مدين). Renders only
+          when otherVoucherKind is set by handleVoucherPicked. */}
+      {otherVoucherKind && (
+        <AddOtherVoucherDialog
+          open={!!otherVoucherKind}
+          onOpenChange={(o) => !o && setOtherVoucherKind(null)}
+          kind={otherVoucherKind}
+          onSaved={({ receiptId }) => {
+            const kind = otherVoucherKind;
+            setOtherVoucherKind(null);
+            setAddVoucherOpen(false);
+            fetchReceipts();
+            // Hand off to the print/send dialog so the agent can
+            // immediately print the slip or share it. No SMS/WhatsApp
+            // phone for an external party, so the dialog gracefully
+            // degrades to print-only.
+            if (kind === 'payment' || kind === 'disbursement' || kind === 'credit_note' || kind === 'debit_note') {
+              setVoucherSend({ kind, receiptId, clientPhone: null });
+            }
+          }}
+        />
+      )}
 
       {/* Customer + سند صرف — reuses the accounting page's existing
           settlement dialog, which already creates client_settlements

@@ -190,7 +190,7 @@ const COUNTERPARTY_OPTIONS: Array<{
     label: 'آخر',
     description: 'جهة خارجية أو مصروف',
     icon: UserPlus,
-    enabled: false,
+    enabled: true,
   },
 ];
 
@@ -252,12 +252,15 @@ export function AddVoucherDialog({ open, onOpenChange, onPicked }: Props) {
   //   • client  → need selectedClient
   //   • broker  → need selectedBroker
   //   • company → need selectedCompany
-  //   • other   → still disabled (next iterations)
+  //   • other   → no entity picker; the specialized dialog captures
+  //               recipient_name + category inline, so Continue is
+  //               enabled once kind is chosen.
   const canContinue =
     !!kind &&
     ((counterparty === 'client' && !!selectedClient) ||
       (counterparty === 'broker' && !!selectedBroker) ||
-      (counterparty === 'company' && !!selectedCompany));
+      (counterparty === 'company' && !!selectedCompany) ||
+      counterparty === 'other');
 
   const handleContinue = () => {
     if (!kind || !counterparty) return;
@@ -483,6 +486,25 @@ export function AddVoucherDialog({ open, onOpenChange, onPicked }: Props) {
                   تعويض). يُقلِّل المستحق للشركة وقد يحوّله إلى رصيد دائن لدى الشركة.
                 </p>
               )}
+            </section>
+          )}
+          {/* For "آخر" (external party) we skip the entity picker —
+              there's nothing to select from a list. Show a short hint
+              instead and let Continue open the inline form dialog. */}
+          {kind && counterparty === 'other' && (
+            <section className="space-y-2">
+              <h3 className="text-sm font-semibold text-muted-foreground">
+                ٣. تفاصيل الجهة الخارجية
+              </h3>
+              <div className="rounded-lg border bg-muted/30 p-3 text-xs leading-relaxed space-y-1.5">
+                <p className="text-foreground">
+                  اضغط <strong>متابعة</strong> لإدخال اسم الجهة، التصنيف، والمبلغ.
+                </p>
+                <p className="text-muted-foreground">
+                  مناسب للمصاريف العامة: كهرباء، ماء، رواتب، أتعاب محامي، صيانة كراج،
+                  مصاريف رسمية، أو أي جهة خارجية لا تنتمي لعميل / وسيط / شركة تأمين.
+                </p>
+              </div>
             </section>
           )}
         </div>
