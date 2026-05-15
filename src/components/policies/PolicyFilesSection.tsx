@@ -357,6 +357,57 @@ export function PolicyFilesSection({
 
     setScanning(fileType);
 
+    // Edge case: when ScanApp isn't installed Asprise injects its
+    // "complete one-time setup" wizard. If the user dismisses that
+    // wizard with the X button instead of installing, Asprise never
+    // fires the scan callback — the spinner would hang forever.
+    // Watch the DOM for the setup dialog appearing then disappearing
+    // without a callback; treat it as a cancellation.
+    let settled = false;
+    let setupShown = false;
+    const SETUP_DIALOG_ID = 'asprise-web-scan-setup-dialog';
+    const isSetupVisible = (): boolean => {
+      const el = document.getElementById(SETUP_DIALOG_ID);
+      return !!el && window.getComputedStyle(el).display !== 'none';
+    };
+    const dismissTimers: number[] = [];
+    const cleanup = () => {
+      settled = true;
+      observer.disconnect();
+      dismissTimers.forEach((t) => window.clearTimeout(t));
+    };
+    const observer = new MutationObserver(() => {
+      if (settled) return;
+      const visible = isSetupVisible();
+      if (visible && !setupShown) {
+        setupShown = true;
+        return;
+      }
+      if (!visible && setupShown) {
+        // Setup wizard was shown then closed. Give Asprise a brief
+        // grace window to fire its callback (in case the user
+        // actually clicked "Click here to enable it"); if it
+        // doesn't, surface the cancellation.
+        const t = window.setTimeout(() => {
+          if (settled) return;
+          cleanup();
+          setScanning(null);
+          toast({
+            title: "تم إلغاء الإعداد",
+            description: "نزّل ScanApp من asprise.com بعدين كبس مسح تاني.",
+            variant: "destructive",
+          });
+        }, 800);
+        dismissTimers.push(t);
+      }
+    });
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['style', 'class'],
+    });
+
     // Scan profile tuned for insurance documents:
     //   • Always show the scanner picker so the user explicitly
     //     chooses the device (a cached pick used to spin forever
@@ -385,6 +436,8 @@ export function PolicyFilesSection({
 
     window.scanner.scan(
       async (successful, mesg, response) => {
+        if (settled) return;
+        cleanup();
         if (!successful) {
           setScanning(null);
           // Don't show error for user cancellation
