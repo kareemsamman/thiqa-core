@@ -1338,84 +1338,53 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       setCancellationInfo(nextInfo);
       setCancellationVouchers(nextVouchers);
 
-      // اشعار دائن + سند صرف rows for this client — independent
-      // fetch since they live in receipts (not policy_payments).
-      // Failure either way just leaves the section without that
-      // family of rows; we don't fail the whole payment-log load
-      // over a single read.
+      // اشعار دائن + إشعار مدين + سند صرف rows for this client.
+      // All three live in `receipts` and share the same client_id +
+      // cancelled_at filter — bundle into ONE round-trip via `.in()`
+      // and fan out by receipt_type in JS. Was previously three
+      // sequential awaits. On failure we fall back to empty arrays
+      // for all three families since the bundled fetch is atomic;
+      // the per-type try/catch resilience the old code had was
+      // theoretical (these are simple SELECTs that don't partially
+      // fail per receipt_type).
       try {
-        const { data: creditRows } = await supabase
+        const { data: voucherRows } = await supabase
           .from('receipts')
-          .select('id, voucher_number, amount, receipt_date, created_at, notes')
-          .eq('receipt_type', 'credit_note')
+          .select('id, voucher_number, amount, receipt_date, created_at, notes, payment_method, receipt_type')
+          .in('receipt_type', ['credit_note', 'debit_note', 'disbursement'])
           .eq('client_id', client.id)
           .is('cancelled_at', null)
           .order('created_at', { ascending: false });
 
-        const nextCreditNotes = (creditRows ?? [])
-          .filter((r: any) => r.voucher_number)
-          .map((r: any) => ({
+        const nextCreditNotes: typeof creditNotes = [];
+        const nextDebitNotes: typeof debitNotes = [];
+        const nextDisbursements: typeof disbursements = [];
+        for (const r of (voucherRows ?? []) as any[]) {
+          if (!r.voucher_number) continue;
+          const base = {
             id: r.id as string,
             voucherNumber: r.voucher_number as string,
             amount: Number(r.amount || 0),
             date: (r.receipt_date as string) || (r.created_at as string),
             sortDate: (r.created_at as string) || (r.receipt_date as string),
             description: (r.notes as string | null) ?? null,
-          }));
+          };
+          if (r.receipt_type === 'credit_note') nextCreditNotes.push(base);
+          else if (r.receipt_type === 'debit_note') nextDebitNotes.push(base);
+          else if (r.receipt_type === 'disbursement') {
+            nextDisbursements.push({
+              ...base,
+              paymentMethod: (r.payment_method as string | null) ?? null,
+            });
+          }
+        }
         setCreditNotes(nextCreditNotes);
-      } catch (creditErr) {
-        console.warn('[ClientDetails] credit_note fetch failed:', creditErr);
-        setCreditNotes([]);
-      }
-
-      try {
-        const { data: debitRows } = await supabase
-          .from('receipts')
-          .select('id, voucher_number, amount, receipt_date, created_at, notes')
-          .eq('receipt_type', 'debit_note')
-          .eq('client_id', client.id)
-          .is('cancelled_at', null)
-          .order('created_at', { ascending: false });
-
-        const nextDebitNotes = (debitRows ?? [])
-          .filter((r: any) => r.voucher_number)
-          .map((r: any) => ({
-            id: r.id as string,
-            voucherNumber: r.voucher_number as string,
-            amount: Number(r.amount || 0),
-            date: (r.receipt_date as string) || (r.created_at as string),
-            sortDate: (r.created_at as string) || (r.receipt_date as string),
-            description: (r.notes as string | null) ?? null,
-          }));
         setDebitNotes(nextDebitNotes);
-      } catch (debitErr) {
-        console.warn('[ClientDetails] debit_note fetch failed:', debitErr);
-        setDebitNotes([]);
-      }
-
-      try {
-        const { data: disbRows } = await supabase
-          .from('receipts')
-          .select('id, voucher_number, amount, receipt_date, created_at, notes, payment_method')
-          .eq('receipt_type', 'disbursement')
-          .eq('client_id', client.id)
-          .is('cancelled_at', null)
-          .order('created_at', { ascending: false });
-
-        const nextDisbursements = (disbRows ?? [])
-          .filter((r: any) => r.voucher_number)
-          .map((r: any) => ({
-            id: r.id as string,
-            voucherNumber: r.voucher_number as string,
-            amount: Number(r.amount || 0),
-            date: (r.receipt_date as string) || (r.created_at as string),
-            sortDate: (r.created_at as string) || (r.receipt_date as string),
-            description: (r.notes as string | null) ?? null,
-            paymentMethod: (r.payment_method as string | null) ?? null,
-          }));
         setDisbursements(nextDisbursements);
-      } catch (disbErr) {
-        console.warn('[ClientDetails] disbursement fetch failed:', disbErr);
+      } catch (voucherErr) {
+        console.warn('[ClientDetails] receipts/notes fetch failed:', voucherErr);
+        setCreditNotes([]);
+        setDebitNotes([]);
         setDisbursements([]);
       }
     } catch (error) {
