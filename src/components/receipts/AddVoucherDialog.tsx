@@ -260,7 +260,7 @@ export function AddVoucherDialog({ open, onOpenChange, onPicked }: Props) {
             <h3 className="text-sm font-semibold text-muted-foreground">
               ١. نوع السند
             </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {VOUCHER_KIND_OPTIONS.map((opt) => {
                 const Icon = opt.icon;
                 const active = kind === opt.value;

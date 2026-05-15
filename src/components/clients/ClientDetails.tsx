@@ -442,6 +442,18 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
     sortDate: string;      // created_at, drives newest-first merge
     description: string | null;  // notes column (e.g. "مرتجع إلغاء معاملة 12/2026")
   }>>([]);
+  // اشعار مدين — same shape as credit notes but the customer OWES
+  // the office (manual_debit wallet entry + receipt_type='debit_note',
+  // M{nn}/YYYY voucher number). Lives in its own bucket so the
+  // payment-log row can render with the rose/debt-side styling.
+  const [debitNotes, setDebitNotes] = useState<Array<{
+    id: string;
+    voucherNumber: string; // M{nn}/YYYY
+    amount: number;
+    date: string;
+    sortDate: string;
+    description: string | null;
+  }>>([]);
   // سند صرف rows — same shape as credit notes but for actual cash
   // disbursed (refund-on-cancel/transfer or manual). The amount
   // here doesn't carry into wallet balance (the agency literally
@@ -1289,6 +1301,31 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       } catch (creditErr) {
         console.warn('[ClientDetails] credit_note fetch failed:', creditErr);
         setCreditNotes([]);
+      }
+
+      try {
+        const { data: debitRows } = await supabase
+          .from('receipts')
+          .select('id, voucher_number, amount, receipt_date, created_at, notes')
+          .eq('receipt_type', 'debit_note')
+          .eq('client_id', client.id)
+          .is('cancelled_at', null)
+          .order('created_at', { ascending: false });
+
+        const nextDebitNotes = (debitRows ?? [])
+          .filter((r: any) => r.voucher_number)
+          .map((r: any) => ({
+            id: r.id as string,
+            voucherNumber: r.voucher_number as string,
+            amount: Number(r.amount || 0),
+            date: (r.receipt_date as string) || (r.created_at as string),
+            sortDate: (r.created_at as string) || (r.receipt_date as string),
+            description: (r.notes as string | null) ?? null,
+          }));
+        setDebitNotes(nextDebitNotes);
+      } catch (debitErr) {
+        console.warn('[ClientDetails] debit_note fetch failed:', debitErr);
+        setDebitNotes([]);
       }
 
       try {
@@ -2423,6 +2460,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
     | { kind: 'payment'; group: GroupedPayment; sortDate: string }
     | { kind: 'voucher'; voucher: (typeof cancellationVouchers)[number]; sortDate: string }
     | { kind: 'credit_note'; note: (typeof creditNotes)[number]; sortDate: string }
+    | { kind: 'debit_note'; note: (typeof debitNotes)[number]; sortDate: string }
     | { kind: 'disbursement'; disb: (typeof disbursements)[number]; sortDate: string };
   const displayRows = useMemo((): DisplayRow[] => {
     const rows: DisplayRow[] = [];
@@ -2435,13 +2473,16 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
     for (const note of creditNotes) {
       rows.push({ kind: 'credit_note', note, sortDate: note.sortDate });
     }
+    for (const note of debitNotes) {
+      rows.push({ kind: 'debit_note', note, sortDate: note.sortDate });
+    }
     for (const disb of disbursements) {
       rows.push({ kind: 'disbursement', disb, sortDate: disb.sortDate });
     }
     return rows.sort((a, b) =>
       new Date(b.sortDate).getTime() - new Date(a.sortDate).getTime(),
     );
-  }, [groupedPayments, cancellationVouchers, creditNotes, disbursements]);
+  }, [groupedPayments, cancellationVouchers, creditNotes, debitNotes, disbursements]);
 
   // Filter options surfaced in the popover are derived from the rows
   // actually present for this client — typing a filter that has no
@@ -2459,6 +2500,9 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
     }
     if (displayRows.some((r) => r.kind === 'credit_note')) {
       opts.push({ value: 'credit_note', label: 'اشعار دائن' });
+    }
+    if (displayRows.some((r) => r.kind === 'debit_note')) {
+      opts.push({ value: 'debit_note', label: 'اشعار مدين' });
     }
     if (displayRows.some((r) => r.kind === 'disbursement')) {
       opts.push({ value: 'disbursement', label: 'سند صرف' });
@@ -2486,7 +2530,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       const date =
         row.kind === 'voucher'
           ? row.voucher.date
-          : row.kind === 'credit_note'
+          : row.kind === 'credit_note' || row.kind === 'debit_note'
             ? row.note.date
             : row.kind === 'disbursement'
               ? row.disb.date
@@ -2501,17 +2545,19 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
             ? 'cancellation'
             : row.kind === 'credit_note'
               ? 'credit_note'
-              : row.kind === 'disbursement'
-                ? 'disbursement'
-                : 'payment';
+              : row.kind === 'debit_note'
+                ? 'debit_note'
+                : row.kind === 'disbursement'
+                  ? 'disbursement'
+                  : 'payment';
         if (!types.includes(kind)) return false;
       }
 
       if (paymentMethods.length > 0) {
-        // Voucher / credit_note rows carry no payment method.
-        // Disbursement rows DO (cash / cheque / transfer / visa)
-        // since the agency picked one when it paid the customer.
-        if (row.kind === 'voucher' || row.kind === 'credit_note') return false;
+        // Voucher / credit_note / debit_note rows carry no payment
+        // method. Disbursement rows DO (cash / cheque / transfer /
+        // visa) since the agency picked one when it paid the customer.
+        if (row.kind === 'voucher' || row.kind === 'credit_note' || row.kind === 'debit_note') return false;
         if (row.kind === 'disbursement') {
           const m = row.disb.paymentMethod;
           return m ? paymentMethods.includes(m) : false;
@@ -3467,6 +3513,75 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                                 )}
                                 <span className="text-[10px] text-muted-foreground">
                                   رصيد للعميل — يُحسم تلقائياً من أي دفعة قادمة
+                                </span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <span className="text-muted-foreground">—</span>
+                            </TableCell>
+                            <TableCell onClick={(e) => e.stopPropagation()}>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                                    <MoreHorizontal className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem
+                                    disabled={generatingReceipt === `credit-${n.id}`}
+                                    onClick={() => handlePrintCreditNote(n.id, n.voucherNumber)}
+                                  >
+                                    {generatingReceipt === `credit-${n.id}` ? (
+                                      <Loader2 className="h-4 w-4 ml-2 animate-spin" />
+                                    ) : (
+                                      <Receipt className="h-4 w-4 ml-2" />
+                                    )}
+                                    طباعة الإشعار
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      }
+                      if (row.kind === 'debit_note') {
+                        const n = row.note;
+                        return (
+                          <TableRow
+                            key={`debit-${n.id}`}
+                            className="hover:bg-muted/40 bg-rose-50/40 dark:bg-rose-950/10"
+                          >
+                            <TableCell className="font-mono text-xs ltr-nums whitespace-nowrap">
+                              <span className="font-bold text-rose-700 dark:text-rose-300">
+                                {n.voucherNumber}
+                              </span>
+                            </TableCell>
+                            <TableCell className="font-semibold">
+                              <span className="text-rose-700 dark:text-rose-300">
+                                ₪{Math.round(n.amount).toLocaleString()}
+                              </span>
+                            </TableCell>
+                            <TableCell>{formatDate(n.date)}</TableCell>
+                            <TableCell>
+                              <Badge
+                                variant="outline"
+                                className="border-rose-500/40 text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/30"
+                              >
+                                اشعار مدين
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex flex-col items-start gap-0.5">
+                                {n.description && (
+                                  <span
+                                    className="text-[10px] text-muted-foreground max-w-[220px] truncate"
+                                    title={n.description}
+                                  >
+                                    {n.description}
+                                  </span>
+                                )}
+                                <span className="text-[10px] text-muted-foreground">
+                                  مستحق على العميل — يُضاف إلى دينه ويُخصم من أول دفعة
                                 </span>
                               </div>
                             </TableCell>

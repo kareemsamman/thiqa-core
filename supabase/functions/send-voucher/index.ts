@@ -53,6 +53,7 @@ const VOUCHER_LABELS: Record<string, { line: string; noun: string }> = {
   payment: { line: 'سند القبض', noun: 'سند القبض' },
   disbursement: { line: 'سند الصرف', noun: 'سند الصرف' },
   credit_note: { line: 'إشعار الدائن', noun: 'إشعار الدائن' },
+  debit_note: { line: 'إشعار المدين', noun: 'إشعار المدين' },
   cancellation: { line: 'سند الإلغاء', noun: 'سند الإلغاء' },
 };
 

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
@@ -12,15 +12,34 @@ import {
 } from '@/components/ui/table';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import {
+  Command,
+  CommandEmpty,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
 import {
   ArrowDownLeft,
   ArrowUpRight,
+  CalendarRange,
+  Check,
+  ChevronsUpDown,
   FileText,
   LayoutGrid,
+  Loader2,
   RotateCcw,
   Search,
   TrendingUp,
+  User as UserIcon,
   Wallet,
+  X,
   type LucideIcon,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
@@ -32,6 +51,17 @@ import {
   useAccountingData,
   type ClientReceiptRow,
 } from './useAccountingData';
+import { supabase } from '@/integrations/supabase/client';
+import { useAgentContext } from '@/hooks/useAgentContext';
+import { cn } from '@/lib/utils';
+import { CustomerStatementModal } from '@/components/clients/CustomerStatementModal';
+
+interface ClientLite {
+  id: string;
+  full_name: string;
+  phone_number: string | null;
+  id_number: string | null;
+}
 
 interface ClientsSectionProps {
   /** Page-level branch filter (global admins only). null = no extra
@@ -78,6 +108,49 @@ const formatDate = (iso: string | null): string => {
 const formatMoney = (n: number): string =>
   `₪${Math.round(Math.abs(n)).toLocaleString('en-US')}`;
 
+// Compute the current-month range as ISO date strings. Used as the
+// default for the customer accounting filter — the user's instruction:
+// "الفلترة دايما لازم تكون على سبط هادا الشهر فقط". A user can widen
+// or change the range from the Filter popover, but the view loads
+// scoped so opening the tab on the 18th doesn't dump the whole year
+// onto the screen.
+const currentMonthRange = (): { from: string; to: string } => {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = d.getMonth();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const lastDay = new Date(y, m + 1, 0).getDate();
+  return {
+    from: `${y}-${pad(m + 1)}-01`,
+    to: `${y}-${pad(m + 1)}-${pad(lastDay)}`,
+  };
+};
+
+// Pretty-print an ISO date range as the active-filter chip text. A
+// full-calendar-month range collapses to its Arabic month name; any
+// other range renders as "dd/MM/yyyy → dd/MM/yyyy" so the user can
+// tell at a glance whether they're on a single month or a custom
+// window.
+const AR_MONTH_NAMES = [
+  'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
+  'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر',
+];
+const describeRange = (from: string, to: string): string => {
+  if (!from && !to) return 'كل التواريخ';
+  if (!from || !to) return `${from || '...'} → ${to || '...'}`;
+  const f = from.split('-');
+  const t = to.split('-');
+  if (f.length === 3 && t.length === 3 && f[0] === t[0] && f[1] === t[1]) {
+    const y = Number(f[0]);
+    const mIdx = Number(f[1]) - 1;
+    const lastDay = new Date(y, mIdx + 1, 0).getDate();
+    if (Number(f[2]) === 1 && Number(t[2]) === lastDay) {
+      return `شهر ${AR_MONTH_NAMES[mIdx] ?? f[1]} ${y}`;
+    }
+  }
+  return `${formatDate(from)} → ${formatDate(to)}`;
+};
+
 // "Office billable" for a single policy — what enters the office's
 // books from the customer side. Matches the kashf rule: إلزامي base
 // price is paid directly to the insurance company (not on the
@@ -96,13 +169,24 @@ const policyOfficeAmount = (p: {
 export function ClientsSection({ branchId }: ClientsSectionProps = {}) {
   const [tab, setTab] = useState<SubTab>('all');
   const [search, setSearch] = useState('');
-  const [filters, setFilters] = useState<AccountingFiltersValue>({
-    dateFrom: '',
-    dateTo: '',
-    companies: [],
-    types: [],
-    paymentMethods: [],
+  // Default to the current calendar month so the customer view loads
+  // pre-scoped — the user explicitly asked the customer tab not to
+  // dump the entire history every time it opens.
+  const [filters, setFilters] = useState<AccountingFiltersValue>(() => {
+    const r = currentMonthRange();
+    return {
+      dateFrom: r.from,
+      dateTo: r.to,
+      companies: [],
+      types: [],
+      paymentMethods: [],
+    };
   });
+  // When set, every list filters down to this single customer and the
+  // "كشف حساب" action appears so the user can open the per-year
+  // statement modal without leaving the accounting page.
+  const [selectedClient, setSelectedClient] = useState<ClientLite | null>(null);
+  const [statementOpen, setStatementOpen] = useState(false);
 
   const data = useAccountingData(filters, branchId);
 
@@ -115,47 +199,81 @@ export function ClientsSection({ branchId }: ClientsSectionProps = {}) {
     [data.issuances, data.returns],
   );
 
+  // Single source of truth for the customer narrowing: when a client
+  // is picked from the dropdown, every list collapses to their rows.
+  // Free-text search still applies on top of that. Per the user:
+  // "في حال بحثت على اسم عميل او فلترت على اسم عميل التنتين لازم
+  // تشتغل نفس بعض" — both paths funnel through the same predicate.
+  const clientId = selectedClient?.id ?? null;
   const filteredPackages = useMemo(
-    () => allPackages.filter((r) => matchesIssuanceSearch(r, search)),
-    [allPackages, search],
+    () =>
+      allPackages.filter(
+        (r) =>
+          (!clientId || r.client_id === clientId) &&
+          matchesIssuanceSearch(r, search),
+      ),
+    [allPackages, search, clientId],
   );
 
   // ── Receipt sub-tabs (live rows after free-text search) ───────
   const payments = useMemo(
     () =>
       data.clientPayments.filter(
-        (r) => !r.cancelled_at && matchesClientReceiptSearch(r, search),
+        (r) =>
+          !r.cancelled_at &&
+          (!clientId || r.client_id === clientId) &&
+          matchesClientReceiptSearch(r, search),
       ),
-    [data.clientPayments, search],
+    [data.clientPayments, search, clientId],
   );
   const cancellations = useMemo(
-    () => data.clientCancellations.filter((r) => matchesClientReceiptSearch(r, search)),
-    [data.clientCancellations, search],
+    () =>
+      data.clientCancellations.filter(
+        (r) =>
+          (!clientId || r.client_id === clientId) &&
+          matchesClientReceiptSearch(r, search),
+      ),
+    [data.clientCancellations, search, clientId],
   );
   const disbursements = useMemo(
     () =>
       data.clientDisbursements.filter(
-        (r) => !r.cancelled_at && matchesClientReceiptSearch(r, search),
+        (r) =>
+          !r.cancelled_at &&
+          (!clientId || r.client_id === clientId) &&
+          matchesClientReceiptSearch(r, search),
       ),
-    [data.clientDisbursements, search],
+    [data.clientDisbursements, search, clientId],
   );
-  // Both flavors of إشعار share receipt_type='credit_note' in DB; the
-  // sign of `amount` flips the meaning. Positive = customer has a
-  // wallet credit owed by the office (إشعار دائن). Negative = customer
-  // owes the office a paper debit (إشعار مدين).
+  // Two كinds of إشعار live in the same bucket here:
+  //   • receipt_type='credit_note', amount > 0  → إشعار دائن
+  //     (legacy: amount < 0 → إشعار مدين, kept for back-compat)
+  //   • receipt_type='debit_note', amount > 0   → إشعار مدين
+  //     (the new first-class type from AddDebitNoteDialog)
+  // Filtering primarily on receipt_type so the new debit notes land
+  // in the right bucket regardless of sign convention.
   const creditNotes = useMemo(
     () =>
       data.clientCreditNotes.filter(
-        (r) => !r.cancelled_at && r.amount > 0 && matchesClientReceiptSearch(r, search),
+        (r) =>
+          !r.cancelled_at &&
+          r.receipt_type === 'credit_note' &&
+          r.amount > 0 &&
+          (!clientId || r.client_id === clientId) &&
+          matchesClientReceiptSearch(r, search),
       ),
-    [data.clientCreditNotes, search],
+    [data.clientCreditNotes, search, clientId],
   );
   const debitNotes = useMemo(
     () =>
       data.clientCreditNotes.filter(
-        (r) => !r.cancelled_at && r.amount < 0 && matchesClientReceiptSearch(r, search),
+        (r) =>
+          !r.cancelled_at &&
+          (r.receipt_type === 'debit_note' || (r.receipt_type === 'credit_note' && r.amount < 0)) &&
+          (!clientId || r.client_id === clientId) &&
+          matchesClientReceiptSearch(r, search),
       ),
-    [data.clientCreditNotes, search],
+    [data.clientCreditNotes, search, clientId],
   );
 
   // ── Summary pills ────────────────────────────────────────────

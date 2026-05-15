@@ -39,6 +39,11 @@ export interface ClientReceiptRow {
   policy_document_number: string | null;
   policy_number: string | null;
   cancelled_at: string | null;
+  /** Receipt type — used by ClientsSection to split the credit/debit
+   *  bucket without relying on amount sign. New إشعار مدين rows are
+   *  receipt_type='debit_note' with positive amount; legacy entries
+   *  are receipt_type='credit_note' with negative amount. */
+  receipt_type: string;
 }
 
 interface UseAccountingDataReturn {
@@ -110,6 +115,7 @@ interface RawPolicy {
   cancelled: boolean | null;
   is_under_24: boolean | null;
   manual_override: boolean | null;
+  client_id: string | null;
   company_id: string | null;
   broker_id: string | null;
   broker_direction: 'from_broker' | 'to_broker' | null;
@@ -253,7 +259,7 @@ export function useAccountingData(
            insurance_price, payed_for_company, profit, office_commission, broker_buy_price,
            policy_type_parent, policy_type_child, cancelled, is_under_24,
            manual_override,
-           company_id, broker_id, broker_direction,
+           client_id, company_id, broker_id, broker_direction,
            clients(full_name, id_number, phone_number),
            cars(id, car_number, car_type, car_value, year),
            insurance_companies(id, name, name_ar, broker_id)`,
@@ -346,10 +352,16 @@ export function useAccountingData(
       // since SubPolicy doesn't carry the joined client.
       const clientByPolicy = new Map<
         string,
-        { name: string | null; id_number: string | null; phone: string | null }
+        {
+          id: string | null;
+          name: string | null;
+          id_number: string | null;
+          phone: string | null;
+        }
       >();
       policyRows.forEach((p) => {
         clientByPolicy.set(p.id, {
+          id: p.client_id ?? null,
           name: p.clients?.full_name ?? null,
           id_number: p.clients?.id_number ?? null,
           phone: p.clients?.phone_number ?? null,
@@ -414,6 +426,7 @@ export function useAccountingData(
           return {
             id: main.group_id ?? main.id,
             document_number: documentNumber,
+            client_id: clientInfo?.id ?? null,
             client_name: clientInfo?.name ?? null,
             client_id_number: clientInfo?.id_number ?? null,
             client_phone: clientInfo?.phone ?? null,
@@ -524,7 +537,7 @@ export function useAccountingData(
       if (agentId) crQuery = crQuery.eq('agent_id', agentId);
       if (branchId) crQuery = crQuery.eq('branch_id', branchId);
       const { data: crData } = await crQuery;
-      const mapClientReceipt = (r: RawClientReceipt & { broker_id?: string | null }): ClientReceiptRow => ({
+      const mapClientReceipt = (r: RawClientReceipt & { broker_id?: string | null; receipt_type?: string }): ClientReceiptRow => ({
         id: r.id,
         receipt_date: r.receipt_date,
         amount: Number(r.amount ?? 0),
@@ -539,6 +552,7 @@ export function useAccountingData(
         policy_document_number: r.policies?.document_number ?? null,
         policy_number: r.policies?.policy_number ?? null,
         cancelled_at: r.cancelled_at,
+        receipt_type: (r.receipt_type as string) ?? '',
       });
       const crRows = (crData ?? []) as unknown as (RawClientReceipt & {
         receipt_type: string;

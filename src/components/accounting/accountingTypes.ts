@@ -62,6 +62,9 @@ export interface IssuanceRow {
   id: string;
   /** Number that maps to the معاملة (e.g. "30/2026"). Read-only. */
   document_number: string | null;
+  /** Client UUID — used by surfaces (e.g. customer accounting) that
+   *  filter the package list to a specific customer. */
+  client_id: string | null;
   /** Client name — shared within a group. */
   client_name: string | null;
   client_id_number: string | null;
