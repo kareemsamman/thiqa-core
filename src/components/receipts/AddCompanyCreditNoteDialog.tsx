@@ -83,6 +83,17 @@ export function AddCompanyCreditNoteDialog({
 
   const displayName = company.name_ar || company.name;
 
+  // Live cap — إشعار دائن reduces المستحق same way سند صرف does, so
+  // recording more than what's actually owed would create a fake
+  // credit balance with the company. Per the user "ممنوع اقدر احط
+  // سعر اكتر من المطلوب باشعار دائن او بسند صرف". Outstanding can
+  // be missing (loading) or zero — both block save.
+  const enteredAmount = Number(amount);
+  const cap = balance?.outstanding ?? null;
+  const capZero = cap !== null && cap <= 0.005;
+  const capExceeded =
+    cap !== null && Number.isFinite(enteredAmount) && enteredAmount > cap + 0.005;
+
   const handleSave = async () => {
     if (!agentId) {
       toast.error('لم يتم تحميل بيانات الوكيل بعد');
@@ -91,6 +102,16 @@ export function AddCompanyCreditNoteDialog({
     const amt = Number(amount);
     if (!Number.isFinite(amt) || amt <= 0) {
       toast.error('أدخل مبلغاً صحيحاً أكبر من صفر');
+      return;
+    }
+    // Runtime cap guard — UI also blocks via disabled button, but the
+    // balance could be stale if another tab just settled something.
+    if (cap !== null && amt > cap + 0.005) {
+      toast.error(
+        capZero
+          ? 'لا يوجد مستحق للشركة — لا يمكن تسجيل إشعار دائن'
+          : `المبلغ يتجاوز المستحق للشركة (₪${Math.round(cap).toLocaleString('en-US')})`,
+      );
       return;
     }
     if (!description.trim()) {
@@ -217,9 +238,22 @@ export function AddCompanyCreditNoteDialog({
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 placeholder="0"
-                className="ltr-nums"
+                className={cn(
+                  'ltr-nums',
+                  capExceeded && 'border-destructive focus-visible:ring-destructive',
+                )}
                 dir="ltr"
               />
+              {capExceeded && !capZero && (
+                <p className="text-[11px] text-destructive font-medium">
+                  ⚠ يتجاوز المستحق للشركة — أقصى ₪{Math.round(cap!).toLocaleString('en-US')}
+                </p>
+              )}
+              {capZero && enteredAmount > 0 && (
+                <p className="text-[11px] text-destructive font-medium">
+                  ⚠ لا يوجد مستحق للشركة — لا يمكن تسجيل إشعار دائن
+                </p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">التاريخ</Label>
@@ -260,7 +294,17 @@ export function AddCompanyCreditNoteDialog({
           >
             {cancelLabel}
           </Button>
-          <Button onClick={handleSave} disabled={saving}>
+          <Button
+            onClick={handleSave}
+            disabled={saving || capExceeded || (capZero && enteredAmount > 0)}
+            title={
+              capZero
+                ? 'لا يوجد مستحق للشركة — لا يمكن تسجيل إشعار دائن'
+                : capExceeded
+                  ? `المبلغ يتجاوز المستحق للشركة (₪${Math.round(cap!).toLocaleString('en-US')})`
+                  : undefined
+            }
+          >
             {saving ? <Loader2 className="h-4 w-4 animate-spin ms-2" /> : null}
             حفظ الإشعار
           </Button>

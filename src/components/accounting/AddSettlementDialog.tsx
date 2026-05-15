@@ -376,6 +376,21 @@ export function AddSettlementDialog({
   const brokerCapZero =
     mode === 'broker' && brokerCap !== null && brokerCap <= 0.005 && total > 0;
 
+  // Company cap — same rule as broker but one-directional. سند صرف
+  // and any future on-the-account credit recorded here can't exceed
+  // المستحق للشركة; per the user "ممنوع اقدر احط سعر اكتر من المطلوب".
+  // Only applies to disbursement (the side that reduces المستحق);
+  // سند قبض من شركة is the opposite direction (rare — the company
+  // refunding the agent) and has no upper limit driven by this tile.
+  const companyCap =
+    mode === 'company' && kind === 'disbursement' && companyBalance
+      ? companyBalance.outstanding
+      : null;
+  const companyCapExceeded =
+    mode === 'company' && companyCap !== null && total > companyCap + 0.005;
+  const companyCapZero =
+    mode === 'company' && companyCap !== null && companyCap <= 0.005 && total > 0;
+
   // Per-line validation surfaced up-front so the Save button stays
   // disabled until every started line is complete. Lines that look
   // like an untouched placeholder (no amount, no cheque number, no
@@ -542,6 +557,24 @@ export function AddSettlementDialog({
           : mode === 'broker'
             ? 'الرجاء اختيار وسيط'
             : 'العميل غير محدد',
+      );
+      return;
+    }
+    // Runtime guard for the company cap — the disabled button + total
+    // bar already prevent this in the UI, but a stale companyBalance
+    // (e.g. another tab just recorded a سند صرف) could let a click
+    // through. Re-check at click time so the database can't end up
+    // with a سند صرف that exceeds the المستحق.
+    if (
+      mode === 'company' &&
+      kind === 'disbursement' &&
+      companyBalance &&
+      total > companyBalance.outstanding + 0.005
+    ) {
+      toast.error(
+        companyBalance.outstanding <= 0.005
+          ? 'لا يوجد مستحق للشركة — لا يمكن تسجيل سند صرف'
+          : `المجموع يتجاوز المستحق للشركة (₪${Math.round(companyBalance.outstanding).toLocaleString('en-US')})`,
       );
       return;
     }
@@ -923,7 +956,7 @@ export function AddSettlementDialog({
             <div
               className={cn(
                 'flex items-center justify-between rounded-lg px-4 py-2.5',
-                targetMismatch || brokerCapExceeded || brokerCapZero
+                targetMismatch || brokerCapExceeded || brokerCapZero || companyCapExceeded || companyCapZero
                   ? 'bg-destructive/10 border border-destructive/30'
                   : 'bg-muted',
               )}
@@ -933,7 +966,7 @@ export function AddSettlementDialog({
                 <span
                   className={cn(
                     'text-lg font-bold tabular-nums',
-                    (targetMismatch || brokerCapExceeded || brokerCapZero) && 'text-destructive',
+                    (targetMismatch || brokerCapExceeded || brokerCapZero || companyCapExceeded || companyCapZero) && 'text-destructive',
                   )}
                 >
                   ₪{total.toLocaleString('en-US')}
@@ -959,6 +992,16 @@ export function AddSettlementDialog({
                       : 'ما إله شي عند المكتب — لا يمكن تسجيل سند صرف'}
                   </span>
                 )}
+                {companyCapExceeded && !companyCapZero && (
+                  <span className="text-[11px] text-destructive font-medium">
+                    يتجاوز المستحق للشركة — أقصى ₪{Math.round(companyCap!).toLocaleString('en-US')}
+                  </span>
+                )}
+                {companyCapZero && (
+                  <span className="text-[11px] text-destructive font-medium">
+                    لا يوجد مستحق للشركة — لا يمكن تسجيل سند صرف
+                  </span>
+                )}
               </div>
             </div>
 
@@ -966,7 +1009,7 @@ export function AddSettlementDialog({
                 blocking save without having to hover the button. Hidden
                 when the only issue is target mismatch (already shown
                 above) so the warnings don't stack. */}
-            {linesIncomplete && !targetMismatch && !brokerCapExceeded && !brokerCapZero && (
+            {linesIncomplete && !targetMismatch && !brokerCapExceeded && !brokerCapZero && !companyCapExceeded && !companyCapZero && (
               <div className="text-[11px] text-destructive font-medium px-1">
                 ⚠ {firstLineError}
               </div>
@@ -984,23 +1027,29 @@ export function AddSettlementDialog({
                 targetMismatch ||
                 linesIncomplete ||
                 brokerCapExceeded ||
-                brokerCapZero
+                brokerCapZero ||
+                companyCapExceeded ||
+                companyCapZero
               }
               className="gap-2"
               title={
-                brokerCapZero
-                  ? kind === 'receipt'
-                    ? 'الوسيط ما عليه رصيد — لا يمكن تسجيل سند قبض'
-                    : 'ما إله رصيد عند المكتب — لا يمكن تسجيل سند صرف'
-                  : brokerCapExceeded
-                    ? kind === 'receipt'
-                      ? `المجموع يتجاوز ما على الوسيط (₪${Math.round(brokerCap!).toLocaleString('en-US')})`
-                      : `المجموع يتجاوز ما له عند المكتب (₪${Math.round(brokerCap!).toLocaleString('en-US')})`
-                    : targetMismatch
-                      ? targetExceeded
-                        ? `المجموع يتجاوز المبلغ المطلوب ₪${targetCap!.toLocaleString('en-US')}`
-                        : `المجموع أقل من المبلغ المطلوب ₪${targetCap!.toLocaleString('en-US')}`
-                      : firstLineError ?? undefined
+                companyCapZero
+                  ? 'لا يوجد مستحق للشركة — لا يمكن تسجيل سند صرف'
+                  : companyCapExceeded
+                    ? `المجموع يتجاوز المستحق للشركة (₪${Math.round(companyCap!).toLocaleString('en-US')})`
+                    : brokerCapZero
+                      ? kind === 'receipt'
+                        ? 'الوسيط ما عليه رصيد — لا يمكن تسجيل سند قبض'
+                        : 'ما إله رصيد عند المكتب — لا يمكن تسجيل سند صرف'
+                      : brokerCapExceeded
+                        ? kind === 'receipt'
+                          ? `المجموع يتجاوز ما على الوسيط (₪${Math.round(brokerCap!).toLocaleString('en-US')})`
+                          : `المجموع يتجاوز ما له عند المكتب (₪${Math.round(brokerCap!).toLocaleString('en-US')})`
+                        : targetMismatch
+                          ? targetExceeded
+                            ? `المجموع يتجاوز المبلغ المطلوب ₪${targetCap!.toLocaleString('en-US')}`
+                            : `المجموع أقل من المبلغ المطلوب ₪${targetCap!.toLocaleString('en-US')}`
+                          : firstLineError ?? undefined
               }
             >
               {saving && <Loader2 className="h-4 w-4 animate-spin" />}
