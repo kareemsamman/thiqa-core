@@ -408,15 +408,19 @@ export function PolicyFilesSection({
       attributeFilter: ['style', 'class'],
     });
 
-    // Scan profile tuned for insurance documents:
-    //   • Always show the scanner picker so the user explicitly
-    //     chooses the device (a cached pick used to spin forever
-    //     when the saved device was unplugged or renamed).
+    // Scan profile tuned for insurance documents at the smallest
+    // file size that still leaves text/stamps legible:
+    //   • Grayscale (TWPT_GRAY) instead of RGB — cuts raw image data
+    //     by ~3× and insurance paperwork has no meaningful colour.
+    //   • 200dpi instead of 300dpi — ~44% of the pixel count, still
+    //     above the industry-standard document threshold.
+    //   • jpeg_quality 75 — Asprise compresses embedded JPEGs in
+    //     the PDF; 75 keeps text crisp while shaving the file.
     //   • Multi-page: after each page Asprise asks "scan another?".
     //     ADF scanners auto-feed and skip the prompt.
-    //   • PDF output bundles every page into ONE combined file —
-    //     way nicer than N separate JPGs for a multi-page policy.
-    //   • 300dpi RGB is the standard for legible document scans.
+    //   • PDF output bundles every page into ONE combined file.
+    //   • Always show the scanner picker (caching the chosen device
+    //     used to spin forever when it was unplugged or renamed).
     const scanRequest = {
       use_asprise_dialog: false,
       show_scanner_ui: false,
@@ -424,13 +428,14 @@ export function PolicyFilesSection({
       scanner_name: 'select',
       prompt_scan_more: true,
       twain_cap_setting: {
-        ICAP_PIXELTYPE: 'TWPT_RGB',
-        ICAP_XRESOLUTION: '300',
-        ICAP_YRESOLUTION: '300',
+        ICAP_PIXELTYPE: 'TWPT_GRAY',
+        ICAP_XRESOLUTION: '200',
+        ICAP_YRESOLUTION: '200',
       },
       output_settings: [{
         type: 'return-base64',
         format: 'pdf',
+        jpeg_quality: 75,
       }],
     };
 
