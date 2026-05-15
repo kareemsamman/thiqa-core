@@ -46,6 +46,12 @@ interface PolicySuccessDialogProps {
    *  receiptable to print/send. */
   receiptPaymentIds: string[];
   onClose: () => void;
+  /** When true, the سند القبض row + its "متاح فقط..." hint never
+   *  render at all. Used by the accounting page's معاملة-click flow,
+   *  where the user wants the dialog scoped to the policy alone
+   *  ("اذا معاملة بس فمعاملة"). The default — false — keeps the
+   *  end-of-wizard behavior unchanged. */
+  hideReceiptSection?: boolean;
 }
 
 const ROW_LABELS: Record<RowKey, { title: string; desc: string; tooltip: string }> = {
@@ -71,6 +77,7 @@ export function PolicySuccessDialog({
   isPackage,
   receiptPaymentIds,
   onClose,
+  hideReceiptSection = false,
 }: PolicySuccessDialogProps) {
   // Only one action panel is ever open at a time — clicking the other
   // row collapses this one and opens that one with the same animation.
@@ -374,10 +381,12 @@ export function PolicySuccessDialog({
               </div>
               <div className="flex-1 min-w-0">
                 <DialogTitle className="text-lg font-bold text-white text-right">
-                  تم إنشاء المعاملة بنجاح
+                  {hideReceiptSection ? 'طباعة أو إرسال المعاملة' : 'تم إنشاء المعاملة بنجاح'}
                 </DialogTitle>
                 <p className="text-xs text-white/70 mt-0.5">
-                  يمكنك طباعة أو إرسال المعاملة وسند القبض للعميل
+                  {hideReceiptSection
+                    ? 'تفاصيل البوليصة الكاملة للعميل'
+                    : 'يمكنك طباعة أو إرسال المعاملة وسند القبض للعميل'}
                 </p>
               </div>
             </div>
@@ -416,26 +425,31 @@ export function PolicySuccessDialog({
             {/* Receipt row — always shown so the user knows the option
                 exists. When there's no non-mandatory payment (hasReceipt
                 is false) the row stays disabled and surfaces a hint
-                explaining the gate, instead of disappearing. */}
-            <RowBlock
-              row="receipt"
-              icon={<Receipt className="h-6 w-6 text-blue-600" />}
-              iconBg="bg-blue-500/10"
-              active={activeRow === "receipt"}
-              onToggle={() => toggleRow("receipt")}
-              channelStates={{
-                print: getCell("receipt", "print"),
-                sms: getCell("receipt", "sms"),
-                whatsapp: getCell("receipt", "whatsapp"),
-              }}
-              onPrint={handleReceiptPrint}
-              onSms={handleReceiptSms}
-              onWhatsapp={handleReceiptWhatsapp}
-              hasPhone={!!clientPhone}
-              smsLocked={smsLocked}
-              disabled={!hasReceipt}
-              disabledHint="متاح فقط عند وجود دفعة غير الإلزامي"
-            />
+                explaining the gate, instead of disappearing.
+                Skipped entirely when `hideReceiptSection` is set —
+                the accounting page's "open by معاملة" flow opens
+                only the policy section. */}
+            {!hideReceiptSection && (
+              <RowBlock
+                row="receipt"
+                icon={<Receipt className="h-6 w-6 text-blue-600" />}
+                iconBg="bg-blue-500/10"
+                active={activeRow === "receipt"}
+                onToggle={() => toggleRow("receipt")}
+                channelStates={{
+                  print: getCell("receipt", "print"),
+                  sms: getCell("receipt", "sms"),
+                  whatsapp: getCell("receipt", "whatsapp"),
+                }}
+                onPrint={handleReceiptPrint}
+                onSms={handleReceiptSms}
+                onWhatsapp={handleReceiptWhatsapp}
+                hasPhone={!!clientPhone}
+                smsLocked={smsLocked}
+                disabled={!hasReceipt}
+                disabledHint="متاح فقط عند وجود دفعة غير الإلزامي"
+              />
+            )}
           </TooltipProvider>
 
           {/* Close */}

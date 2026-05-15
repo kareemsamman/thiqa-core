@@ -43,6 +43,7 @@ import {
   Loader2,
   MessageSquare,
   Printer,
+  Receipt as ReceiptIcon,
   RotateCcw,
   Search,
   TrendingUp,
@@ -614,6 +615,7 @@ export function ClientsSection({ branchId }: ClientsSectionProps = {}) {
           isPackage={policyActionPkg.is_grouped}
           receiptPaymentIds={[]}
           onClose={() => setPolicyActionPkg(null)}
+          hideReceiptSection
         />
       ) : null}
     </div>
@@ -1203,12 +1205,11 @@ function ReceiptsTable({
 // ReceiptActionsDialog — print / SMS / WhatsApp picker
 // ──────────────────────────────────────────────────────────────
 //
-// Mirrors the PolicySuccessDialog UX the user gets at the end of
-// PolicyWizard, but scoped to a SINGLE voucher: a row of three
-// channel buttons (طباعة / SMS / واتساب) that each fire the right
-// edge function for the receipt's type.
+// Mirrors the PolicySuccessDialog visual design — gradient hero
+// header + a single expandable Row that reveals three channel
+// buttons (طباعة / SMS / واتساب). Scoped to ONE voucher; per-type
+// edge-function routing:
 //
-// Edge-function routing per receipt_type:
 //   • payment      → send-payment-receipt-sms  body={ payment_ids:[...] }
 //   • disbursement → send-disbursement-sms     body={ voucher_receipt_id }
 //   • credit_note  → send-credit-note-sms      body={ voucher_receipt_id }
@@ -1216,11 +1217,11 @@ function ReceiptsTable({
 //   • cancellation → no SMS sibling yet, only print
 //
 // Print uses `generate-voucher` for every type (it dispatches
-// internally) so the printable URL matches what /receipts shows.
+// internally) so the URL matches what /receipts shows.
 //
-// SMS-lock awareness comes from useSmsLock — when the agent's quota
-// is exhausted the SMS button shows the lock badge and clicking it
-// opens the upgrade dialog, matching PolicySuccessDialog.
+// SMS-lock awareness comes from useSmsLock — when quota's gone the
+// SMS button gets an amber dot and clicking it opens the upgrade
+// dialog, matching PolicySuccessDialog.
 
 type ActionChannelState = 'idle' | 'loading' | 'sent';
 
@@ -1240,6 +1241,14 @@ const RECEIPT_TITLE_BY_TYPE: Record<string, string> = {
   credit_note: 'إشعار دائن',
   debit_note: 'إشعار مدين',
   cancellation: 'سند إلغاء',
+};
+
+const RECEIPT_DESC_BY_TYPE: Record<string, string> = {
+  payment: 'إثبات استلام المبلغ من العميل',
+  disbursement: 'إثبات صرف المبلغ للعميل',
+  credit_note: 'تسجيل رصيد للعميل لدى المكتب',
+  debit_note: 'تسجيل مبلغ مستحق على العميل',
+  cancellation: 'إلغاء سند قبض سابق',
 };
 
 function ReceiptActionsDialog({
@@ -1392,121 +1401,191 @@ function ReceiptActionsDialog({
 
   const smsDisabled = !sendFunction || !row.client_phone || smsLoading;
   const whatsappDisabled = !sendFunction || !row.client_phone;
+  const anyLoading =
+    printState === 'loading' || smsState === 'loading' || whatsappState === 'loading';
+  const [expanded, setExpanded] = useState(false);
+  // Reset expanded state when switching receipts.
+  useEffect(() => {
+    setExpanded(false);
+  }, [row?.id]);
 
   return (
     <Dialog open={!!row} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="max-w-md" dir="rtl">
-        <DialogHeader>
-          <DialogTitle className="text-right">
-            طباعة أو إرسال {title}
-          </DialogTitle>
-        </DialogHeader>
-
-        <div className="text-xs text-muted-foreground -mt-1 mb-2 flex items-center justify-between">
-          <span>{row.client_name || '—'}</span>
-          {row.voucher_number ? (
-            <span className="font-mono ltr-nums">{row.voucher_number}</span>
-          ) : null}
+      <DialogContent className="max-w-md w-[95vw] p-0 overflow-hidden" dir="rtl">
+        {/* Hero header — same gradient as PolicySuccessDialog so the
+            two dialogs read as a family. Different icon (Receipt) so
+            the user can tell at a glance which flow they're in. */}
+        <div className="text-white p-5 hero-gradient">
+          <DialogHeader>
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                <ReceiptIcon className="h-6 w-6" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <DialogTitle className="text-lg font-bold text-white text-right">
+                  طباعة أو إرسال {title}
+                </DialogTitle>
+                <p className="text-xs text-white/70 mt-0.5">
+                  {row.client_name || '—'}
+                  {row.voucher_number ? ` · ${row.voucher_number}` : ''}
+                </p>
+              </div>
+            </div>
+          </DialogHeader>
         </div>
 
-        <div className="grid grid-cols-3 gap-2">
-          <ActionButton
-            label="طباعة"
-            icon={<Printer className="h-5 w-5" />}
-            state={printState}
-            onClick={handlePrint}
-          />
-          <ActionButton
-            label="SMS"
-            icon={<MessageSquare className="h-5 w-5" />}
-            state={smsState}
-            disabled={smsDisabled}
-            onClick={handleSms}
-            badge={
-              smsLocked && sendFunction ? (
-                <span className="absolute -top-1 -right-1 bg-amber-500 text-white text-[9px] rounded-full px-1.5 py-0.5">
-                  مغلق
-                </span>
-              ) : null
-            }
-            hint={
-              !sendFunction
-                ? 'غير متوفر لهذا النوع'
-                : !row.client_phone
-                  ? 'لا يوجد هاتف'
-                  : smsLocked
-                    ? 'تجاوزت الباقة — اضغط للترقية'
-                    : undefined
-            }
-          />
-          <ActionButton
-            label="واتساب"
-            icon={<WhatsappLogo size={20} weight="fill" />}
-            state={whatsappState}
-            disabled={whatsappDisabled}
-            onClick={handleWhatsapp}
-            hint={
-              !sendFunction
-                ? 'غير متوفر لهذا النوع'
-                : !row.client_phone
-                  ? 'لا يوجد هاتف'
-                  : undefined
-            }
-          />
-        </div>
+        {/* Body */}
+        <div className="p-4 space-y-3">
+          {errorMessage && (
+            <div className="flex items-start gap-2 p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-destructive text-sm">
+              <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
+              <span>{errorMessage}</span>
+            </div>
+          )}
 
-        {errorMessage ? (
-          <div className="mt-3 text-xs text-destructive flex items-start gap-1.5">
-            <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-            <span>{errorMessage}</span>
+          {/* Action panel — same expand-on-click pattern as
+              PolicySuccessDialog's RowBlock so the two dialogs feel
+              identical to operate. */}
+          <div className="space-y-2">
+            <div
+              className={cn(
+                'overflow-hidden transition-all duration-200 ease-out',
+                expanded ? 'max-h-24 opacity-100' : 'max-h-0 opacity-0',
+              )}
+            >
+              <div className="flex items-center justify-center gap-2 p-2 bg-muted/40 border border-border/60 rounded-xl">
+                <ChannelButton
+                  state={printState}
+                  onClick={handlePrint}
+                  icon={<Printer className="h-5 w-5" />}
+                  colorIdle="text-emerald-600"
+                  title="طباعة"
+                />
+                <ChannelButton
+                  state={smsState}
+                  onClick={handleSms}
+                  disabled={smsDisabled}
+                  locked={!!sendFunction && smsLocked}
+                  icon={<MessageSquare className="h-5 w-5" />}
+                  colorIdle="text-blue-600"
+                  title={
+                    !sendFunction
+                      ? 'غير متوفر لهذا النوع'
+                      : !row.client_phone
+                        ? 'لا يوجد رقم هاتف'
+                        : smsLocked
+                          ? 'تجاوزت الباقة — اضغط للترقية'
+                          : 'إرسال SMS'
+                  }
+                />
+                <ChannelButton
+                  state={whatsappState}
+                  onClick={handleWhatsapp}
+                  disabled={whatsappDisabled}
+                  icon={<WhatsappLogo className="h-5 w-5" weight="fill" />}
+                  colorIdle="text-green-600"
+                  title={
+                    !sendFunction
+                      ? 'غير متوفر لهذا النوع'
+                      : !row.client_phone
+                        ? 'لا يوجد رقم هاتف'
+                        : 'إرسال واتساب'
+                  }
+                />
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setExpanded((v) => !v)}
+              className={cn(
+                'w-full p-4 rounded-xl border-2 transition-all duration-200 text-right flex items-center gap-4',
+                expanded
+                  ? 'border-primary/60 bg-primary/5'
+                  : 'border-border hover:border-primary/50 hover:bg-primary/5',
+              )}
+            >
+              <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center shrink-0">
+                <ReceiptIcon className="h-6 w-6 text-blue-600" />
+              </div>
+              <div className="flex-1 min-w-0 text-right">
+                <div className="font-semibold text-base">
+                  طباعة أو إرسال {title}
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  {RECEIPT_DESC_BY_TYPE[row.receipt_type] ?? 'تفاصيل السند'}
+                </div>
+              </div>
+            </button>
+
+            {!sendFunction && (
+              <p className="text-xs text-muted-foreground text-right px-1">
+                هذا النوع يدعم الطباعة فقط حالياً
+              </p>
+            )}
           </div>
-        ) : null}
+
+          <Button
+            variant="outline"
+            className="w-full gap-2 mt-1"
+            onClick={onClose}
+            disabled={anyLoading}
+          >
+            <X className="h-4 w-4" />
+            إغلاق
+          </Button>
+        </div>
       </DialogContent>
     </Dialog>
   );
 }
 
-function ActionButton({
-  label,
-  icon,
+// Mini channel button — mirrors PolicySuccessDialog's ChannelButton
+// style so both dialogs share the same expand-into-channels feel.
+function ChannelButton({
   state,
   onClick,
+  icon,
+  colorIdle,
   disabled,
-  hint,
-  badge,
+  locked,
+  title,
 }: {
-  label: string;
-  icon: React.ReactNode;
   state: ActionChannelState;
   onClick: () => void;
+  icon: React.ReactNode;
+  colorIdle: string;
   disabled?: boolean;
-  hint?: string;
-  badge?: React.ReactNode;
+  locked?: boolean;
+  title: string;
 }) {
+  const isLoading = state === 'loading';
+  const isSent = state === 'sent';
   return (
     <button
       type="button"
       onClick={onClick}
-      disabled={disabled || state === 'loading'}
+      disabled={disabled || isLoading || isSent}
+      title={title}
       className={cn(
-        'relative flex flex-col items-center justify-center gap-1.5 rounded-lg border border-border bg-card px-3 py-4 text-sm',
-        'hover:border-primary hover:bg-primary/5 transition-colors',
-        'disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-card disabled:hover:border-border',
-        state === 'sent' && 'border-emerald-500 bg-emerald-50',
+        'relative flex-1 h-12 rounded-lg border border-border/60 bg-background',
+        'transition-all duration-150 hover:scale-105 hover:shadow-sm',
+        'flex items-center justify-center',
+        'disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:hover:shadow-none',
+        !disabled && !isLoading && !isSent && colorIdle,
+        isSent && 'text-emerald-600 bg-emerald-50 border-emerald-200',
       )}
-      title={hint}
     >
-      {badge}
-      <div className="text-foreground">
-        {state === 'loading' ? (
-          <Loader2 className="h-5 w-5 animate-spin" />
-        ) : state === 'sent' ? (
-          <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-        ) : (
-          icon
-        )}
-      </div>
-      <span className="text-xs font-medium">{label}</span>
+      {isLoading ? (
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+      ) : isSent ? (
+        <CheckCircle2 className="h-5 w-5" />
+      ) : (
+        icon
+      )}
+      {locked && !isLoading && !isSent && (
+        <span className="absolute top-0.5 left-0.5 h-1.5 w-1.5 rounded-full bg-amber-500" />
+      )}
     </button>
   );
 }
