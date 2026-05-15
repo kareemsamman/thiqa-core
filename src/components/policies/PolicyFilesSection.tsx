@@ -357,23 +357,6 @@ export function PolicyFilesSection({
 
     setScanning(fileType);
 
-    // Safety timeout: when ScanApp isn't installed Asprise pops its
-    // "complete one-time setup" overlay and never invokes the
-    // callback if the user dismisses it. Multi-page sessions take
-    // a while, so 60s leaves room for ADF scanners while still
-    // catching the no-response case.
-    let settled = false;
-    const safetyTimer = window.setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      setScanning(null);
-      toast({
-        title: "تثبيت مطلوب",
-        description: "ScanApp مش مثبت أو ما استجاب. نزّله من asprise.com وحاول تاني.",
-        variant: "destructive",
-      });
-    }, 60000);
-
     // Scan profile tuned for insurance documents:
     //   • Always show the scanner picker so the user explicitly
     //     chooses the device (a cached pick used to spin forever
@@ -402,9 +385,6 @@ export function PolicyFilesSection({
 
     window.scanner.scan(
       async (successful, mesg, response) => {
-        if (settled) return;
-        settled = true;
-        window.clearTimeout(safetyTimer);
         if (!successful) {
           setScanning(null);
           // Don't show error for user cancellation
