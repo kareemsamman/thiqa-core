@@ -13,7 +13,11 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { PolicySuccessDialog } from '@/components/policies/PolicySuccessDialog';
+import { useSmsLock } from '@/hooks/useSmsLock';
+import { toast } from 'sonner';
+import { WhatsappLogo } from '@phosphor-icons/react';
 import {
   Popover,
   PopoverContent,
@@ -27,14 +31,18 @@ import {
   CommandList,
 } from '@/components/ui/command';
 import {
+  AlertCircle,
   ArrowDownLeft,
   ArrowUpRight,
   CalendarRange,
   Check,
+  CheckCircle2,
   ChevronsUpDown,
   FileText,
   LayoutGrid,
   Loader2,
+  MessageSquare,
+  Printer,
   RotateCcw,
   Search,
   TrendingUp,
@@ -196,11 +204,14 @@ export function ClientsSection({ branchId }: ClientsSectionProps = {}) {
   // statement modal without leaving the accounting page.
   const [selectedClient, setSelectedClient] = useState<ClientLite | null>(null);
   const [statementOpen, setStatementOpen] = useState(false);
-  // Clicking a voucher number in any sub-tab opens a modal with the
-  // voucher's HTML — we track which receipt is being viewed so the
-  // modal can pick the right `generate-voucher` payload (payment_id
-  // for bulk session receipts vs voucher_receipt_id for everything else).
-  const [viewVoucherRow, setViewVoucherRow] = useState<ClientReceiptRow | null>(null);
+  // Clicking a voucher number opens an action picker (طباعة / SMS /
+  // واتساب) instead of a passive viewer — same UX the user gets at
+  // the end of PolicyWizard, applied per-voucher.
+  const [voucherActionRow, setVoucherActionRow] = useState<ClientReceiptRow | null>(null);
+  // Clicking a معاملة number in the إصدارات tab opens the existing
+  // PolicySuccessDialog scoped to that package (no receipt row, since
+  // the user explicitly wants "للمعاملة بس").
+  const [policyActionPkg, setPolicyActionPkg] = useState<IssuanceRow | null>(null);
 
   const data = useAccountingData(filters, branchId);
 
@@ -530,42 +541,42 @@ export function ClientsSection({ branchId }: ClientsSectionProps = {}) {
               everything visible, grouped by section. Each block uses
               the same table as its dedicated tab. */}
           <AllTabSection title="الإصدارات" count={filteredPackages.length}>
-            <IssuancesTable rows={filteredPackages} loading={data.loading} visibleCols={issuanceCols.visible} />
+            <IssuancesTable rows={filteredPackages} loading={data.loading} visibleCols={issuanceCols.visible} onDocumentClick={setPolicyActionPkg} />
           </AllTabSection>
           <AllTabSection title="سند قبض" count={payments.length}>
-            <ReceiptsTable rows={payments} loading={data.loading} kind="payments" onVoucherClick={setViewVoucherRow} visibleCols={receiptCols.visible} />
+            <ReceiptsTable rows={payments} loading={data.loading} kind="payments" onVoucherClick={setVoucherActionRow} visibleCols={receiptCols.visible} />
           </AllTabSection>
           <AllTabSection title="سند صرف" count={disbursements.length}>
-            <ReceiptsTable rows={disbursements} loading={data.loading} kind="disbursements" onVoucherClick={setViewVoucherRow} visibleCols={receiptCols.visible} />
+            <ReceiptsTable rows={disbursements} loading={data.loading} kind="disbursements" onVoucherClick={setVoucherActionRow} visibleCols={receiptCols.visible} />
           </AllTabSection>
           <AllTabSection title="سند إلغاء" count={cancellations.length}>
-            <ReceiptsTable rows={cancellations} loading={data.loading} kind="cancellations" onVoucherClick={setViewVoucherRow} visibleCols={receiptCols.visible} />
+            <ReceiptsTable rows={cancellations} loading={data.loading} kind="cancellations" onVoucherClick={setVoucherActionRow} visibleCols={receiptCols.visible} />
           </AllTabSection>
           <AllTabSection title="إشعار مدين" count={debitNotes.length}>
-            <ReceiptsTable rows={debitNotes} loading={data.loading} kind="debit_notes" onVoucherClick={setViewVoucherRow} visibleCols={receiptCols.visible} />
+            <ReceiptsTable rows={debitNotes} loading={data.loading} kind="debit_notes" onVoucherClick={setVoucherActionRow} visibleCols={receiptCols.visible} />
           </AllTabSection>
           <AllTabSection title="إشعار دائن" count={creditNotes.length}>
-            <ReceiptsTable rows={creditNotes} loading={data.loading} kind="credit_notes" onVoucherClick={setViewVoucherRow} visibleCols={receiptCols.visible} />
+            <ReceiptsTable rows={creditNotes} loading={data.loading} kind="credit_notes" onVoucherClick={setVoucherActionRow} visibleCols={receiptCols.visible} />
           </AllTabSection>
         </TabsContent>
 
         <TabsContent value="issuances" className="mt-3">
-          <IssuancesTable rows={filteredPackages} loading={data.loading} visibleCols={issuanceCols.visible} />
+          <IssuancesTable rows={filteredPackages} loading={data.loading} visibleCols={issuanceCols.visible} onDocumentClick={setPolicyActionPkg} />
         </TabsContent>
         <TabsContent value="payments" className="mt-3">
-          <ReceiptsTable rows={payments} loading={data.loading} kind="payments" onVoucherClick={setViewVoucherRow} visibleCols={receiptCols.visible} />
+          <ReceiptsTable rows={payments} loading={data.loading} kind="payments" onVoucherClick={setVoucherActionRow} visibleCols={receiptCols.visible} />
         </TabsContent>
         <TabsContent value="disbursements" className="mt-3">
-          <ReceiptsTable rows={disbursements} loading={data.loading} kind="disbursements" onVoucherClick={setViewVoucherRow} visibleCols={receiptCols.visible} />
+          <ReceiptsTable rows={disbursements} loading={data.loading} kind="disbursements" onVoucherClick={setVoucherActionRow} visibleCols={receiptCols.visible} />
         </TabsContent>
         <TabsContent value="cancellations" className="mt-3">
-          <ReceiptsTable rows={cancellations} loading={data.loading} kind="cancellations" onVoucherClick={setViewVoucherRow} visibleCols={receiptCols.visible} />
+          <ReceiptsTable rows={cancellations} loading={data.loading} kind="cancellations" onVoucherClick={setVoucherActionRow} visibleCols={receiptCols.visible} />
         </TabsContent>
         <TabsContent value="debit_notes" className="mt-3">
-          <ReceiptsTable rows={debitNotes} loading={data.loading} kind="debit_notes" onVoucherClick={setViewVoucherRow} visibleCols={receiptCols.visible} />
+          <ReceiptsTable rows={debitNotes} loading={data.loading} kind="debit_notes" onVoucherClick={setVoucherActionRow} visibleCols={receiptCols.visible} />
         </TabsContent>
         <TabsContent value="credit_notes" className="mt-3">
-          <ReceiptsTable rows={creditNotes} loading={data.loading} kind="credit_notes" onVoucherClick={setViewVoucherRow} visibleCols={receiptCols.visible} />
+          <ReceiptsTable rows={creditNotes} loading={data.loading} kind="credit_notes" onVoucherClick={setVoucherActionRow} visibleCols={receiptCols.visible} />
         </TabsContent>
       </Tabs>
 
@@ -588,10 +599,23 @@ export function ClientsSection({ branchId }: ClientsSectionProps = {}) {
         />
       ) : null}
 
-      <VoucherViewerModal
-        row={viewVoucherRow}
-        onClose={() => setViewVoucherRow(null)}
+      <ReceiptActionsDialog
+        row={voucherActionRow}
+        onClose={() => setVoucherActionRow(null)}
       />
+
+      {policyActionPkg ? (
+        <PolicySuccessDialog
+          open={!!policyActionPkg}
+          onOpenChange={(open) => { if (!open) setPolicyActionPkg(null); }}
+          policyId={policyActionPkg.main.id}
+          clientId={policyActionPkg.client_id ?? ''}
+          clientPhone={policyActionPkg.client_phone}
+          isPackage={policyActionPkg.is_grouped}
+          receiptPaymentIds={[]}
+          onClose={() => setPolicyActionPkg(null)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -821,10 +845,12 @@ function IssuancesTable({
   rows,
   loading,
   visibleCols,
+  onDocumentClick,
 }: {
   rows: IssuanceRow[];
   loading: boolean;
   visibleCols: string[];
+  onDocumentClick?: (pkg: IssuanceRow) => void;
 }) {
   if (loading) {
     return (
@@ -906,7 +932,17 @@ function IssuancesTable({
               >
                 {show('document_number') && (
                   <TableCell className="font-mono ltr-nums whitespace-nowrap">
-                    {pkg.document_number ?? '—'}
+                    {pkg.document_number && onDocumentClick ? (
+                      <button
+                        type="button"
+                        onClick={() => onDocumentClick(pkg)}
+                        className="text-blue-600 underline-offset-2 hover:underline focus:outline-none focus-visible:underline"
+                      >
+                        {pkg.document_number}
+                      </button>
+                    ) : (
+                      pkg.document_number ?? '—'
+                    )}
                   </TableCell>
                 )}
                 {show('date') && (
@@ -1102,7 +1138,7 @@ function ReceiptsTable({
                     <button
                       type="button"
                       onClick={() => onVoucherClick(r)}
-                      className="text-primary underline-offset-2 hover:underline focus:outline-none focus-visible:underline"
+                      className="text-blue-600 underline-offset-2 hover:underline focus:outline-none focus-visible:underline"
                     >
                       {r.voucher_number}
                     </button>
@@ -1164,118 +1200,313 @@ function ReceiptsTable({
 }
 
 // ──────────────────────────────────────────────────────────────
-// VoucherViewerModal — opens the HTML voucher in an iframe
+// ReceiptActionsDialog — print / SMS / WhatsApp picker
 // ──────────────────────────────────────────────────────────────
 //
-// Mirrors the CustomerStatementModal pattern: invoke the unified
-// `generate-voucher` edge function, get a CDN-hosted URL back, drop
-// it into an iframe. Single-purpose modal so clicking R162/2026 in
-// the accounting table opens the actual receipt the user printed
-// (not a fresh generation) — matches what they expect from /receipts.
+// Mirrors the PolicySuccessDialog UX the user gets at the end of
+// PolicyWizard, but scoped to a SINGLE voucher: a row of three
+// channel buttons (طباعة / SMS / واتساب) that each fire the right
+// edge function for the receipt's type.
 //
-// Inputs are decided per receipt type:
-//   • payment row with payment_id → pass payment_ids: [payment_id]
-//     so the bulk session number prints the way it does on /receipts.
-//   • everything else            → pass voucher_receipt_id: receipt.id.
-function VoucherViewerModal({
+// Edge-function routing per receipt_type:
+//   • payment      → send-payment-receipt-sms  body={ payment_ids:[...] }
+//   • disbursement → send-disbursement-sms     body={ voucher_receipt_id }
+//   • credit_note  → send-credit-note-sms      body={ voucher_receipt_id }
+//   • debit_note   → no SMS sibling yet, only print
+//   • cancellation → no SMS sibling yet, only print
+//
+// Print uses `generate-voucher` for every type (it dispatches
+// internally) so the printable URL matches what /receipts shows.
+//
+// SMS-lock awareness comes from useSmsLock — when the agent's quota
+// is exhausted the SMS button shows the lock badge and clicking it
+// opens the upgrade dialog, matching PolicySuccessDialog.
+
+type ActionChannelState = 'idle' | 'loading' | 'sent';
+
+const SEND_FUNCTION_BY_TYPE: Record<string, string | null> = {
+  payment: 'send-payment-receipt-sms',
+  disbursement: 'send-disbursement-sms',
+  credit_note: 'send-credit-note-sms',
+  // debit_note + cancellation have no dedicated send function yet;
+  // surface only the print button for those.
+  debit_note: null,
+  cancellation: null,
+};
+
+const RECEIPT_TITLE_BY_TYPE: Record<string, string> = {
+  payment: 'سند قبض',
+  disbursement: 'سند صرف',
+  credit_note: 'إشعار دائن',
+  debit_note: 'إشعار مدين',
+  cancellation: 'سند إلغاء',
+};
+
+function ReceiptActionsDialog({
   row,
   onClose,
 }: {
   row: ClientReceiptRow | null;
   onClose: () => void;
 }) {
-  const [url, setUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [printState, setPrintState] = useState<ActionChannelState>('idle');
+  const [smsState, setSmsState] = useState<ActionChannelState>('idle');
+  const [whatsappState, setWhatsappState] = useState<ActionChannelState>('idle');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const {
+    locked: smsLocked,
+    loading: smsLoading,
+    openUpgradeDialog: openSmsUpgrade,
+  } = useSmsLock();
+
+  // Reset state every time the dialog opens against a new row so
+  // returning to a previously-sent voucher doesn't show the green
+  // "sent" badge from the last session.
   useEffect(() => {
-    if (!row) {
-      setUrl(null);
-      setError(null);
-      return;
-    }
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    setUrl(null);
-    const body: Record<string, unknown> =
+    if (!row) return;
+    setPrintState('idle');
+    setSmsState('idle');
+    setWhatsappState('idle');
+    setErrorMessage(null);
+  }, [row?.id]);
+
+  if (!row) return null;
+
+  const sendFunction = SEND_FUNCTION_BY_TYPE[row.receipt_type] ?? null;
+  const title = RECEIPT_TITLE_BY_TYPE[row.receipt_type] ?? 'سند';
+
+  // Body shape every send-* and generate-voucher accepts. Payment
+  // rows ride on payment_ids so the bulk session number renders
+  // consistently with /receipts; everything else uses voucher_receipt_id.
+  const buildBody = (extra: Record<string, unknown> = {}) => {
+    const base =
       row.receipt_type === 'payment' && row.payment_id
         ? { payment_ids: [row.payment_id] }
         : { voucher_receipt_id: row.id };
-    supabase.functions
-      .invoke('generate-voucher', { body })
-      .then(({ data: resp, error: err }) => {
-        if (cancelled) return;
-        if (err) {
-          setError(err.message || 'فشل توليد السند');
-          setLoading(false);
-          return;
-        }
-        const next = (resp as { receipt_url?: string } | null)?.receipt_url ?? null;
-        if (!next) {
-          setError('لم يتم إرجاع رابط السند');
-          setLoading(false);
-          return;
-        }
-        setUrl(next);
-        setLoading(false);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setError(err instanceof Error ? err.message : 'فشل توليد السند');
-        setLoading(false);
+    return { ...base, ...extra };
+  };
+
+  const handlePrint = async () => {
+    setPrintState('loading');
+    setErrorMessage(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-voucher', {
+        body: buildBody(),
       });
-    return () => {
-      cancelled = true;
-    };
-  }, [row]);
+      if (error) {
+        setErrorMessage(error.message || 'فشل توليد السند');
+        toast.error('فشل توليد السند');
+        return;
+      }
+      const url = (data as { receipt_url?: string } | null)?.receipt_url ?? null;
+      if (!url) {
+        setErrorMessage('لم يتم إرجاع رابط السند');
+        return;
+      }
+      window.open(url, '_blank', 'noopener');
+      toast.success('تم فتح السند');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'فشل توليد السند';
+      setErrorMessage(msg);
+      toast.error(msg);
+    } finally {
+      setPrintState('idle');
+    }
+  };
+
+  const handleSms = async () => {
+    if (!sendFunction) return;
+    if (!row.client_phone) {
+      toast.error('لا يوجد رقم هاتف للعميل');
+      return;
+    }
+    if (smsLoading) return;
+    if (smsLocked) {
+      openSmsUpgrade();
+      return;
+    }
+    setSmsState('loading');
+    setErrorMessage(null);
+    try {
+      const { data, error } = await supabase.functions.invoke(sendFunction, {
+        body: buildBody(),
+      });
+      if (error) {
+        setErrorMessage(error.message || 'فشل إرسال SMS');
+        toast.error('فشل إرسال SMS');
+        setSmsState('idle');
+        return;
+      }
+      if ((data as { error?: string } | null)?.error) {
+        toast.error((data as { error: string }).error);
+        setSmsState('idle');
+        return;
+      }
+      setSmsState('sent');
+      toast.success('تم إرسال السند عبر SMS');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'فشل إرسال SMS';
+      setErrorMessage(msg);
+      toast.error(msg);
+      setSmsState('idle');
+    }
+  };
+
+  const handleWhatsapp = async () => {
+    if (!sendFunction) return;
+    if (!row.client_phone) {
+      toast.error('لا يوجد رقم هاتف للعميل');
+      return;
+    }
+    setWhatsappState('loading');
+    setErrorMessage(null);
+    try {
+      const { data, error } = await supabase.functions.invoke(sendFunction, {
+        body: buildBody({ whatsapp_mode: true }),
+      });
+      if (error) {
+        setErrorMessage(error.message || 'فشل تجهيز رسالة واتساب');
+        toast.error('فشل تجهيز رسالة واتساب');
+        return;
+      }
+      const phone = (data as { whatsapp_phone?: string } | null)?.whatsapp_phone;
+      const text = (data as { message_text?: string } | null)?.message_text;
+      if (!phone || !text) {
+        toast.error('لم يتم تجهيز رسالة واتساب');
+        return;
+      }
+      window.open(
+        `https://wa.me/${phone}?text=${encodeURIComponent(text)}`,
+        '_blank',
+      );
+      toast.success('تم فتح واتساب');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'فشل تجهيز رسالة واتساب';
+      setErrorMessage(msg);
+      toast.error(msg);
+    } finally {
+      setWhatsappState('idle');
+    }
+  };
+
+  const smsDisabled = !sendFunction || !row.client_phone || smsLoading;
+  const whatsappDisabled = !sendFunction || !row.client_phone;
 
   return (
     <Dialog open={!!row} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="max-w-5xl w-[95vw] h-[88vh] p-0 gap-0 overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-3 border-b bg-foreground text-background">
-          <div>
-            <div className="font-bold text-sm">عرض السند</div>
-            {row?.voucher_number ? (
-              <div className="text-xs opacity-80 ltr-nums">{row.voucher_number}</div>
-            ) : null}
-          </div>
-          <div className="flex items-center gap-2">
-            {url ? (
-              <Button
-                variant="secondary"
-                size="sm"
-                className="gap-2"
-                onClick={() => window.open(url, '_blank', 'noopener')}
-              >
-                فتح في تبويب جديد
-              </Button>
-            ) : null}
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onClose}
-              className="text-background hover:bg-background/10"
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-        <div className="flex-1 bg-muted overflow-hidden">
-          {loading ? (
-            <div className="h-full flex items-center justify-center text-sm text-muted-foreground gap-2">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              جاري توليد السند...
-            </div>
-          ) : error ? (
-            <div className="h-full flex items-center justify-center text-sm text-destructive">
-              {error}
-            </div>
-          ) : url ? (
-            <iframe src={url} className="w-full h-full border-0" title="voucher" />
+      <DialogContent className="max-w-md" dir="rtl">
+        <DialogHeader>
+          <DialogTitle className="text-right">
+            طباعة أو إرسال {title}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="text-xs text-muted-foreground -mt-1 mb-2 flex items-center justify-between">
+          <span>{row.client_name || '—'}</span>
+          {row.voucher_number ? (
+            <span className="font-mono ltr-nums">{row.voucher_number}</span>
           ) : null}
         </div>
+
+        <div className="grid grid-cols-3 gap-2">
+          <ActionButton
+            label="طباعة"
+            icon={<Printer className="h-5 w-5" />}
+            state={printState}
+            onClick={handlePrint}
+          />
+          <ActionButton
+            label="SMS"
+            icon={<MessageSquare className="h-5 w-5" />}
+            state={smsState}
+            disabled={smsDisabled}
+            onClick={handleSms}
+            badge={
+              smsLocked && sendFunction ? (
+                <span className="absolute -top-1 -right-1 bg-amber-500 text-white text-[9px] rounded-full px-1.5 py-0.5">
+                  مغلق
+                </span>
+              ) : null
+            }
+            hint={
+              !sendFunction
+                ? 'غير متوفر لهذا النوع'
+                : !row.client_phone
+                  ? 'لا يوجد هاتف'
+                  : smsLocked
+                    ? 'تجاوزت الباقة — اضغط للترقية'
+                    : undefined
+            }
+          />
+          <ActionButton
+            label="واتساب"
+            icon={<WhatsappLogo size={20} weight="fill" />}
+            state={whatsappState}
+            disabled={whatsappDisabled}
+            onClick={handleWhatsapp}
+            hint={
+              !sendFunction
+                ? 'غير متوفر لهذا النوع'
+                : !row.client_phone
+                  ? 'لا يوجد هاتف'
+                  : undefined
+            }
+          />
+        </div>
+
+        {errorMessage ? (
+          <div className="mt-3 text-xs text-destructive flex items-start gap-1.5">
+            <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+            <span>{errorMessage}</span>
+          </div>
+        ) : null}
       </DialogContent>
     </Dialog>
+  );
+}
+
+function ActionButton({
+  label,
+  icon,
+  state,
+  onClick,
+  disabled,
+  hint,
+  badge,
+}: {
+  label: string;
+  icon: React.ReactNode;
+  state: ActionChannelState;
+  onClick: () => void;
+  disabled?: boolean;
+  hint?: string;
+  badge?: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled || state === 'loading'}
+      className={cn(
+        'relative flex flex-col items-center justify-center gap-1.5 rounded-lg border border-border bg-card px-3 py-4 text-sm',
+        'hover:border-primary hover:bg-primary/5 transition-colors',
+        'disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-card disabled:hover:border-border',
+        state === 'sent' && 'border-emerald-500 bg-emerald-50',
+      )}
+      title={hint}
+    >
+      {badge}
+      <div className="text-foreground">
+        {state === 'loading' ? (
+          <Loader2 className="h-5 w-5 animate-spin" />
+        ) : state === 'sent' ? (
+          <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+        ) : (
+          icon
+        )}
+      </div>
+      <span className="text-xs font-medium">{label}</span>
+    </button>
   );
 }

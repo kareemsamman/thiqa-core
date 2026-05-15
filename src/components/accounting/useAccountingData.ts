@@ -201,7 +201,9 @@ interface RawClientReceipt {
     | {
         document_number: string | null;
         policy_number: string | null;
+        client_id: string | null;
         cars: { car_number: string | null } | null;
+        clients: { id_number: string | null; phone_number: string | null } | null;
       }
     | null;
 }
@@ -559,7 +561,7 @@ export function useAccountingData(
            broker_id, policy_id, payment_id, car_number, cancelled_at,
            receipt_type,
            clients(id_number, phone_number),
-           policies(document_number, policy_number, cars(car_number))`,
+           policies(document_number, policy_number, client_id, cars(car_number), clients(id_number, phone_number))`,
         )
         .in('receipt_type', ['payment', 'cancellation', 'disbursement', 'credit_note', 'debit_note'])
         .eq('is_imported', false)
@@ -576,12 +578,19 @@ export function useAccountingData(
         receipt_number: r.receipt_number,
         cheque_number: r.cheque_number,
         notes: r.notes,
-        client_id: r.client_id,
+        // Trigger-mirrored payment rows leave receipts.client_id null;
+        // fall through to the linked policy's client_id so the customer
+        // filter on the accounting page still matches those rows.
+        client_id: r.client_id ?? r.policies?.client_id ?? null,
         client_name: r.client_name,
-        // Customer detail joined from `clients` so the optional
-        // columns on the accounting page don't require a second fetch.
-        client_id_number: r.clients?.id_number ?? null,
-        client_phone: r.clients?.phone_number ?? null,
+        // Customer detail joined from `clients`. Prefer the direct
+        // join (manual vouchers explicitly set receipts.client_id),
+        // then fall back to the policy's client (auto-mirrored payment
+        // / cancellation rows leave receipts.client_id null).
+        client_id_number:
+          r.clients?.id_number ?? r.policies?.clients?.id_number ?? null,
+        client_phone:
+          r.clients?.phone_number ?? r.policies?.clients?.phone_number ?? null,
         // Car number comes from either the denormalized column on
         // `receipts` (set by the cancellation flow) or the linked
         // policy's `cars` join. Prefer the denormalized value first
