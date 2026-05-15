@@ -161,46 +161,47 @@ export function AddCompanyCreditNoteDialog({
             <div className="text-xs text-muted-foreground mb-1">شركة التأمين</div>
             <div className="font-semibold text-base">{displayName}</div>
             {balance && (
-              <div className="mt-3 pt-3 border-t border-border/60 space-y-1.5">
+              <div className="mt-3 pt-3 border-t border-border/60 space-y-2">
                 <div className="flex items-baseline justify-between gap-3">
-                  <span className="text-[11px] font-semibold text-muted-foreground">
-                    المستحق للشركة
+                  <span className="text-xs font-semibold text-muted-foreground">
+                    {balance.outstanding > 0.01
+                      ? 'المستحق للشركة'
+                      : balance.outstanding < -0.01
+                        ? 'رصيد دائن لدى الشركة'
+                        : 'الحساب مع الشركة مسوّى'}
                   </span>
                   <span
                     className={cn(
                       'text-base font-bold tabular-nums',
-                      balance.outstanding > 0
+                      balance.outstanding > 0.01
                         ? 'text-rose-700 dark:text-rose-300'
-                        : balance.outstanding < 0
+                        : balance.outstanding < -0.01
                           ? 'text-emerald-700 dark:text-emerald-300'
                           : 'text-muted-foreground',
                     )}
                   >
-                    {balance.outstanding < 0
-                      ? `للشركة عندك ₪${Math.round(Math.abs(balance.outstanding)).toLocaleString('en-US')}`
-                      : `₪${Math.round(balance.outstanding).toLocaleString('en-US')}`}
+                    ₪{Math.round(Math.abs(balance.outstanding)).toLocaleString('en-US')}
                   </span>
                 </div>
-                <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[10.5px] text-muted-foreground tabular-nums">
-                  <span>
-                    إجمالي المستحق: ₪{Math.round(balance.totalPayable).toLocaleString('en-US')}
-                    {' '}({balance.policiesCount} بوليصة)
-                  </span>
-                  <span>
-                    إشعارات دائنة: ₪{Math.round(balance.totalCreditNotes).toLocaleString('en-US')}
-                  </span>
-                  <span>
-                    سندات الصرف: ₪{Math.round(balance.totalPaidOut).toLocaleString('en-US')}
-                  </span>
-                  <span>
-                    سندات القبض: ₪{Math.round(balance.totalPaidIn).toLocaleString('en-US')}
-                  </span>
+                <div className="space-y-1 text-[11px] tabular-nums border-t border-border/40 pt-2">
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>المستحق من التأمينات</span>
+                    <span>₪{Math.round(balance.totalPayable).toLocaleString('en-US')}</span>
+                  </div>
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>− سندات الصرف</span>
+                    <span>₪{Math.round(balance.totalPaidOut).toLocaleString('en-US')}</span>
+                  </div>
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>− إشعارات دائنة</span>
+                    <span>₪{Math.round(balance.totalCreditNotes).toLocaleString('en-US')}</span>
+                  </div>
                 </div>
               </div>
             )}
             <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-2 leading-relaxed">
-              إشعار دائن يُضاف على الحساب المفتوح بينك وبين الشركة — يزيد المستحق
-              لها بدون كاش. لتسديده فعلياً أصدر سند صرف لاحقاً.
+              إشعار دائن: تسجيل الدفع على الحساب الجاري مع الشركة بدون كاش —
+              يُقلِّل المستحق من التأمينات وينتظر التسوية الفعلية لاحقاً عبر سند صرف.
             </p>
           </div>
 

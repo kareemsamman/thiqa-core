@@ -10,10 +10,13 @@ import { useAgentContext } from './useAgentContext';
 // same pattern report_company_settlement uses on /company-settlement.
 //
 // Formula (mirrored in the RPC body):
-//   outstanding = Σ payed_for_company         ← gross from issued policies
-//               + Σ credit_notes for company   ← paper, ADDS to debt
-//               − Σ outgoing settlements       ← cash we paid the company
-//               − Σ incoming settlements       ← cash the company paid us
+//   outstanding = Σ payed_for_company         ← من البوليصات
+//               − Σ outgoing settlements       ← سندات الصرف للشركة
+//               − Σ credit_notes for company   ← إشعارات دائنة (على الحساب)
+//
+// Incoming settlements (rare — company refunding the agent) are
+// returned for display but excluded from outstanding; per the
+// accountant model the dialog shows ONLY the three terms above.
 //
 // Cancelled / transferred policies and refused settlements are
 // excluded by the RPC.

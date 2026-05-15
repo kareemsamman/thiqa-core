@@ -751,56 +751,57 @@ export function AddSettlementDialog({
               </div>
             )}
 
-            {/* Company balance — single-direction (agent owes the
-                insurance company) so we surface the running-account
-                breakdown rather than the bidirectional broker pills.
-                The chosen voucher kind ring-highlights the row that
-                will change: a سند صرف reduces المستحق, a سند قبض
-                increases the المستلم column (rare — company refunding
-                the agent). */}
+            {/* Company balance — single-direction running account:
+                the agent owes the insurance company. Per the user's
+                accountant model the card surfaces ONE number with
+                exactly the three terms that produce it:
+                  المستحق من التأمينات − سندات الصرف − إشعارات دائنة.
+                سندات القبض من الشركة are rare and live on the
+                receipts page, not in this summary — including them
+                here muddied the headline number. */}
             {mode === 'company' && companyBalance && (
               <div
                 className={cn(
-                  'rounded-lg border p-3 space-y-2',
+                  'rounded-lg border p-3 space-y-2.5',
                   kind === 'disbursement'
                     ? 'border-rose-500/40 bg-rose-50 dark:bg-rose-950/20 ring-1 ring-rose-500/30'
                     : 'border-emerald-500/40 bg-emerald-50 dark:bg-emerald-950/20 ring-1 ring-emerald-500/30',
                 )}
               >
                 <div className="flex items-baseline justify-between gap-3">
-                  <span className="text-[11px] font-semibold text-muted-foreground">
-                    المستحق للشركة
+                  <span className="text-xs font-semibold text-muted-foreground">
+                    {companyBalance.outstanding > 0.01
+                      ? 'المستحق للشركة'
+                      : companyBalance.outstanding < -0.01
+                        ? 'رصيد دائن لدى الشركة'
+                        : 'الحساب مع الشركة مسوّى'}
                   </span>
                   <span
                     className={cn(
                       'text-lg font-bold tabular-nums',
-                      companyBalance.outstanding > 0
+                      companyBalance.outstanding > 0.01
                         ? 'text-rose-700 dark:text-rose-300'
-                        : companyBalance.outstanding < 0
+                        : companyBalance.outstanding < -0.01
                           ? 'text-emerald-700 dark:text-emerald-300'
                           : 'text-muted-foreground',
                     )}
                   >
-                    {companyBalance.outstanding < 0
-                      ? `للشركة عندك ₪${Math.round(Math.abs(companyBalance.outstanding)).toLocaleString('en-US')}`
-                      : `₪${Math.round(companyBalance.outstanding).toLocaleString('en-US')}`}
+                    ₪{Math.round(Math.abs(companyBalance.outstanding)).toLocaleString('en-US')}
                   </span>
                 </div>
-                <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[10.5px] text-muted-foreground tabular-nums">
-                  <span>
-                    إجمالي المستحق من البوليصات:
-                    {' '}₪{Math.round(companyBalance.totalPayable).toLocaleString('en-US')}
-                    {' '}({companyBalance.policiesCount} بوليصة)
-                  </span>
-                  <span>
-                    إشعارات دائنة: ₪{Math.round(companyBalance.totalCreditNotes).toLocaleString('en-US')}
-                  </span>
-                  <span>
-                    سندات الصرف: ₪{Math.round(companyBalance.totalPaidOut).toLocaleString('en-US')}
-                  </span>
-                  <span>
-                    سندات القبض: ₪{Math.round(companyBalance.totalPaidIn).toLocaleString('en-US')}
-                  </span>
+                <div className="space-y-1 text-[11px] tabular-nums border-t border-border/40 pt-2">
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>المستحق من التأمينات</span>
+                    <span>₪{Math.round(companyBalance.totalPayable).toLocaleString('en-US')}</span>
+                  </div>
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>− سندات الصرف</span>
+                    <span>₪{Math.round(companyBalance.totalPaidOut).toLocaleString('en-US')}</span>
+                  </div>
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>− إشعارات دائنة</span>
+                    <span>₪{Math.round(companyBalance.totalCreditNotes).toLocaleString('en-US')}</span>
+                  </div>
                 </div>
               </div>
             )}
