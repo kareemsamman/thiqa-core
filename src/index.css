@@ -41,6 +41,19 @@ html {
   }
 }
 
+/* Asprise scanner.js renders its "complete one-time setup" overlay
+   straight into <body> with a low inline z-index, which lands BELOW
+   our open shadcn Dialog and swallows clicks. Hoist anything the
+   library injects (overlay, popup, dialog) above every modal. */
+[id*="scanner"][id*="dialog"],
+[id*="scanner"][id*="overlay"],
+[id*="scanner"][id*="popup"],
+[class*="scannerjs"],
+[id*="asprise"],
+[class*="asprise"] {
+  z-index: 900000 !important;
+}
+
 @layer base {
   :root {
     /* Light theme - Professional blue-indigo */

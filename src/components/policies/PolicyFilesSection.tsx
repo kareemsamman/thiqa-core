@@ -356,16 +356,15 @@ export function PolicyFilesSection({
 
     setScanning(fileType);
 
-    // Get saved scanner from localStorage (skip selection dialog if already saved)
-    const savedScanner = localStorage.getItem('preferred_scanner');
-
+    // Always let the user pick a scanner — caching a "preferred"
+    // scanner caused the button to spin forever when the saved
+    // device was unplugged or renamed.
     const scanRequest = {
       use_asprise_dialog: false,
       show_scanner_ui: false,
-      // Scanner.js uses `source_name` (docs). Keep `scanner_name` as fallback for compatibility.
-      source_name: savedScanner || 'select',
-      scanner_name: savedScanner || 'select',
-      prompt_scan_more: false, // Don't ask to scan more pages
+      source_name: 'select',
+      scanner_name: 'select',
+      prompt_scan_more: false,
       twain_cap_setting: {
         ICAP_PIXELTYPE: 'TWPT_RGB',
         ICAP_XRESOLUTION: '200',
@@ -396,30 +395,6 @@ export function PolicyFilesSection({
             }
           }
           return;
-        }
-
-        // Save the used scanner name for next time (skip dialog on future scans)
-        let responseObj: any = null;
-        try {
-          responseObj = typeof response === 'string' ? JSON.parse(response) : response;
-        } catch {
-          responseObj = null;
-        }
-
-        const usedScanner =
-          responseObj?.source_name ??
-          responseObj?.sourceName ??
-          responseObj?.source ??
-          responseObj?.scanner_name ??
-          responseObj?.scanner ??
-          null;
-
-        const normalizedUsedScanner = typeof usedScanner === 'string' ? usedScanner.trim() : '';
-        if (normalizedUsedScanner && normalizedUsedScanner !== 'select') {
-          localStorage.setItem('preferred_scanner', normalizedUsedScanner);
-        } else if (!savedScanner) {
-          // Fallback: at least avoid showing selection dialogs next time
-          localStorage.setItem('preferred_scanner', 'default');
         }
 
         const scannedImages = window.scanner.getScannedImages(response, true, false);
