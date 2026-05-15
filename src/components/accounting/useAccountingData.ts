@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAgentContext } from '@/hooks/useAgentContext';
 import type { Enums } from '@/integrations/supabase/types';
@@ -243,9 +244,46 @@ function hydrateChequeImages(arr: string[] | null, single: string | null): strin
   return single ? [single] : [];
 }
 
+interface AccountingDataPayload {
+  companies: CompanyOption[];
+  brokers: BrokerOption[];
+  policies: IssuanceRow[];
+  companySettlements: (SettlementRow & { direction?: 'outgoing' | 'incoming' })[];
+  brokerSettlements: SettlementRow[];
+  clientPaymentsRaw: ClientReceiptRow[];
+  clientCancellationsRaw: ClientReceiptRow[];
+  clientDisbursementsRaw: ClientReceiptRow[];
+  clientCreditNotesRaw: ClientReceiptRow[];
+  brokerCreditNotesRaw: ClientReceiptRow[];
+  companyCreditNotesRaw: ClientReceiptRow[];
+  expenses: RawExpense[];
+}
+
+const EMPTY_PAYLOAD: AccountingDataPayload = {
+  companies: [],
+  brokers: [],
+  policies: [],
+  companySettlements: [],
+  brokerSettlements: [],
+  clientPaymentsRaw: [],
+  clientCancellationsRaw: [],
+  clientDisbursementsRaw: [],
+  clientCreditNotesRaw: [],
+  brokerCreditNotesRaw: [],
+  companyCreditNotesRaw: [],
+  expenses: [],
+};
+
 /**
  * Centralized fetch for the new accounting page. Each "section"
- * (companies / brokers / expenses) consumes a slice of the result.
+ * (companies / brokers / clients / expenses) consumes a slice of the
+ * result.
+ *
+ * Backed by React Query so all four section components share ONE
+ * in-flight request and ONE cached payload — without this, each
+ * section spawned its own useState+useEffect copy of the hook and
+ * re-fired the same ~10 reads on tab switch (companies → brokers →
+ * clients → expenses = 4× the queries).
  *
  * Filters are applied post-fetch on the client — not at the SQL level —
  * so toggling a filter doesn't re-hit the network. The dataset for an
@@ -256,26 +294,22 @@ export function useAccountingData(
   branchId?: string | null,
 ): UseAccountingDataReturn {
   const { agentId } = useAgentContext();
+  const queryClient = useQueryClient();
 
-  const [loading, setLoading] = useState(true);
-  const [companies, setCompanies] = useState<CompanyOption[]>([]);
-  const [brokers, setBrokers] = useState<BrokerOption[]>([]);
-  const [policies, setPolicies] = useState<IssuanceRow[]>([]);
-  const [companySettlements, setCompanySettlements] = useState<
-    (SettlementRow & { direction?: 'outgoing' | 'incoming' })[]
-  >([]);
-  const [brokerSettlements, setBrokerSettlements] = useState<SettlementRow[]>([]);
-  const [clientPaymentsRaw, setClientPaymentsRaw] = useState<ClientReceiptRow[]>([]);
-  const [clientCancellationsRaw, setClientCancellationsRaw] = useState<ClientReceiptRow[]>([]);
-  const [clientDisbursementsRaw, setClientDisbursementsRaw] = useState<ClientReceiptRow[]>([]);
-  const [clientCreditNotesRaw, setClientCreditNotesRaw] = useState<ClientReceiptRow[]>([]);
-  const [brokerCreditNotesRaw, setBrokerCreditNotesRaw] = useState<ClientReceiptRow[]>([]);
-  const [companyCreditNotesRaw, setCompanyCreditNotesRaw] = useState<ClientReceiptRow[]>([]);
-  const [expenses, setExpenses] = useState<RawExpense[]>([]);
+  const queryKey = useMemo(
+    () => ['accounting-data', agentId ?? null, branchId ?? null] as const,
+    [agentId, branchId],
+  );
 
-  const fetchAll = useCallback(async () => {
-    setLoading(true);
-    try {
+  const { data, isLoading } = useQuery<AccountingDataPayload>({
+    queryKey,
+    enabled: !!agentId,
+    // Filter changes don't refetch — they're applied client-side via
+    // the useMemos below. Only agentId / branchId / explicit refresh
+    // re-hit the network. 30s is generous enough that a tab switch
+    // back inside that window is instant.
+    staleTime: 30 * 1000,
+    queryFn: async (): Promise<AccountingDataPayload> => {
       // 1. Companies + brokers (small lookup tables)
       const [{ data: companiesData }, { data: brokersData }] = await Promise.all([
         supabase
@@ -285,8 +319,8 @@ export function useAccountingData(
           .order('name'),
         supabase.from('brokers').select('id, name').order('name'),
       ]);
-      setCompanies((companiesData ?? []) as CompanyOption[]);
-      setBrokers((brokersData ?? []) as BrokerOption[]);
+      const companies = (companiesData ?? []) as CompanyOption[];
+      const brokers = (brokersData ?? []) as BrokerOption[];
 
       // 2. Policies + cars + clients + companies (joined)
       let policyQuery = supabase
@@ -595,8 +629,6 @@ export function useAccountingData(
         return bd - ad;
       });
 
-      setPolicies(issuances);
-
       // 4. Company settlements (both directions — split client-side
       //    into disbursements / receipts based on `direction`)
       let csQuery = supabase
@@ -688,8 +720,6 @@ export function useAccountingData(
           payment_id: mirror?.payment_id ?? null,
         };
       });
-      setCompanySettlements(csRows);
-
       // 5. Broker settlements
       let bsQuery = supabase
         .from('broker_settlements')
@@ -771,8 +801,6 @@ export function useAccountingData(
           payment_id: mirror?.payment_id ?? null,
         };
       });
-      setBrokerSettlements(bsRows);
-
       // 6. Client receipts — fetch every flavor that hits a client's
       //    account from the agency's side. We read them all in one
       //    query and split client-side by receipt_type so the
@@ -897,27 +925,21 @@ export function useAccountingData(
       // broker payments don't flow through the customer receipts
       // table. We keep cancelled (refused) rows in the raw list so
       // the سند الغاء sub-tab can render them; totals filter them.
-      setClientPaymentsRaw(
-        crRows
-          .filter((r) => r.receipt_type === 'payment' && !r.broker_id)
-          .map(mapClientReceipt)
-          .map(enrichVoucherNumber),
-      );
-      setClientCancellationsRaw(
-        crRows
-          .filter((r) => r.receipt_type === 'cancellation' && !r.broker_id)
-          .map(mapClientReceipt)
-          .map(enrichVoucherNumber),
-      );
+      const clientPaymentsRaw = crRows
+        .filter((r) => r.receipt_type === 'payment' && !r.broker_id)
+        .map(mapClientReceipt)
+        .map(enrichVoucherNumber);
+      const clientCancellationsRaw = crRows
+        .filter((r) => r.receipt_type === 'cancellation' && !r.broker_id)
+        .map(mapClientReceipt)
+        .map(enrichVoucherNumber);
       // disbursement rows: client-only (the broker disbursement
       // path uses the broker_settlements table directly, not the
       // receipts mirror).
-      setClientDisbursementsRaw(
-        crRows
-          .filter((r) => r.receipt_type === 'disbursement')
-          .map(mapClientReceipt)
-          .map(enrichVoucherNumber),
-      );
+      const clientDisbursementsRaw = crRows
+        .filter((r) => r.receipt_type === 'disbursement')
+        .map(mapClientReceipt)
+        .map(enrichVoucherNumber);
       // credit_note + debit_note rows: split THREE ways so each
       // accounting tab sees only its own bucket:
       //   • broker_id set        → broker credit/debit note
@@ -927,23 +949,17 @@ export function useAccountingData(
       // null client_id/broker_id, so without this split they used to
       // leak into the clientCreditNotes bucket.
       const creditNoteRows = crRows.filter((r) => r.receipt_type === 'credit_note' || r.receipt_type === 'debit_note');
-      setClientCreditNotesRaw(
-        creditNoteRows
-          .filter((r) => !r.broker_id && !r.company_id)
-          .map(mapClientReceipt)
-          .map(enrichVoucherNumber),
-      );
-      setBrokerCreditNotesRaw(
-        creditNoteRows
-          .filter((r) => !!r.broker_id)
-          .map((r) => ({ ...enrichVoucherNumber(mapClientReceipt(r)), broker_id: r.broker_id ?? null }) as ClientReceiptRow & { broker_id: string | null }),
-      );
-      setCompanyCreditNotesRaw(
-        creditNoteRows
-          .filter((r) => !r.broker_id && !!r.company_id)
-          .map(mapClientReceipt)
-          .map(enrichVoucherNumber),
-      );
+      const clientCreditNotesRaw = creditNoteRows
+        .filter((r) => !r.broker_id && !r.company_id)
+        .map(mapClientReceipt)
+        .map(enrichVoucherNumber);
+      const brokerCreditNotesRaw = creditNoteRows
+        .filter((r) => !!r.broker_id)
+        .map((r) => ({ ...enrichVoucherNumber(mapClientReceipt(r)), broker_id: r.broker_id ?? null }) as ClientReceiptRow & { broker_id: string | null });
+      const companyCreditNotesRaw = creditNoteRows
+        .filter((r) => !r.broker_id && !!r.company_id)
+        .map(mapClientReceipt)
+        .map(enrichVoucherNumber);
 
       // 7. Expenses — only the sum is needed by the pills, but the full
       //    rows are required to apply the date filter client-side.
@@ -951,28 +967,59 @@ export function useAccountingData(
       if (agentId) exQuery = exQuery.eq('agent_id', agentId);
       if (branchId) exQuery = exQuery.eq('branch_id', branchId);
       const { data: exData } = await exQuery;
-      setExpenses((exData ?? []) as RawExpense[]);
-    } finally {
-      setLoading(false);
-    }
-  }, [agentId, branchId]);
+      const expenses = (exData ?? []) as RawExpense[];
 
-  useEffect(() => {
-    fetchAll();
-  }, [fetchAll]);
+      return {
+        companies,
+        brokers,
+        policies: issuances,
+        companySettlements: csRows,
+        brokerSettlements: bsRows,
+        clientPaymentsRaw,
+        clientCancellationsRaw,
+        clientDisbursementsRaw,
+        clientCreditNotesRaw,
+        brokerCreditNotesRaw,
+        companyCreditNotesRaw,
+        expenses,
+      };
+    },
+  });
 
-  // Refetch when external actions (e.g. RecalcProfitsButton, policy create
-  // from the wizard) signal that policy data has changed. Avoids the user
-  // having to manually reload the accounting page to see fresh numbers.
+  // External signals (RecalcProfitsButton, policy wizard) want a
+  // fresh fetch — invalidate the shared cache key so EVERY mounted
+  // section refreshes off one network call.
   useEffect(() => {
-    const handler = () => fetchAll();
+    const handler = () => queryClient.invalidateQueries({ queryKey });
     window.addEventListener('thiqa:policy-created', handler);
     return () => window.removeEventListener('thiqa:policy-created', handler);
-  }, [fetchAll]);
+  }, [queryClient, queryKey]);
 
+  // Section slices come straight off the cached payload — no per-
+  // section state, no second fetch.
+  const payload = data ?? EMPTY_PAYLOAD;
+  const {
+    companies,
+    brokers,
+    policies,
+    companySettlements,
+    brokerSettlements,
+    clientPaymentsRaw,
+    clientCancellationsRaw,
+    clientDisbursementsRaw,
+    clientCreditNotesRaw,
+    brokerCreditNotesRaw,
+    companyCreditNotesRaw,
+    expenses,
+  } = payload;
+
+  // Optimistic in-place patch for a single sub-policy. Edits the
+  // cached payload directly via React Query so every section sees
+  // the new value without refetching.
   const patchSubPolicy = useCallback((subId: string, patch: Partial<SubPolicy>) => {
-    setPolicies((prev) =>
-      prev.map((row) => {
+    queryClient.setQueryData<AccountingDataPayload>(queryKey, (prev) => {
+      if (!prev) return prev;
+      const nextPolicies = prev.policies.map((row) => {
         const idx = row.sub_policies.findIndex((s) => s.id === subId);
         if (idx === -1) return row;
         const nextSubs = row.sub_policies.slice();
@@ -1009,9 +1056,10 @@ export function useAccountingData(
           ...aggregate,
           manual_override: nextSubs.some((s) => s.manual_override),
         };
-      }),
-    );
-  }, []);
+      });
+      return { ...prev, policies: nextPolicies };
+    });
+  }, [queryClient, queryKey]);
 
   // ---- Apply filters client-side ----
   // Memoized so a parent re-render driven by an unrelated state change
@@ -1091,8 +1139,13 @@ export function useAccountingData(
     return rows.reduce((s, r) => s + Number(r.amount ?? 0), 0);
   }, [expenses, filters]);
 
+  const refresh = useCallback(
+    async () => { await queryClient.invalidateQueries({ queryKey }); },
+    [queryClient, queryKey],
+  );
+
   return {
-    loading,
+    loading: isLoading,
     companies,
     brokers,
     issuances,
@@ -1107,7 +1160,7 @@ export function useAccountingData(
     brokerCreditNotes: filteredBrokerCreditNotes,
     companyCreditNotes: filteredCompanyCreditNotes,
     expensesTotal,
-    refresh: fetchAll,
+    refresh,
     patchSubPolicy,
   };
 }
