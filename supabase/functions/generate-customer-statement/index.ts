@@ -1847,13 +1847,17 @@ function buildStatementHtml(args: BuildArgs): string {
     .ledger-table .direction-debit {
       background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5;
     }
-    /* Unified event ledger — per-row tint so the customer scans by color */
+    /* Unified event ledger — per-row tint so the customer scans by
+       color. Credit-side events (sit in the دائن column, reduce
+       customer's debt) tint green; debit-side events (مدين column,
+       grow the debt) tint red/rose. Cancellations/transfers stay
+       amber as a "neutral notation" family. */
     .ledger-table .event-transaction td       { background: #fffefb; }
     .ledger-table .event-inactive td          { background: #fafafa; opacity: 0.78; }
     .ledger-table .event-reversal td          { background: #fff7ed; }
     .ledger-table .event-payment td           { background: #f0fdf4; }
-    .ledger-table .event-credit-note td       { background: #fef2f2; }
-    .ledger-table .event-disbursement td      { background: #fef2f2; }
+    .ledger-table .event-credit-note td       { background: #ecfdf5; }
+    .ledger-table .event-disbursement td      { background: #eff6ff; }
     .ledger-table .event-cancel-receipt td    { background: #fef2f2; }
     .ledger-table .event-debit-note td        { background: #ffe4e6; }
     .ledger-table .event-headline {

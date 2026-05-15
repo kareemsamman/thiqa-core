@@ -748,29 +748,35 @@ export function DebtPaymentModal({
           }
         }
       }
-      const { data: walletAdjustmentRows } = await supabase
-        .from('customer_wallet_transactions')
-        .select('amount, transaction_type')
+      // Pull the receipts that affect the customer's outstanding —
+      // credit_note SUBTRACTS, debit_note ADDS, disbursements stay
+      // independent (per the user's "each voucher is independent" rule
+      // mirrored in the kashf). Matches generate-customer-statement
+      // exactly so the payment ceiling here = the kashf's المتبقي.
+      const { data: clientReceiptRows } = await supabase
+        .from('receipts')
+        .select('amount, receipt_type, cancelled_at')
         .eq('client_id', clientId)
-        .in('transaction_type', ['credit_consumed', 'manual_debit'])
-        .is('settled_at', null);
-      let creditConsumedTotal = 0;
-      let manualDebitTotal = 0;
-      for (const r of (walletAdjustmentRows ?? []) as any[]) {
-        const amt = Number(r.amount || 0);
-        if (r.transaction_type === 'credit_consumed') creditConsumedTotal += amt;
-        else if (r.transaction_type === 'manual_debit') manualDebitTotal += amt;
+        .in('receipt_type', ['credit_note', 'debit_note'])
+        .is('cancelled_at', null);
+      let creditNotesIssuedTotal = 0;
+      let debitNotesBilledTotal = 0;
+      for (const r of (clientReceiptRows ?? []) as any[]) {
+        const amt = Math.abs(Number(r.amount || 0));
+        if (r.receipt_type === 'credit_note') creditNotesIssuedTotal += amt;
+        else if (r.receipt_type === 'debit_note') debitNotesBilledTotal += amt;
       }
-      // manual_debit (إشعار مدين) ADDS to the customer's outstanding —
-      // same direction as the policy debt itself. transfer_office_pays
-      // and credit_consumed REDUCE it.
+      // kashf-aligned formula:
+      //   billed   = office_claim + transfer_customer_pays + debit_notes
+      //   credits  = paid + credit_notes + transfer_office_pays
+      //   ceiling  = max(0, billed - credits)
       const kashfTotal = Math.max(
         0,
         officeClaimSum
           + transferCustomerPaysSum
-          + manualDebitTotal
+          + debitNotesBilledTotal
           - grossPaid
-          - creditConsumedTotal
+          - creditNotesIssuedTotal
           - transferOfficePaysSum,
       );
       setKashfOutstanding(kashfTotal);

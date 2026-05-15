@@ -995,22 +995,49 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
         }
       });
 
-      // Transfer adjustments where the customer owes the office
-      // (تكلفة التحويل على الزبون). These live on policy_transfers,
-      // not on a policy's office_commission, so they have to be
-      // added to the debt total explicitly — the kashf already does
-      // the same in totalYearAmount. Without this, a transfer fee
-      // shows in the kashf but is missing from the in-app card.
+      // Transfer adjustments — both directions:
+      //   • customer_pays: ADDS to debt (تكلفة التحويل على الزبون)
+      //   • office_pays:   SUBTRACTS from debt (المكتب بيرجّع للزبون)
+      // The kashf nets both inside yearBalance; without this the
+      // tile drifts whenever a transfer involves a refund leg.
       const allClientPolicyIds = (everyPolicyRow || []).map((p: any) => p.id);
       let transferCustomerPaysTotal = 0;
+      let transferOfficePaysTotal = 0;
       if (allClientPolicyIds.length > 0) {
         const { data: transferRows } = await supabase
           .from('policy_transfers')
           .select('adjustment_amount, adjustment_type')
           .in('policy_id', allClientPolicyIds);
-        transferCustomerPaysTotal = (transferRows || [])
-          .filter((t: any) => t.adjustment_type === 'customer_pays')
-          .reduce((s: number, t: any) => s + Number(t.adjustment_amount || 0), 0);
+        for (const t of (transferRows || []) as any[]) {
+          const amt = Number(t.adjustment_amount || 0);
+          if (amt <= 0.01) continue;
+          if (t.adjustment_type === 'customer_pays') transferCustomerPaysTotal += amt;
+          else if (t.adjustment_type === 'office_pays') transferOfficePaysTotal += amt;
+        }
+      }
+
+      // Receipts the office issued to the customer this whole time —
+      // both flavours reduce the customer's debt and so must be
+      // subtracted from the running outstanding to match the kashf.
+      //   • credit_note: paper credit (wallet IOU)
+      //   • disbursement: cash actually paid back
+      //   • debit_note:   ADDS to debt (we charged him extra)
+      // Cancelled receipts (cancelled_at != null) are skipped — same
+      // rule as the kashf's filter.
+      const { data: clientReceiptRows } = await supabase
+        .from('receipts')
+        .select('amount, receipt_type, cancelled_at')
+        .eq('client_id', client.id)
+        .in('receipt_type', ['credit_note', 'disbursement', 'debit_note'])
+        .is('cancelled_at', null);
+      let totalCreditNotesIssued = 0;
+      let totalDisbursementsPaid = 0;
+      let totalDebitNotesBilled = 0;
+      for (const r of (clientReceiptRows ?? []) as any[]) {
+        const amt = Math.abs(Number(r.amount || 0));
+        if (r.receipt_type === 'credit_note') totalCreditNotesIssued += amt;
+        else if (r.receipt_type === 'disbursement') totalDisbursementsPaid += amt;
+        else if (r.receipt_type === 'debit_note') totalDebitNotesBilled += amt;
       }
 
       // Wallet credit consumed by a new transaction at sale time
@@ -1034,22 +1061,42 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
         else if (r.transaction_type === 'manual_debit') totalManualDebit += amt;
       }
 
-      // Outstanding = the kashf's exact formula plus manual_debit on
-      // top. Pulling grossPaid (not clientPaid clamped per package) is
-      // the crucial change: payments mirrored onto a transfer
-      // DESTINATION policy (e.g. 226 in a 224→226 ELZAMI transfer)
-      // sit outside policiesData because we filter destinations out,
-      // so clientPaid's per-package clamp loses them. The kashf's
-      // totalYearPaid sweeps every policy_payments row of the
-      // customer (refused/إلزامي passthrough excluded) — grossPaid
-      // already does the same.
+      // Outstanding = the kashf's exact formula. Mirrors the printed
+      // كشف totals box so the tile and the printout never disagree:
+      //   billed   = policy office_claim + transfer_customer_pays + debit_notes
+      //   credits  = paid + credit_notes + transfer_office_pays
+      //   remaining = max(0, billed - credits)
+      //
+      // We pull debit/credit/disbursement amounts from RECEIPTS (not
+      // the wallet) to match exactly what generate-customer-statement
+      // does — using the wallet would double-count, since each
+      // credit_note / debit_note already writes a paired wallet entry
+      // and the kashf reads from receipts only. Disbursements aren't
+      // in the kashf credit total either ("each voucher is independent
+      // — سند صرف doesn't auto-settle a credit_note"); we follow that
+      // rule here for consistency.
+      //
+      // grossPaid (not clientPaid clamped per package) is critical:
+      // payments mirrored onto a transfer DESTINATION policy sit
+      // outside policiesData because we filter destinations out, so
+      // clientPaid's per-package clamp loses them. grossPaid sweeps
+      // every policy_payments row (refused / إلزامي passthrough
+      // excluded), exactly like the kashf's totalYearPaid.
+      void totalManualDebit;        // wallet mirror of debit_notes — kept for legacy callers
+      void totalCreditConsumed;     // legacy netting — superseded by credit_note subtraction below
+      void totalDisbursementsPaid;  // independent voucher per user rule — not netted here
       const grossPaidEffective = grossPaid;
+      const billedTotal =
+        clientOwed
+        + transferCustomerPaysTotal
+        + totalDebitNotesBilled;
+      const creditsTotal =
+        grossPaidEffective
+        + totalCreditNotesIssued
+        + transferOfficePaysTotal;
       setPaymentSummary({
         total_paid: grossPaidEffective,
-        total_remaining: Math.max(
-          0,
-          clientOwed - grossPaidEffective + transferCustomerPaysTotal - totalCreditConsumed + totalManualDebit,
-        ),
+        total_remaining: Math.max(0, billedTotal - creditsTotal),
         total_profit: totalProfit,
       });
       setBrokerDebts(Array.from(brokerTotals.values()));
