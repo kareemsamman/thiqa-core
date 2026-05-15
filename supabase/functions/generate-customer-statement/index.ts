@@ -2032,6 +2032,88 @@ function buildStatementHtml(args: BuildArgs): string {
       padding: 6px 14px; border-radius: 999px;
     }
     .actions button:hover { background: rgba(255,255,255,0.15); }
+
+    /* Horizontal scroll wrapper so the ledger table never forces
+       the whole page to scroll — only the table itself does. */
+    .ledger-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+    /* ── Mobile (≤640px) ───────────────────────────────────────
+       The fixed table column widths + 4-up customer grid don't fit
+       on a phone. We stack the header, drop the customer grid to
+       2 columns, shrink paddings/fonts, and let the table scroll
+       horizontally inside its own wrapper. */
+    @media (max-width: 640px) {
+      body { padding: 8px 4px; font-size: 12px; }
+      .sheet { padding: 14px 10px; }
+
+      .sheet-top {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 14px;
+        padding-bottom: 14px;
+        margin-bottom: 16px;
+      }
+      .brand, .doc-meta { max-width: 100%; min-width: 0; }
+      .brand img { max-height: 48px; max-width: 160px; }
+      .brand .name { font-size: 15px; }
+      .doc-meta { text-align: right; }
+      .doc-meta .title { font-size: 22px; }
+      .doc-meta .year-line {
+        font-size: 15px;
+        direction: rtl;
+        text-align: right;
+      }
+      .meta-rows { font-size: 11px; }
+      .meta-rows .label { flex: 0 0 92px; padding: 5px 8px; }
+      .meta-rows .val { padding: 5px 8px; }
+
+      .customer-grid { grid-template-columns: 1fr 1fr; }
+      .customer-grid .cell { padding: 7px 9px; }
+      .customer-grid .cell:nth-child(3) { border-right: none; }
+      .customer-grid .cell:nth-child(n+3) { border-top: 1px solid #1a1a1a; }
+      .customer-grid .label { font-size: 9.5px; }
+      .customer-grid .value { font-size: 12px; }
+
+      .ledger { margin-bottom: 18px; }
+      .ledger-legend {
+        font-size: 10px;
+        gap: 8px;
+        padding: 6px 10px;
+        line-height: 1.5;
+      }
+      .ledger-legend .legend-note { width: 100%; margin-right: 0; }
+
+      .ledger-table { font-size: 10.5px; min-width: 560px; }
+      .ledger-table thead th,
+      .ledger-table tbody td { padding: 6px 6px; }
+      .ledger-table .event-headline { font-size: 11.5px; line-height: 1.45; }
+      .ledger-table .event-sublines { font-size: 10.5px; margin-top: 3px; }
+      .ledger-table .line-item .line-amount { min-width: 56px; }
+      .ledger-table .th-main { font-size: 10px; }
+      .ledger-table .th-sub { font-size: 9px; }
+
+      .totals { justify-content: stretch; }
+      .totals-box { min-width: 0; width: 100%; }
+      .totals-row { padding: 8px 12px; }
+      .totals-label { font-size: 11.5px; }
+      .totals-value { font-size: 12.5px; }
+      .totals-row.totals-final .totals-value { font-size: 13.5px; }
+      .totals-hint { font-size: 9.5px; }
+
+      .overall-note { font-size: 11.5px; padding: 10px 12px; }
+
+      .actions { bottom: 12px; padding: 8px 12px; font-size: 12px; }
+      .actions button { padding: 5px 12px; }
+    }
+
+    /* Very narrow phones (≤360px) — shave a touch more. */
+    @media (max-width: 360px) {
+      .doc-meta .title { font-size: 20px; }
+      .customer-grid { grid-template-columns: 1fr; }
+      .customer-grid .cell:nth-child(even) { border-right: none; }
+      .customer-grid .cell:nth-child(3) { border-right: none; }
+      .customer-grid .cell:nth-child(n+2) { border-top: 1px solid #1a1a1a; }
+    }
   </style>
 </head>
 <body>
@@ -2082,23 +2164,25 @@ function buildStatementHtml(args: BuildArgs): string {
         <span class="legend-item"><span class="legend-dot legend-credit"></span><strong>دائن (−)</strong> — يطرح من دين العميل (سند قبض / إشعار دائن / سند صرف)</span>
         <span class="legend-item legend-note">اضغط على رقم السند لعرض الوثيقة الأصلية</span>
       </div>
-      <table class="ledger-table">
-        <thead>
-          <tr>
-            <th style="width:90px">رقم السند</th>
-            <th style="width:85px">التاريخ</th>
-            <th>البيان</th>
-            <th style="width:100px">
-              <span class="th-main">مدين</span>
-            </th>
-            <th style="width:100px">
-              <span class="th-main">دائن</span>
-            </th>
-            <th style="width:110px">الرصيد</th>
-          </tr>
-        </thead>
-        <tbody>${ledgerRowsHtml}${emptyLedgerHtml}</tbody>
-      </table>
+      <div class="ledger-scroll">
+        <table class="ledger-table">
+          <thead>
+            <tr>
+              <th style="width:90px">رقم السند</th>
+              <th style="width:85px">التاريخ</th>
+              <th>البيان</th>
+              <th style="width:100px">
+                <span class="th-main">مدين</span>
+              </th>
+              <th style="width:100px">
+                <span class="th-main">دائن</span>
+              </th>
+              <th style="width:110px">الرصيد</th>
+            </tr>
+          </thead>
+          <tbody>${ledgerRowsHtml}${emptyLedgerHtml}</tbody>
+        </table>
+      </div>
     </div>
 
     ${totalsHtml}
