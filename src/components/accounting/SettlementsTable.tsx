@@ -99,6 +99,10 @@ interface Props {
    *  and supply the entity context for edit. */
   onEdit?: (row: SettlementRow) => void;
   onDelete?: (row: SettlementRow) => Promise<void> | void;
+  /** Click handler for the رقم السند cell — opens the shared
+   *  print/SMS/WhatsApp dialog. When omitted, the voucher cell is
+   *  rendered as plain text. */
+  onVoucherClick?: (row: SettlementRow) => void;
   /** Deep-link target — when present, the matching row scrolls into
    *  view, gets a brief highlight, and the customer-cheque accordion
    *  auto-opens for cheque-style settlements. */
@@ -117,6 +121,7 @@ export function SettlementsTable({
   entityLabel,
   onEdit,
   onDelete,
+  onVoucherClick,
   focusSettlementId,
   onSettlementChanged,
 }: Props) {
@@ -147,6 +152,7 @@ export function SettlementsTable({
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/40">
+              {showCol('voucher_number') && <TableHead className="whitespace-nowrap min-w-[110px]">رقم السند</TableHead>}
               {showCol('date') && <TableHead className="whitespace-nowrap min-w-[120px]">التاريخ</TableHead>}
               {showCol('entity') && <TableHead className="whitespace-nowrap min-w-[180px]">{entityLabel}</TableHead>}
               {showCol('amount') && <TableHead className="whitespace-nowrap min-w-[120px]">المبلغ</TableHead>}
@@ -213,6 +219,24 @@ export function SettlementsTable({
                     toggle();
                   }}
                 >
+                  {showCol('voucher_number') && (
+                    <TableCell className="text-sm whitespace-nowrap font-mono ltr-nums">
+                      {r.voucher_number && onVoucherClick ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onVoucherClick(r);
+                          }}
+                          className="text-blue-600 underline-offset-2 hover:underline focus:outline-none focus-visible:underline"
+                        >
+                          {r.voucher_number}
+                        </button>
+                      ) : (
+                        <span className="text-muted-foreground">{r.voucher_number ?? 'تسوية'}</span>
+                      )}
+                    </TableCell>
+                  )}
                   {showCol('date') && (
                     <TableCell className="text-sm whitespace-nowrap">
                       <div className="flex items-center gap-1">

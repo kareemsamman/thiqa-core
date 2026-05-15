@@ -208,8 +208,12 @@ export function BrokersSection({ focusSettlementId, branchId }: BrokersSectionPr
     ISSUANCE_DEFAULT_VISIBLE,
     ISSUANCE_KEYS,
   );
+  // v4 forces a clean reset so the newly-added voucher_number column
+  // (required: true) is included for users who already had v3 cached
+  // without it. Without the bump, those users would never see رقم
+  // السند on سند الصرف / سند القبض.
   const settlementCols = useTableColumnVisibility(
-    'accounting-brokers-settlements-v3',
+    'accounting-brokers-settlements-v4',
     SETTLEMENT_DEFAULT_VISIBLE,
     SETTLEMENT_KEYS,
   );
@@ -720,6 +724,7 @@ export function BrokersSection({ focusSettlementId, branchId }: BrokersSectionPr
             entityLabel="الوسيط"
             onEdit={handleEdit}
             onDelete={handleDelete}
+            onVoucherClick={openSettlementVoucher}
             focusSettlementId={focusSettlementId}
             onSettlementChanged={() => data.refresh()}
           />
@@ -734,6 +739,7 @@ export function BrokersSection({ focusSettlementId, branchId }: BrokersSectionPr
             entityLabel="الوسيط"
             onEdit={handleEdit}
             onDelete={handleDelete}
+            onVoucherClick={openSettlementVoucher}
             focusSettlementId={focusSettlementId}
             onSettlementChanged={() => data.refresh()}
           />

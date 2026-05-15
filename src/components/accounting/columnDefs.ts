@@ -46,6 +46,7 @@ export const BROKER_ISSUANCE_COLUMNS: ColumnOption[] = [
 export const ISSUANCE_DEFAULT_OFF = new Set(['client_id_number', 'client_phone']);
 
 export const SETTLEMENT_COLUMNS: ColumnOption[] = [
+  { key: 'voucher_number', label: 'رقم السند', required: true },
   { key: 'date', label: 'التاريخ', required: true },
   { key: 'entity', label: 'الجهة', required: true },
   { key: 'amount', label: 'المبلغ', required: true },

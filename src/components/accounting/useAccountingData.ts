@@ -700,23 +700,77 @@ export function useAccountingData(
       if (agentId) bsQuery = bsQuery.eq('agent_id', agentId);
       if (branchId) bsQuery = bsQuery.eq('branch_id', branchId);
       const { data: bsData } = await bsQuery;
-      const bsRows: SettlementRow[] = ((bsData ?? []) as unknown as RawBrokerSettlement[]).map((s) => ({
-        id: s.id,
-        settlement_date: s.settlement_date,
-        total_amount: Number(s.total_amount ?? 0),
-        payment_type: s.payment_type,
-        cheque_number: s.cheque_number,
-        bank_code: s.bank_code,
-        branch_code: s.branch_code,
-        cheque_image_urls: hydrateChequeImages(s.cheque_image_urls, s.cheque_image_url),
-        customer_cheque_count: Array.isArray(s.customer_cheque_ids) ? s.customer_cheque_ids.length : 0,
-        status: s.status,
-        refused: s.refused,
-        notes: s.notes,
-        direction: s.direction,
-        entity_id: s.broker_id ?? null,
-        entity_name: s.brokers?.name ?? null,
-      }));
+      const bsRowsBase = (bsData ?? []) as unknown as RawBrokerSettlement[];
+
+      // Mirror lookup — same shape as the company-settlements mirror
+      // hydration above. Brokers do their mirror at the app-layer (per
+      // persistSettlementLines), not via trigger, so older rows that
+      // were saved before the mirror feature shipped still won't have
+      // a receipts row; for those, voucher_number falls through to
+      // cheque_number on display.
+      const bsIds = bsRowsBase.map((s) => s.id);
+      const brokerMirrorById = new Map<string, {
+        voucher_number: string | null;
+        receipt_id: string;
+        receipt_type: string;
+        payment_id: string | null;
+      }>();
+      if (bsIds.length > 0) {
+        const { data: bMirrorRows } = await supabase
+          .from('receipts')
+          .select('id, broker_settlement_id, voucher_number, receipt_number, receipt_date, receipt_type, payment_id')
+          .in('broker_settlement_id', bsIds);
+        for (const m of (bMirrorRows ?? []) as Array<{
+          id: string;
+          broker_settlement_id: string;
+          voucher_number: string | null;
+          receipt_number: number | null;
+          receipt_date: string | null;
+          receipt_type: string;
+          payment_id: string | null;
+        }>) {
+          if (!m.broker_settlement_id) continue;
+          let label = m.voucher_number;
+          if (!label && m.receipt_number != null) {
+            const yr = m.receipt_date
+              ? new Date(m.receipt_date).getFullYear()
+              : new Date().getFullYear();
+            const prefix = m.receipt_type === 'disbursement' ? 'D' : 'R';
+            label = `${prefix}${m.receipt_number}/${yr}`;
+          }
+          brokerMirrorById.set(m.broker_settlement_id, {
+            receipt_id: m.id,
+            voucher_number: label,
+            receipt_type: m.receipt_type,
+            payment_id: m.payment_id,
+          });
+        }
+      }
+
+      const bsRows: SettlementRow[] = bsRowsBase.map((s) => {
+        const mirror = brokerMirrorById.get(s.id) ?? null;
+        return {
+          id: s.id,
+          settlement_date: s.settlement_date,
+          total_amount: Number(s.total_amount ?? 0),
+          payment_type: s.payment_type,
+          cheque_number: s.cheque_number,
+          bank_code: s.bank_code,
+          branch_code: s.branch_code,
+          cheque_image_urls: hydrateChequeImages(s.cheque_image_urls, s.cheque_image_url),
+          customer_cheque_count: Array.isArray(s.customer_cheque_ids) ? s.customer_cheque_ids.length : 0,
+          status: s.status,
+          refused: s.refused,
+          notes: s.notes,
+          direction: s.direction,
+          entity_id: s.broker_id ?? null,
+          entity_name: s.brokers?.name ?? null,
+          voucher_number: mirror?.voucher_number ?? null,
+          receipt_id: mirror?.receipt_id ?? null,
+          receipt_type: mirror?.receipt_type ?? null,
+          payment_id: mirror?.payment_id ?? null,
+        };
+      });
       setBrokerSettlements(bsRows);
 
       // 6. Client receipts — fetch every flavor that hits a client's
