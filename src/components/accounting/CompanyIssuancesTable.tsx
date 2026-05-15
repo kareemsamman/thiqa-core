@@ -479,17 +479,16 @@ export function CompanyIssuancesTable({
                                 او الطباعة"). Rows with 0 or >1
                                 receipts keep the existing drawer
                                 pill behavior. */}
-                            {row.receipts_count === 1 && row.primary_receipt && onPrimaryReceiptClick ? (
+                            {row.receipts_count === 1 && row.primary_receipt && onPrimaryReceiptClick && row.primary_receipt.voucher_number ? (
                               <button
                                 type="button"
                                 onClick={() => onPrimaryReceiptClick(rawRow)}
                                 className={cn(
-                                  'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-mono ltr-nums transition-colors',
-                                  'border-emerald-500/30 text-emerald-700 bg-emerald-500/5 hover:bg-emerald-500/10',
+                                  'inline-flex items-center gap-1 text-xs font-mono ltr-nums',
+                                  'text-blue-600 hover:text-blue-700 underline underline-offset-2 transition-colors',
                                 )}
                               >
-                                <Receipt className="h-3.5 w-3.5" />
-                                {row.primary_receipt.voucher_number ?? '1 سند'}
+                                {row.primary_receipt.voucher_number}
                               </button>
                             ) : (
                               <button

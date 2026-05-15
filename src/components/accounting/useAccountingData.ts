@@ -357,31 +357,76 @@ export function useAccountingData(
           receiptsByPolicy.set(p.policy_id, cur);
         });
 
-        // Separate query for the mirror receipts — joining clients so
-        // the dialog can send via SMS / WhatsApp without a follow-up
-        // lookup. Filtered to payment-type mirrors that aren't
-        // cancelled so the cell can't open a stale voucher.
+        // Separate query for the mirror receipts. We also pull
+        // receipt_number + receipt_date so we can synthesize the
+        // user-facing R{n}/{year} label when voucher_number is NULL
+        // (the trigger-mirrored case for some legacy payment rows).
+        // Joining clients so the action dialog can send via SMS /
+        // WhatsApp without a follow-up lookup.
         const { data: payMirrors } = await supabase
           .from('receipts')
           .select(
-            'id, policy_id, voucher_number, receipt_type, payment_id, cancelled_at, clients(phone_number)',
+            'id, policy_id, voucher_number, receipt_number, receipt_date, receipt_type, payment_id, cancelled_at, clients(phone_number)',
           )
           .in('policy_id', policyIds)
           .eq('receipt_type', 'payment');
+
+        // Look up the shared session label on policy_payments — that's
+        // the R-number a single bulk سند قبض stamps across all its
+        // policy-share rows. Prefer it over the per-receipt serial so
+        // multi-policy sessions print the same number everywhere.
+        const mirrorPaymentIds = Array.from(
+          new Set(
+            ((payMirrors ?? []) as Array<{ payment_id: string | null }>)
+              .map((m) => m.payment_id)
+              .filter((id): id is string => !!id),
+          ),
+        );
+        const sessionReceiptByPaymentId = new Map<string, string>();
+        if (mirrorPaymentIds.length > 0) {
+          const { data: payMeta } = await supabase
+            .from('policy_payments')
+            .select('id, receipt_number')
+            .in('id', mirrorPaymentIds);
+          for (const p of (payMeta ?? []) as Array<{
+            id: string;
+            receipt_number: string | null;
+          }>) {
+            if (p.receipt_number) sessionReceiptByPaymentId.set(p.id, p.receipt_number);
+          }
+        }
+
         for (const m of (payMirrors ?? []) as Array<{
           id: string;
           policy_id: string | null;
           voucher_number: string | null;
+          receipt_number: number | null;
+          receipt_date: string | null;
           receipt_type: string;
           payment_id: string | null;
           cancelled_at: string | null;
           clients?: { phone_number: string | null } | null;
         }>) {
           if (!m.policy_id || m.cancelled_at) continue;
+          // Cascade: explicit voucher_number → shared session label
+          // from policy_payments → synthesized R{serial}/{year} from
+          // receipts.receipt_number. Last-resort null means the cell
+          // hides the receipts pill — but with this cascade that
+          // should be vanishingly rare.
+          let label = m.voucher_number;
+          if (!label && m.payment_id && sessionReceiptByPaymentId.has(m.payment_id)) {
+            label = sessionReceiptByPaymentId.get(m.payment_id)!;
+          }
+          if (!label && m.receipt_number != null) {
+            const yr = m.receipt_date
+              ? new Date(m.receipt_date).getFullYear()
+              : new Date().getFullYear();
+            label = `R${m.receipt_number}/${yr}`;
+          }
           const arr = paymentMirrorsByPolicy.get(m.policy_id) ?? [];
           arr.push({
             receipt_id: m.id,
-            voucher_number: m.voucher_number,
+            voucher_number: label,
             receipt_type: m.receipt_type,
             payment_id: m.payment_id,
             client_phone: m.clients?.phone_number ?? null,

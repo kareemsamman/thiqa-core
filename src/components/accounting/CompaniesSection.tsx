@@ -775,25 +775,6 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
               sort: true,
             }}
           />
-          {/* Print — prints whatever rowset the active tab is showing
-              (issuances / returns / settlements / receipts). Was
-              removed during the toolbar cleanup; brought back per
-              user request. */}
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="gap-2"
-            onClick={handlePrint}
-            disabled={printing || data.loading}
-          >
-            {printing ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Printer className="h-3.5 w-3.5" />
-            )}
-            <span className="hidden sm:inline">طباعة</span>
-          </Button>
         </div>
       </div>
 
@@ -926,6 +907,31 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
           />
         </TabsContent>
       </Tabs>
+
+      {/* Sticky floating print bar — same visual as the kashf modal's
+          floating actions. Pinned to the bottom of the viewport so
+          it's always within reach regardless of scroll position.
+          Prints whatever rowset the active tab is currently showing
+          (so filters / sort / search are all honored). */}
+      <div className="fixed bottom-5 inset-x-0 z-40 flex justify-center pointer-events-none">
+        <div className="pointer-events-auto bg-foreground text-background rounded-full shadow-2xl px-4 py-1.5">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={handlePrint}
+            disabled={printing || data.loading}
+            className="gap-2 text-background hover:bg-background/10 hover:text-background rounded-full"
+          >
+            {printing ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Printer className="h-4 w-4" />
+            )}
+            <span>طباعة الإصدارات</span>
+          </Button>
+        </div>
+      </div>
 
       <ReceiptActionsDialog
         row={voucherActionRow}
