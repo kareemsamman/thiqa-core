@@ -2,6 +2,7 @@ import { ReactNode, useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Table,
@@ -16,6 +17,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import {
+  ArrowDownLeft,
   ArrowDownRight,
   ArrowUpRight,
   CalendarRange,
@@ -493,12 +495,19 @@ export function BrokersSection({ focusSettlementId, branchId }: BrokersSectionPr
 
   return (
     <div className="space-y-2.5">
+      {/* Summary card grid — same visual as the companies + customers
+          sections. Four pills for now (sell / remaining / received /
+          profit); each card carries an icon bubble in a tinted colour
+          + label + tabular value + hint subtitle, with a tooltip for
+          the breakdown math. */}
       <TooltipProvider delayDuration={150}>
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-2 rounded-lg border bg-card p-3 sm:flex sm:flex-wrap sm:items-center sm:gap-2 sm:p-0 sm:px-3 sm:py-2">
-          <SummaryPill
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <BrokerPillCard
+            icon={FileText}
+            tone="slate"
             label="سعر البيع للعميل"
             value={fmt(totals.sellSum)}
-            tone="primary"
+            hint={`${totals.activeCount} معاملة`}
             tooltip={
               <BreakdownLines
                 title="سعر البيع للعميل"
@@ -509,27 +518,32 @@ export function BrokersSection({ focusSettlementId, branchId }: BrokersSectionPr
               />
             }
           />
-          <Sep />
-          <SummaryPill
+          <BrokerPillCard
+            icon={ArrowUpRight}
+            tone="rose"
             label="المتبقي على الوسطاء"
             value={fmt(totals.remainingFromBrokersSum)}
-            tone="destructive"
+            hint="بعد المقبوض والإشعارات"
             tooltip={
               <BreakdownLines
                 title="المتبقي على الوسطاء (الصافي)"
                 lines={[
                   { label: 'إجمالي مستحق', value: fmt(totals.grossDueFromBrokers) },
                   { label: 'مقبوض من الوسطاء', value: `− ${fmt(totals.receivedSum)}` },
+                  ...(totals.brokerCreditNotesSum > 0
+                    ? [{ label: 'إشعار مدين', value: `− ${fmt(totals.brokerCreditNotesSum)}` }]
+                    : []),
                   { label: 'المتبقي', value: fmt(totals.remainingFromBrokersSum), strong: true },
                 ]}
               />
             }
           />
-          <Sep />
-          <SummaryPill
+          <BrokerPillCard
+            icon={ArrowDownLeft}
+            tone="emerald"
             label="مقبوض من الوسطاء"
             value={fmt(totals.receivedSum)}
-            tone="emerald"
+            hint={`${receipts.filter((r) => !r.refused).length} سند قبض`}
             tooltip={
               <BreakdownLines
                 title="مقبوض من الوسطاء"
@@ -543,11 +557,12 @@ export function BrokersSection({ focusSettlementId, branchId }: BrokersSectionPr
               />
             }
           />
-          <Sep />
-          <SummaryPill
+          <BrokerPillCard
+            icon={TrendingUp}
+            tone="emerald"
             label="الربح"
             value={fmt(totals.profitSum)}
-            tone="success"
+            hint="من إصدارات الوسطاء"
             tooltip={
               <BreakdownLines
                 title="الربح من الوسطاء"
@@ -798,41 +813,57 @@ export function BrokersSection({ focusSettlementId, branchId }: BrokersSectionPr
   );
 }
 
-function Sep() {
-  return <span className="h-5 w-px bg-border hidden sm:inline-block" />;
-}
+// BrokerPillCard — mirrors CompanyPillCard from the companies section
+// so both surfaces share the same visual vocabulary. Icon bubble in a
+// tinted colour + label + tabular value + optional hint subtitle;
+// breakdown tooltip on hover when supplied.
+const BR_TONE_CLASSES: Record<string, { bg: string; text: string }> = {
+  slate: { bg: 'bg-slate-500/10', text: 'text-slate-700' },
+  emerald: { bg: 'bg-emerald-500/10', text: 'text-emerald-700' },
+  amber: { bg: 'bg-amber-500/10', text: 'text-amber-700' },
+  indigo: { bg: 'bg-indigo-500/10', text: 'text-indigo-700' },
+  sky: { bg: 'bg-sky-500/10', text: 'text-sky-700' },
+  rose: { bg: 'bg-rose-500/10', text: 'text-rose-700' },
+};
 
-function SummaryPill({
+function BrokerPillCard({
+  icon: Icon,
+  tone,
   label,
   value,
-  tone,
+  hint,
   tooltip,
 }: {
+  icon: LucideIcon;
+  tone: keyof typeof BR_TONE_CLASSES;
   label: string;
   value: string;
-  tone: 'primary' | 'success' | 'amber' | 'emerald' | 'destructive';
+  hint?: string;
   tooltip?: ReactNode;
 }) {
-  const cls =
-    tone === 'primary'
-      ? 'text-primary'
-      : tone === 'success'
-      ? 'text-emerald-600'
-      : tone === 'amber'
-      ? 'text-amber-600'
-      : tone === 'destructive'
-      ? 'text-destructive'
-      : 'text-emerald-700';
-  const pill = (
-    <div className="inline-flex items-center gap-1.5 px-1 cursor-help">
-      <span className="text-[11px] text-muted-foreground">{label}</span>
-      <span className={`text-sm font-bold tabular-nums ${cls}`}>{value}</span>
-    </div>
+  const cls = BR_TONE_CLASSES[tone];
+  const card = (
+    <Card className={tooltip ? 'cursor-help' : undefined}>
+      <CardContent className="py-3 px-4 flex items-center gap-3">
+        <div className={`h-9 w-9 rounded-xl ${cls.bg} flex items-center justify-center shrink-0`}>
+          <Icon className={`h-4 w-4 ${cls.text}`} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-xs text-muted-foreground truncate">{label}</p>
+          <p className={`text-lg font-bold tabular-nums ${cls.text} whitespace-nowrap`}>
+            {value}
+          </p>
+          {hint ? (
+            <p className="text-[10px] text-muted-foreground truncate">{hint}</p>
+          ) : null}
+        </div>
+      </CardContent>
+    </Card>
   );
-  if (!tooltip) return pill;
+  if (!tooltip) return card;
   return (
     <Tooltip>
-      <TooltipTrigger asChild>{pill}</TooltipTrigger>
+      <TooltipTrigger asChild>{card}</TooltipTrigger>
       <TooltipContent side="bottom" className="p-2.5 max-w-xs">
         {tooltip}
       </TooltipContent>
