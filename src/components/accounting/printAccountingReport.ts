@@ -12,10 +12,24 @@ interface ReportPayload {
   subtitle?: string;
   meta?: { label: string; value: string }[];
   stats: { label: string; value: string; tone?: StatTone }[];
-  columns: { key: string; label: string; align?: 'right' | 'left' | 'center' }[];
+  columns: {
+    key: string;
+    label: string;
+    align?: 'right' | 'left' | 'center';
+    /** When true the column shows on screen (clickable links etc.) but
+     *  the @media print rule in the edge function hides it. Used for
+     *  reference numbers the user wants accessible from the preview
+     *  but absent from the printed paper. */
+    print_hide?: boolean;
+  }[];
   rows: Record<string, string | number | null>[];
   total_key?: string | null;
   total_label?: string | null;
+  /** Origin of the calling app (e.g. https://thiqa.lovable.app) so the
+   *  report can deep-link voucher cells back into the SPA. The edge
+   *  function reads `<key>_url` per-row already; this just gives the
+   *  client wrapper a base for building those URLs. */
+  app_base_url?: string;
 }
 
 const fmtMoney = (n: number) => `₪${Math.round(Number(n || 0)).toLocaleString('en-US')}`;
@@ -87,6 +101,10 @@ export function buildBrokerStats(totals: BrokerTotals): ReportPayload['stats'] {
 const ISSUANCE_COLUMNS: ReportPayload['columns'] = [
   { key: 'idx', label: '#', align: 'center' },
   { key: 'document_number', label: 'رقم المعاملة', align: 'right' },
+  // Clickable in the HTML preview, hidden when actually printed —
+  // it's a navigation aid for the digital report, not data the paper
+  // copy needs. The link target is the receipts page in the SPA.
+  { key: 'voucher_number', label: 'رقم السند', align: 'right', print_hide: true },
   { key: 'client_name', label: 'العميل', align: 'right' },
   { key: 'company_name', label: 'الشركة', align: 'right' },
   { key: 'policy_type', label: 'النوع', align: 'right' },
@@ -120,12 +138,22 @@ const SETTLEMENT_COLUMNS: ReportPayload['columns'] = [
   { key: 'amount', label: 'المبلغ', align: 'right' },
 ];
 
-function issuanceRows(rows: IssuanceRow[]): ReportPayload['rows'] {
+function issuanceRows(rows: IssuanceRow[], appBaseUrl: string | undefined): ReportPayload['rows'] {
   return rows.map((r, i) => {
     const main = r.main;
+    const voucher = r.primary_receipt?.voucher_number ?? '';
+    // Link the voucher number cell back to the SPA's receipts page when
+    // we have one. The page doesn't deep-link to a specific voucher
+    // yet, so this is "take me back to where I can find/act on it"
+    // rather than a precise jump. `_url`-suffixed keys are the edge
+    // function's hook for cell linking — see generate-accounting-report.
+    const voucherUrl =
+      voucher && appBaseUrl ? `${appBaseUrl}/receipts` : '';
     return {
       idx: i + 1,
       document_number: r.document_number ?? '',
+      voucher_number: voucher,
+      voucher_number_url: voucherUrl,
       client_name: r.client_name ?? '',
       company_name: main.company_name ?? '',
       policy_type: policyTypeLabel(main.policy_type_parent, main.policy_type_child),
@@ -195,6 +223,11 @@ interface BuildArgs {
  *  matches the active tab (issuances or settlements). */
 export function buildAccountingReportPayload({ ctx, stats, issuances, settlements }: BuildArgs): ReportPayload {
   const subtitle = ctx.filterSummary || undefined;
+  // Read the origin lazily — this runs in the browser, so
+  // window.location is always available. Kept inside the function so
+  // tests / SSR callers can pass an empty payload without crashing.
+  const appBaseUrl =
+    typeof window !== 'undefined' ? window.location.origin : undefined;
 
   if (ctx.tab === 'disbursements' || ctx.tab === 'receipts') {
     const rows = settlementRows(settlements ?? []);
@@ -206,6 +239,7 @@ export function buildAccountingReportPayload({ ctx, stats, issuances, settlement
       rows,
       total_key: 'amount',
       total_label: 'إجمالي السندات',
+      app_base_url: appBaseUrl,
     };
   }
 
@@ -217,9 +251,10 @@ export function buildAccountingReportPayload({ ctx, stats, issuances, settlement
     subtitle,
     stats,
     columns: isBroker ? BROKER_ISSUANCE_COLUMNS : ISSUANCE_COLUMNS,
-    rows: isBroker ? brokerIssuanceRows(list) : issuanceRows(list),
+    rows: isBroker ? brokerIssuanceRows(list) : issuanceRows(list, appBaseUrl),
     total_key: 'insurance_price',
     total_label: 'إجمالي سعر التأمين',
+    app_base_url: appBaseUrl,
   };
 }
 

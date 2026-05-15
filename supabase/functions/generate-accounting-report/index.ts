@@ -21,6 +21,11 @@ interface ColumnPayload {
   key: string;
   label: string;
   align?: CellAlign;
+  /** When true the th/td get a `.col-hide-print` class and the
+   *  @media print rule below collapses the column. Used for reference
+   *  cells (voucher links etc.) that help navigation on screen but
+   *  shouldn't appear on the paper copy. */
+  print_hide?: boolean;
 }
 
 interface RowPayload {
@@ -97,9 +102,10 @@ function buildAccountingReportHtml(
     .join('');
 
   const headerCellsHtml = payload.columns
-    .map(
-      (c) => `<th class="align-${c.align ?? 'right'}">${escapeHtml(c.label)}</th>`,
-    )
+    .map((c) => {
+      const hideCls = c.print_hide ? ' col-hide-print' : '';
+      return `<th class="align-${c.align ?? 'right'}${hideCls}">${escapeHtml(c.label)}</th>`;
+    })
     .join('');
 
   // Per-cell linking: when a row has `<key>_url` set to a non-empty
@@ -119,7 +125,8 @@ function buildAccountingReportHtml(
           const content = href
             ? `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" class="cell-link">${inner}</a>`
             : inner;
-          return `<td class="align-${c.align ?? 'right'}">${content}</td>`;
+          const hideCls = c.print_hide ? ' col-hide-print' : '';
+          return `<td class="align-${c.align ?? 'right'}${hideCls}">${content}</td>`;
         })
         .join('');
       return `<tr>${cells}</tr>`;
@@ -130,6 +137,11 @@ function buildAccountingReportHtml(
   // column to sum. Each row's value is expected to already be a string
   // like "₪1,014" so we strip non-digit/decimal characters before
   // summing and re-format with Intl.
+  //
+  // When any column is print_hide, the visible column count differs
+  // between screen and print. colspan can't be media-queried, so we
+  // emit TWO totals rows and toggle visibility via CSS — keeps the
+  // label cell flush against the total cell in both modes.
   let totalsRowHtml = '';
   if (payload.total_key) {
     const numericTotal = payload.rows.reduce((sum, row) => {
@@ -139,14 +151,29 @@ function buildAccountingReportHtml(
       return sum + (Number.isFinite(numeric) ? numeric : 0);
     }, 0);
     const formatted = `₪${numericTotal.toLocaleString('en-US')}`;
-    const colspan = payload.columns.length - 1;
+    const printHiddenCount = payload.columns.filter((c) => c.print_hide).length;
+    const screenColspan = payload.columns.length - 1;
+    const printColspan = Math.max(1, payload.columns.length - 1 - printHiddenCount);
     const totalLabel = payload.total_label || 'الإجمالي';
-    totalsRowHtml = `
-      <tr class="totals-row">
-        <td class="align-right" colspan="${colspan}">${escapeHtml(totalLabel)}</td>
-        <td class="align-right total-cell">${escapeHtml(formatted)}</td>
-      </tr>
-    `;
+    if (printHiddenCount === 0) {
+      totalsRowHtml = `
+        <tr class="totals-row">
+          <td class="align-right" colspan="${screenColspan}">${escapeHtml(totalLabel)}</td>
+          <td class="align-right total-cell">${escapeHtml(formatted)}</td>
+        </tr>
+      `;
+    } else {
+      totalsRowHtml = `
+        <tr class="totals-row totals-screen-only">
+          <td class="align-right" colspan="${screenColspan}">${escapeHtml(totalLabel)}</td>
+          <td class="align-right total-cell">${escapeHtml(formatted)}</td>
+        </tr>
+        <tr class="totals-row totals-print-only">
+          <td class="align-right" colspan="${printColspan}">${escapeHtml(totalLabel)}</td>
+          <td class="align-right total-cell">${escapeHtml(formatted)}</td>
+        </tr>
+      `;
+    }
   }
 
   const phoneLinksHtml = (contact.company_phone_links || [])
@@ -263,11 +290,15 @@ function buildAccountingReportHtml(
       font-variant-numeric: tabular-nums;
     }
 
-    /* Stats grid — same five-pill bar shown on the page itself, made
-       printable with a uniform dark border and big monospaced figures. */
+    /* Stats grid — pill bar shown on the page itself, made printable
+       with a uniform dark border and big monospaced figures. Column
+       count is driven by the payload (each tab supplies its own pill
+       count: 4 for brokers, 6 for companies) so everything fits on
+       ONE row by default. The narrow-viewport fallback below collapses
+       to 2 columns. */
     .stats {
       display: grid;
-      grid-template-columns: repeat(5, 1fr);
+      grid-template-columns: repeat(${Math.max(1, payload.stats.length)}, 1fr);
       border: 1px solid #1a1a1a;
       margin-bottom: 22px;
     }
@@ -359,11 +390,22 @@ function buildAccountingReportHtml(
       border-bottom: 1px dashed #1d4ed8;
     }
     table.data .cell-link:hover { border-bottom-style: solid; }
+    /* Dual totals rows — one with the screen colspan, one with the
+       print colspan. Only emitted when at least one column is
+       print_hide; otherwise the single-row form above is used. */
+    table.data tr.totals-print-only { display: none; }
     @media print {
       table.data .cell-link {
         color: inherit;
         border-bottom: none;
       }
+      /* Columns flagged print_hide collapse on paper — used by the
+         "رقم السند" navigation column. display:none on a <th>/<td>
+         keeps the table layout balanced since every row drops the
+         same cell together. */
+      table.data .col-hide-print { display: none !important; }
+      table.data tr.totals-screen-only { display: none; }
+      table.data tr.totals-print-only { display: table-row; }
     }
 
     .empty {
