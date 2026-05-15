@@ -2801,9 +2801,11 @@ export type Database = {
           receipt_images: Json | null
           refused: boolean | null
           settlement_date: string
+          settlement_session_id: string | null
           status: string
           total_amount: number
           updated_at: string
+          voucher_number: string | null
         }
         Insert: {
           agent_id?: string | null
@@ -2829,9 +2831,11 @@ export type Database = {
           receipt_images?: Json | null
           refused?: boolean | null
           settlement_date?: string
+          settlement_session_id?: string | null
           status?: string
           total_amount?: number
           updated_at?: string
+          voucher_number?: string | null
         }
         Update: {
           agent_id?: string | null
@@ -2857,9 +2861,11 @@ export type Database = {
           receipt_images?: Json | null
           refused?: boolean | null
           settlement_date?: string
+          settlement_session_id?: string | null
           status?: string
           total_amount?: number
           updated_at?: string
+          voucher_number?: string | null
         }
         Relationships: [
           {
@@ -3210,6 +3216,7 @@ export type Database = {
           payment_method: string | null
           policy_id: string | null
           refund_date: string | null
+          settled_at: string | null
           transaction_type: string
         }
         Insert: {
@@ -3226,6 +3233,7 @@ export type Database = {
           payment_method?: string | null
           policy_id?: string | null
           refund_date?: string | null
+          settled_at?: string | null
           transaction_type?: string
         }
         Update: {
@@ -3242,6 +3250,7 @@ export type Database = {
           payment_method?: string | null
           policy_id?: string | null
           refund_date?: string | null
+          settled_at?: string | null
           transaction_type?: string
         }
         Relationships: [
@@ -5729,6 +5738,8 @@ export type Database = {
           agent_id: string
           amount: number
           branch_id: string | null
+          broker_id: string | null
+          broker_settlement_id: string | null
           cancellation_reason: string | null
           cancelled_at: string | null
           cancels_receipt_id: string | null
@@ -5738,6 +5749,8 @@ export type Database = {
           client_id: string | null
           client_name: string | null
           client_settlement_id: string | null
+          company_id: string | null
+          company_settlement_id: string | null
           created_at: string | null
           created_by: string | null
           id: string
@@ -5746,6 +5759,7 @@ export type Database = {
           payment_id: string | null
           payment_method: string | null
           policy_id: string | null
+          printed_at: string | null
           receipt_date: string
           receipt_number: number
           receipt_type: string
@@ -5757,6 +5771,8 @@ export type Database = {
           agent_id: string
           amount?: number
           branch_id?: string | null
+          broker_id?: string | null
+          broker_settlement_id?: string | null
           cancellation_reason?: string | null
           cancelled_at?: string | null
           cancels_receipt_id?: string | null
@@ -5766,6 +5782,8 @@ export type Database = {
           client_id?: string | null
           client_name?: string | null
           client_settlement_id?: string | null
+          company_id?: string | null
+          company_settlement_id?: string | null
           created_at?: string | null
           created_by?: string | null
           id?: string
@@ -5774,6 +5792,7 @@ export type Database = {
           payment_id?: string | null
           payment_method?: string | null
           policy_id?: string | null
+          printed_at?: string | null
           receipt_date?: string
           receipt_number?: number
           receipt_type?: string
@@ -5785,6 +5804,8 @@ export type Database = {
           agent_id?: string
           amount?: number
           branch_id?: string | null
+          broker_id?: string | null
+          broker_settlement_id?: string | null
           cancellation_reason?: string | null
           cancelled_at?: string | null
           cancels_receipt_id?: string | null
@@ -5794,6 +5815,8 @@ export type Database = {
           client_id?: string | null
           client_name?: string | null
           client_settlement_id?: string | null
+          company_id?: string | null
+          company_settlement_id?: string | null
           created_at?: string | null
           created_by?: string | null
           id?: string
@@ -5802,6 +5825,7 @@ export type Database = {
           payment_id?: string | null
           payment_method?: string | null
           policy_id?: string | null
+          printed_at?: string | null
           receipt_date?: string
           receipt_number?: number
           receipt_type?: string
@@ -5825,6 +5849,20 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "receipts_broker_id_fkey"
+            columns: ["broker_id"]
+            isOneToOne: false
+            referencedRelation: "brokers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "receipts_broker_settlement_id_fkey"
+            columns: ["broker_settlement_id"]
+            isOneToOne: false
+            referencedRelation: "broker_settlements"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "receipts_cancels_receipt_id_fkey"
             columns: ["cancels_receipt_id"]
             isOneToOne: false
@@ -5843,6 +5881,20 @@ export type Database = {
             columns: ["client_settlement_id"]
             isOneToOne: false
             referencedRelation: "client_settlements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "receipts_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "insurance_companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "receipts_company_settlement_id_fkey"
+            columns: ["company_settlement_id"]
+            isOneToOne: false
+            referencedRelation: "company_settlements"
             referencedColumns: ["id"]
           },
           {
@@ -7238,6 +7290,10 @@ export type Database = {
         Args: { p_agent_id: string; p_year: number }
         Returns: string
       }
+      allocate_debit_note_number: {
+        Args: { p_agent_id: string; p_year: number }
+        Returns: string
+      }
       allocate_disbursement_number: {
         Args: { p_agent_id: string; p_year: number }
         Returns: string
@@ -7533,6 +7589,18 @@ export type Database = {
         }[]
       }
       get_company_contact_info: { Args: never; Returns: Json }
+      get_company_outstanding_summary: {
+        Args: { p_agent_id: string }
+        Returns: {
+          company_id: string
+          outstanding: number
+          policies_count: number
+          total_credit_notes: number
+          total_paid_in: number
+          total_paid_out: number
+          total_payable: number
+        }[]
+      }
       get_company_wallet_balance: {
         Args: { p_company_id: string; p_from_date?: string; p_to_date?: string }
         Returns: {
