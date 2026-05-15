@@ -2973,11 +2973,11 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
             <div className="flex-1 min-w-0">
               <p className="text-[10px] sm:text-xs text-muted-foreground truncate">إجمالي المتبقي</p>
               <p className={cn("text-sm sm:text-base lg:text-xl font-bold tabular-nums whitespace-nowrap truncate leading-tight",
-                (paymentSummary.total_remaining - walletBalance.total_refunds) > 0
+                paymentSummary.total_remaining > 0
                   ? "text-destructive"
                   : "text-success"
               )}>
-                ₪{Math.max(0, paymentSummary.total_remaining - walletBalance.total_refunds).toLocaleString()}
+                ₪{Math.max(0, paymentSummary.total_remaining).toLocaleString()}
               </p>
               {/* Always say who owes whom on this card so staff don't have
                   to do the subtraction in their head. Three states:
@@ -2985,7 +2985,11 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                     • net == 0 with prior payments → fully settled
                     • net == 0 with no movement → no debt yet */}
               {(() => {
-                const net = paymentSummary.total_remaining - walletBalance.total_refunds;
+                // Mirror the kashf's "المتبقي على العميل" line directly —
+                // credit notes are already netted inside total_remaining
+                // (via creditsTotal), so subtracting walletBalance.total_refunds
+                // here would double-count the same إشعارات دائن.
+                const net = paymentSummary.total_remaining;
                 if (net > 0) {
                   return (
                     <p className="text-[10px] sm:text-[11px] text-destructive/80 font-medium leading-tight mt-0.5">
@@ -3029,14 +3033,14 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
           )}
 
           {/* Wallet Balance - Show only if we owe customer MORE than their debt (net credit) */}
-          {(walletBalance.total_refunds - paymentSummary.total_remaining) > 0 && (
+          {walletBalance.total_refunds > 0 && (
             <Card className="p-2.5 sm:p-4 flex items-center gap-2 sm:gap-4 border-amber-500/30 bg-amber-500/5">
               <div className="h-9 w-9 sm:h-12 sm:w-12 rounded-xl bg-amber-500/20 flex items-center justify-center shrink-0">
                 <Banknote className="h-4 w-4 sm:h-6 sm:w-6 text-amber-600" />
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-[10px] sm:text-xs text-amber-700 truncate">مرتجع للعميل</p>
-                <p className="text-sm sm:text-base lg:text-xl font-bold text-amber-600 tabular-nums whitespace-nowrap truncate leading-tight">₪{(walletBalance.total_refunds - paymentSummary.total_remaining).toLocaleString()}</p>
+                <p className="text-sm sm:text-base lg:text-xl font-bold text-amber-600 tabular-nums whitespace-nowrap truncate leading-tight">₪{walletBalance.total_refunds.toLocaleString()}</p>
                 <p className="text-[9px] sm:text-[10px] text-amber-600/70 leading-tight">نحن مدينون للعميل بهذا المبلغ</p>
               </div>
             </Card>
