@@ -13,10 +13,13 @@ import { useAgentContext } from './useAgentContext';
 //   outstanding = Σ payed_for_company         ← من البوليصات
 //               − Σ outgoing settlements       ← سندات الصرف للشركة
 //               − Σ credit_notes for company   ← إشعارات دائنة (على الحساب)
+//               − Σ debit_notes for company    ← إشعارات مدينة (الشركة عليها)
 //
 // Incoming settlements (rare — company refunding the agent) are
 // returned for display but excluded from outstanding; per the
 // accountant model the dialog shows ONLY the three terms above.
+// Debit notes also fold into outstanding directly (no separate
+// breakdown column) per the user's "بدي بس المستحق فقط لا غير".
 //
 // Cancelled / transferred policies and refused settlements are
 // excluded by the RPC.
@@ -28,7 +31,7 @@ export interface CompanyOutstanding {
   totalPaidOut: number;
   /** Σ incoming settlements (cash the company paid the agent), non-refused. */
   totalPaidIn: number;
-  /** Σ credit-note receipts for this company (ADD to debt). */
+  /** Σ credit-note receipts for this company (reduce المستحق). */
   totalCreditNotes: number;
   /** Count of active policies tied to this company. */
   policiesCount: number;
