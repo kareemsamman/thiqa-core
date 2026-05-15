@@ -6,13 +6,22 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import {
   ImageIcon, Plus, Trash2, Download, X, Loader2, FileText, FolderOpen,
-  Printer, ChevronLeft, ChevronRight,
-  ExternalLink, Play, Upload
+  FolderSync, ChevronLeft, ChevronRight,
+  ExternalLink, Play, Upload, Link2Off
 } from "lucide-react";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { Progress } from "@/components/ui/progress";
 import { FilePreviewGallery } from "./FilePreviewGallery";
 import * as tus from "tus-js-client";
+import {
+  clearStoredHandle,
+  ensurePermission,
+  isSupported as isFolderSyncSupported,
+  listPendingFiles,
+  loadStoredHandle,
+  moveToUploaded,
+  pickAndStoreFolder,
+} from "@/lib/naps2Folder";
 
 interface MediaFile {
   id: string;
@@ -68,12 +77,20 @@ export function PolicyFilesSection({
   const [deleteProgress, setDeleteProgress] = useState<{ name: string; pct: number } | null>(null);
   const [activeTab, setActiveTab] = useState("insurance");
 
-  // Scanner state
-  const [scanning, setScanning] = useState<'insurance' | 'crm' | null>(null);
+  // NAPS2 watch-folder state. The handle persists in IndexedDB so
+  // we only need to pick the folder once per browser profile.
+  const [folderHandle, setFolderHandle] = useState<FileSystemDirectoryHandle | null>(null);
+  const [syncing, setSyncing] = useState<'insurance' | 'crm' | null>(null);
 
   // Drag-and-drop state — tracks which tab card is currently being
   // dragged over so we can show the drop ring + overlay.
   const [isDragging, setIsDragging] = useState<'insurance' | 'crm' | null>(null);
+
+  useEffect(() => {
+    loadStoredHandle().then((handle) => {
+      if (handle) setFolderHandle(handle);
+    });
+  }, []);
 
   const fetchFiles = async () => {
     setLoading(true);
@@ -263,7 +280,7 @@ export function PolicyFilesSection({
   const handleDrop = async (event: React.DragEvent<HTMLDivElement>, fileType: 'insurance' | 'crm') => {
     event.preventDefault();
     setIsDragging(null);
-    if (uploading || scanning) return;
+    if (uploading || syncing) return;
 
     const collected = await gatherFilesFromDataTransfer(event.dataTransfer);
     const accepted = collected.filter(isAcceptedFile);
@@ -330,114 +347,105 @@ export function PolicyFilesSection({
     });
   };
 
-  // Convert base64 to Blob
-  const base64ToBlob = (base64: string): Blob => {
-    // Remove data URL prefix if present
-    const base64Data = base64.includes(',') ? base64.split(',')[1] : base64;
-    const byteCharacters = atob(base64Data);
-    const byteNumbers = new Array(byteCharacters.length);
-    for (let i = 0; i < byteCharacters.length; i++) {
-      byteNumbers[i] = byteCharacters.charCodeAt(i);
-    }
-    const byteArray = new Uint8Array(byteNumbers);
-    return new Blob([byteArray], { type: 'image/jpeg' });
-  };
-
-  // Direct scan function - no dialog, auto-upload
-  const handleDirectScan = async (fileType: 'insurance' | 'crm') => {
-    if (!window.scanner) {
-      toast({ 
-        title: "خطأ", 
-        description: "مكتبة السكانر غير محملة. يرجى تحديث الصفحة.", 
-        variant: "destructive" 
+  // NAPS2 watch-folder sync. First click prompts the user to pick
+  // the folder NAPS2 saves to; subsequent clicks read everything in
+  // its root, upload it, and move each file into `uploaded/` so the
+  // next sync doesn't re-upload.
+  const handleFolderSync = async (fileType: 'insurance' | 'crm') => {
+    if (!isFolderSyncSupported()) {
+      toast({
+        title: "متصفح غير مدعوم",
+        description: "هذه الميزة متاحة في Chrome و Edge فقط.",
+        variant: "destructive",
       });
       return;
     }
 
-    setScanning(fileType);
-
-    // Always let the user pick a scanner — caching a "preferred"
-    // scanner caused the button to spin forever when the saved
-    // device was unplugged or renamed.
-    const scanRequest = {
-      use_asprise_dialog: false,
-      show_scanner_ui: false,
-      source_name: 'select',
-      scanner_name: 'select',
-      prompt_scan_more: false,
-      twain_cap_setting: {
-        ICAP_PIXELTYPE: 'TWPT_RGB',
-        ICAP_XRESOLUTION: '200',
-        ICAP_YRESOLUTION: '200',
-      },
-      output_settings: [{
-        type: 'return-base64',
-        format: 'jpg',
-        jpeg_quality: 85,
-      }],
-    };
-
-    window.scanner.scan(
-      async (successful, mesg, response) => {
-        if (!successful) {
-          setScanning(null);
-          // Don't show error for user cancellation
-          if (mesg && !mesg.toLowerCase().includes('cancel')) {
-            // Check if ScanApp not installed
-            if (mesg.includes('Scanner.js') || mesg.includes('localhost')) {
-              toast({ 
-                title: "تثبيت مطلوب", 
-                description: "يرجى تثبيت برنامج ScanApp من asprise.com",
-                variant: "destructive" 
-              });
-            } else {
-              toast({ title: "خطأ في المسح", description: mesg, variant: "destructive" });
-            }
-          }
-          return;
-        }
-
-        const scannedImages = window.scanner.getScannedImages(response, true, false);
-        if (!scannedImages || scannedImages.length === 0) {
-          setScanning(null);
-          toast({ title: "تنبيه", description: "لم يتم العثور على صور ممسوحة" });
-          return;
-        }
-
-        // Auto-upload all scanned images
-        setUploading(fileType);
-        try {
-          const { data: { session } } = await supabase.auth.getSession();
-          const entityType = fileType === 'insurance' ? 'policy_insurance' : 'policy_crm';
-
-          for (let i = 0; i < scannedImages.length; i++) {
-            const img = scannedImages[i];
-            const blob = base64ToBlob(img.src);
-            const file = new File([blob], `scan_${Date.now()}_${i}.jpg`, { type: 'image/jpeg' });
-
-            setUploadProgress({ name: file.name, pct: 0, current: i + 1, total: scannedImages.length });
-            await uploadFileWithXhr(file, entityType, session?.access_token, (pct) => {
-              setUploadProgress((prev) => (prev ? { ...prev, pct } : prev));
-            });
-          }
-
-          toast({ title: "تم", description: `تم مسح ورفع ${scannedImages.length} صورة بنجاح` });
-          fetchFiles();
-        } catch (error: any) {
-          console.error('Error uploading scanned images:', error);
-          toast({ 
-            title: "خطأ", 
-            description: error.message || "فشل في رفع الصور الممسوحة", 
-            variant: "destructive" 
+    // First-time setup: open the picker and stop. The user clicks
+    // sync again to actually pull files in — keeps the two actions
+    // (link + sync) explicit.
+    let handle = folderHandle;
+    if (!handle) {
+      try {
+        handle = await pickAndStoreFolder();
+        setFolderHandle(handle);
+        toast({ title: "تم ربط المجلد", description: handle.name });
+      } catch (err: any) {
+        if (err?.name !== 'AbortError') {
+          toast({
+            title: "خطأ",
+            description: err?.message || "تعذّر اختيار المجلد",
+            variant: "destructive",
           });
-        } finally {
-          setUploading(null);
-          setScanning(null);
-          setUploadProgress(null);
         }
-      },
-      scanRequest
-    );
+      }
+      return;
+    }
+
+    const permission = await ensurePermission(handle).catch(() => 'denied' as const);
+    if (permission !== 'granted') {
+      toast({
+        title: "صلاحية مرفوضة",
+        description: "لازم تسمح للمتصفح بالوصول للمجلد",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSyncing(fileType);
+    try {
+      const pending = await listPendingFiles(handle);
+      if (pending.length === 0) {
+        toast({ title: "لا يوجد جديد", description: "المجلد فاضي من الملفات الجديدة" });
+        return;
+      }
+
+      const { data: { session } } = await supabase.auth.getSession();
+      const entityType = fileType === 'insurance' ? 'policy_insurance' : 'policy_crm';
+      setUploading(fileType);
+
+      let uploadedCount = 0;
+      for (let i = 0; i < pending.length; i++) {
+        const entry = pending[i];
+        setUploadProgress({ name: entry.name, pct: 0, current: i + 1, total: pending.length });
+        try {
+          await uploadFileWithXhr(entry.file, entityType, session?.access_token, (pct) => {
+            setUploadProgress((prev) => (prev ? { ...prev, pct } : prev));
+          });
+          await moveToUploaded(handle, entry);
+          uploadedCount++;
+        } catch (err: any) {
+          console.error(`Failed to sync ${entry.name}:`, err);
+          toast({
+            title: `تعذّر رفع ${entry.name}`,
+            description: err?.message || "فشل الرفع — الملف بظل بالمجلد",
+            variant: "destructive",
+          });
+        }
+      }
+
+      if (uploadedCount > 0) {
+        toast({ title: "تمت المزامنة", description: `تم رفع ${uploadedCount} ملف` });
+        fetchFiles();
+      }
+    } catch (err: any) {
+      console.error('Folder sync error:', err);
+      toast({
+        title: "خطأ في المزامنة",
+        description: err?.message || "تعذّرت قراءة المجلد",
+        variant: "destructive",
+      });
+    } finally {
+      setSyncing(null);
+      setUploading(null);
+      setUploadProgress(null);
+    }
+  };
+
+  const handleUnlinkFolder = async () => {
+    await clearStoredHandle();
+    setFolderHandle(null);
+    toast({ title: "تم فك الربط", description: "اختر مجلد جديد عند المزامنة القادمة" });
   };
 
   const handleDelete = async () => {
@@ -634,45 +642,71 @@ export function PolicyFilesSection({
     );
   };
 
-  const renderUploadButton = (fileType: 'insurance' | 'crm') => (
-    <div className="flex items-center gap-2">
-      {/* Direct Scan button - no dialog */}
-      <Button 
-        size="sm" 
-        variant="outline" 
-        disabled={uploading !== null || scanning !== null}
-        onClick={() => handleDirectScan(fileType)}
-        className="gap-1"
-      >
-        {scanning === fileType ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
-        ) : (
-          <Printer className="h-4 w-4" />
-        )}
-        {scanning === fileType ? 'جاري المسح...' : 'مسح'}
-      </Button>
-      
-      {/* Upload button */}
-      <div className="relative">
-        <input
-          type="file"
-          multiple
-          accept="image/*,.pdf,video/*"
-          onChange={(e) => handleUpload(e, fileType)}
-          className="absolute inset-0 opacity-0 cursor-pointer"
-          disabled={uploading !== null || scanning !== null}
-        />
-        <Button size="sm" variant="outline" disabled={uploading !== null || scanning !== null}>
-          {uploading === fileType ? (
-            <Loader2 className="h-4 w-4 ml-1 animate-spin" />
+  const renderUploadButton = (fileType: 'insurance' | 'crm') => {
+    const busy = uploading !== null || syncing !== null;
+    const isLinked = !!folderHandle;
+    const syncLabel = !isFolderSyncSupported()
+      ? 'متصفح غير مدعوم'
+      : !isLinked
+        ? 'ربط مجلد المسح'
+        : syncing === fileType
+          ? 'جاري المزامنة...'
+          : 'مزامنة من المجلد';
+
+    return (
+      <div className="flex items-center gap-2">
+        {/* NAPS2 folder sync button. First click picks the folder;
+            after that, every click pulls new scans from it. */}
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={busy || !isFolderSyncSupported()}
+          onClick={() => handleFolderSync(fileType)}
+          className="gap-1"
+          title={isLinked ? `المجلد: ${folderHandle?.name}` : undefined}
+        >
+          {syncing === fileType ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
           ) : (
-            <Plus className="h-4 w-4 ml-1" />
+            <FolderSync className="h-4 w-4" />
           )}
-          رفع ملف
+          {syncLabel}
         </Button>
+        {isLinked && (
+          <Button
+            size="icon"
+            variant="ghost"
+            disabled={busy}
+            onClick={handleUnlinkFolder}
+            title="فك ربط المجلد"
+            className="h-9 w-9"
+          >
+            <Link2Off className="h-4 w-4" />
+          </Button>
+        )}
+
+        {/* Upload button */}
+        <div className="relative">
+          <input
+            type="file"
+            multiple
+            accept="image/*,.pdf,video/*"
+            onChange={(e) => handleUpload(e, fileType)}
+            className="absolute inset-0 opacity-0 cursor-pointer"
+            disabled={busy}
+          />
+          <Button size="sm" variant="outline" disabled={busy}>
+            {uploading === fileType ? (
+              <Loader2 className="h-4 w-4 ml-1 animate-spin" />
+            ) : (
+              <Plus className="h-4 w-4 ml-1" />
+            )}
+            رفع ملف
+          </Button>
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <>
@@ -717,7 +751,7 @@ export function PolicyFilesSection({
             }`}
             onDragOver={(e) => {
               e.preventDefault();
-              if (!uploading && !scanning) setIsDragging('insurance');
+              if (!uploading && !syncing) setIsDragging('insurance');
             }}
             onDragLeave={(e) => {
               // Only clear when actually leaving the card, not when crossing children
@@ -760,7 +794,7 @@ export function PolicyFilesSection({
             }`}
             onDragOver={(e) => {
               e.preventDefault();
-              if (!uploading && !scanning) setIsDragging('crm');
+              if (!uploading && !syncing) setIsDragging('crm');
             }}
             onDragLeave={(e) => {
               if (e.currentTarget.contains(e.relatedTarget as Node)) return;
