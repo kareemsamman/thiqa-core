@@ -1258,10 +1258,16 @@ function ReceiptActionsDialog({
   row: ClientReceiptRow | null;
   onClose: () => void;
 }) {
+  // ⚠ ALL hooks must run on every render — keep them above any early
+  // return. The previous implementation had `useState(expanded)` and
+  // a `useEffect` after `if (!row) return null`, which violated the
+  // Rules of Hooks and crashed the whole accounting tab to a blank
+  // page the moment a user clicked a voucher number.
   const [printState, setPrintState] = useState<ActionChannelState>('idle');
   const [smsState, setSmsState] = useState<ActionChannelState>('idle');
   const [whatsappState, setWhatsappState] = useState<ActionChannelState>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
 
   const {
     locked: smsLocked,
@@ -1278,6 +1284,7 @@ function ReceiptActionsDialog({
     setSmsState('idle');
     setWhatsappState('idle');
     setErrorMessage(null);
+    setExpanded(false);
   }, [row?.id]);
 
   if (!row) return null;
@@ -1403,11 +1410,6 @@ function ReceiptActionsDialog({
   const whatsappDisabled = !sendFunction || !row.client_phone;
   const anyLoading =
     printState === 'loading' || smsState === 'loading' || whatsappState === 'loading';
-  const [expanded, setExpanded] = useState(false);
-  // Reset expanded state when switching receipts.
-  useEffect(() => {
-    setExpanded(false);
-  }, [row?.id]);
 
   return (
     <Dialog open={!!row} onOpenChange={(open) => { if (!open) onClose(); }}>
