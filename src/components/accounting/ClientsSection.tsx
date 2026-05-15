@@ -38,7 +38,6 @@ import {
   Loader2,
   RotateCcw,
   Search,
-  TrendingUp,
   User as UserIcon,
   Wallet,
   X,
@@ -85,7 +84,6 @@ type SubTab =
   | 'payments'
   | 'disbursements'
   | 'cancellations'
-  | 'debit_notes'
   | 'credit_notes';
 
 const SUB_TABS: { key: SubTab; label: string; Icon: LucideIcon }[] = [
@@ -94,7 +92,6 @@ const SUB_TABS: { key: SubTab; label: string; Icon: LucideIcon }[] = [
   { key: 'payments', label: 'سند قبض', Icon: ArrowDownLeft },
   { key: 'disbursements', label: 'سند صرف', Icon: ArrowUpRight },
   { key: 'cancellations', label: 'سند إلغاء', Icon: RotateCcw },
-  { key: 'debit_notes', label: 'إشعار مدين', Icon: TrendingUp },
   { key: 'credit_notes', label: 'إشعار دائن', Icon: Wallet },
 ];
 
@@ -320,13 +317,9 @@ export function ClientsSection({ branchId }: ClientsSectionProps = {}) {
       ),
     [data.clientDisbursements, search, clientId, sortDir],
   );
-  // Two كinds of إشعار live in the same bucket here:
-  //   • receipt_type='credit_note', amount > 0  → إشعار دائن
-  //     (legacy: amount < 0 → إشعار مدين, kept for back-compat)
-  //   • receipt_type='debit_note', amount > 0   → إشعار مدين
-  //     (the new first-class type from AddDebitNoteDialog)
-  // Filtering primarily on receipt_type so the new debit notes land
-  // in the right bucket regardless of sign convention.
+  // إشعار دائن only — إشعار مدين على العميل غير مدعوم في الـ UI
+  // (تم إخفاؤه عمداً، أنظر AddVoucherDialog). البيانات الموجودة
+  // للـ debit_note بتفضل بقاعدة البيانات وبتظهر في الكشف للأرشيف.
   const creditNotes = useMemo(
     () =>
       sortReceipts(
@@ -335,19 +328,6 @@ export function ClientsSection({ branchId }: ClientsSectionProps = {}) {
             !r.cancelled_at &&
             r.receipt_type === 'credit_note' &&
             r.amount > 0 &&
-            (!clientId || r.client_id === clientId) &&
-            matchesClientReceiptSearch(r, search),
-        ),
-      ),
-    [data.clientCreditNotes, search, clientId, sortDir],
-  );
-  const debitNotes = useMemo(
-    () =>
-      sortReceipts(
-        data.clientCreditNotes.filter(
-          (r) =>
-            !r.cancelled_at &&
-            (r.receipt_type === 'debit_note' || (r.receipt_type === 'credit_note' && r.amount < 0)) &&
             (!clientId || r.client_id === clientId) &&
             matchesClientReceiptSearch(r, search),
         ),
@@ -391,10 +371,6 @@ export function ClientsSection({ branchId }: ClientsSectionProps = {}) {
     () => creditNotes.reduce((s, r) => s + r.amount, 0),
     [creditNotes],
   );
-  const totalDebitNotes = useMemo(
-    () => debitNotes.reduce((s, r) => s + Math.abs(r.amount), 0),
-    [debitNotes],
-  );
   const totalOutflow = totalDisbursed + totalCreditNotes;
 
   return (
@@ -402,7 +378,7 @@ export function ClientsSection({ branchId }: ClientsSectionProps = {}) {
       {/* Summary pills — five-card row mirrors the شركات tab layout
           so the customer view reads at a glance: what was billed,
           what came in, what went back out, what's still outstanding. */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <PillCard
           icon={FileText}
           tone="slate"
@@ -423,13 +399,6 @@ export function ClientsSection({ branchId }: ClientsSectionProps = {}) {
           label="الخارج للعملاء"
           value={formatMoney(totalOutflow)}
           hint="سند صرف + إشعار دائن"
-        />
-        <PillCard
-          icon={TrendingUp}
-          tone="indigo"
-          label="إشعار مدين"
-          value={formatMoney(totalDebitNotes)}
-          hint={`${debitNotes.length} إشعار — مستحق على العميل`}
         />
         <PillCard
           icon={Wallet}
@@ -527,7 +496,7 @@ export function ClientsSection({ branchId }: ClientsSectionProps = {}) {
       </div>
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as SubTab)}>
-        <TabsList className="grid w-full grid-cols-4 lg:grid-cols-7">
+        <TabsList className="grid w-full grid-cols-3 lg:grid-cols-6">
           {SUB_TABS.map(({ key, label, Icon }) => {
             const count =
               key === 'all'
@@ -535,7 +504,6 @@ export function ClientsSection({ branchId }: ClientsSectionProps = {}) {
                   payments.length +
                   disbursements.length +
                   cancellations.length +
-                  debitNotes.length +
                   creditNotes.length
                 : key === 'issuances'
                 ? filteredPackages.length
@@ -545,8 +513,6 @@ export function ClientsSection({ branchId }: ClientsSectionProps = {}) {
                 ? disbursements.length
                 : key === 'cancellations'
                 ? cancellations.length
-                : key === 'debit_notes'
-                ? debitNotes.length
                 : creditNotes.length;
             return (
               <TabsTrigger key={key} value={key} className="gap-1.5">
@@ -574,9 +540,6 @@ export function ClientsSection({ branchId }: ClientsSectionProps = {}) {
           <AllTabSection title="سند إلغاء" count={cancellations.length}>
             <ReceiptsTable rows={cancellations} loading={data.loading} kind="cancellations" onVoucherClick={setVoucherActionRow} visibleCols={receiptCols.visible} />
           </AllTabSection>
-          <AllTabSection title="إشعار مدين" count={debitNotes.length}>
-            <ReceiptsTable rows={debitNotes} loading={data.loading} kind="debit_notes" onVoucherClick={setVoucherActionRow} visibleCols={receiptCols.visible} />
-          </AllTabSection>
           <AllTabSection title="إشعار دائن" count={creditNotes.length}>
             <ReceiptsTable rows={creditNotes} loading={data.loading} kind="credit_notes" onVoucherClick={setVoucherActionRow} visibleCols={receiptCols.visible} />
           </AllTabSection>
@@ -593,9 +556,6 @@ export function ClientsSection({ branchId }: ClientsSectionProps = {}) {
         </TabsContent>
         <TabsContent value="cancellations" className="mt-3">
           <ReceiptsTable rows={cancellations} loading={data.loading} kind="cancellations" onVoucherClick={setVoucherActionRow} visibleCols={receiptCols.visible} />
-        </TabsContent>
-        <TabsContent value="debit_notes" className="mt-3">
-          <ReceiptsTable rows={debitNotes} loading={data.loading} kind="debit_notes" onVoucherClick={setVoucherActionRow} visibleCols={receiptCols.visible} />
         </TabsContent>
         <TabsContent value="credit_notes" className="mt-3">
           <ReceiptsTable rows={creditNotes} loading={data.loading} kind="credit_notes" onVoucherClick={setVoucherActionRow} visibleCols={receiptCols.visible} />

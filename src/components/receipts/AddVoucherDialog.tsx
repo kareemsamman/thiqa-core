@@ -194,6 +194,19 @@ const COUNTERPARTY_OPTIONS: Array<{
   },
 ];
 
+// Per business rule: إشعار مدين على العميل غير مدعوم — لو احنا
+// كوكيل بدنا منه مصاري، الطريق الصح هو رفع قيمة البوليصة أو إصدار
+// سند قبض ناقص؛ مش تركيب دين جانبي ما إله طريق دفع. التركيبة دي
+// disabled بصرياً هون عشان المستخدم يفهم انها مش متاحة بدل ما
+// يدخل ويعلق بدون flow تسديد.
+const isCombinationAvailable = (
+  kind: VoucherKind,
+  counterparty: CounterpartyKind,
+): boolean => {
+  if (kind === 'debit_note' && counterparty === 'client') return false;
+  return true;
+};
+
 export function AddVoucherDialog({ open, onOpenChange, onPicked }: Props) {
   const { agentId } = useAgentContext();
   const [kind, setKind] = useState<VoucherKind | null>(null);
@@ -216,6 +229,19 @@ export function AddVoucherDialog({ open, onOpenChange, onPicked }: Props) {
       setSelectedCompany(null);
     }
   }, [open]);
+
+  // If the user switches kind to one that makes the current
+  // counterparty invalid (e.g. they had picked عميل first, then went
+  // back and switched to إشعار مدين), drop the stale counterparty so
+  // they don't continue with a combination the picker disables.
+  useEffect(() => {
+    if (kind && counterparty && !isCombinationAvailable(kind, counterparty)) {
+      setCounterparty(null);
+      setSelectedClient(null);
+      setSelectedBroker(null);
+      setSelectedCompany(null);
+    }
+  }, [kind, counterparty]);
 
   // Continue enabled when the (kind, counterparty, entity) tuple is
   // complete. Counterparty-specific check:
@@ -314,18 +340,26 @@ export function AddVoucherDialog({ open, onOpenChange, onPicked }: Props) {
                 {COUNTERPARTY_OPTIONS.map((opt) => {
                   const Icon = opt.icon;
                   const active = counterparty === opt.value;
+                  // Two reasons a card can be disabled: it's planned-but-
+                  // not-yet-shipped (opt.enabled=false → "قريباً"), or the
+                  // active voucher kind isn't valid for this counterparty
+                  // (→ "غير متوفر"). The second case is dynamic — only
+                  // appears once the user picks a kind that excludes it.
+                  const combinationAllowed = isCombinationAvailable(kind, opt.value);
+                  const interactable = opt.enabled && combinationAllowed;
+                  const unavailableForKind = opt.enabled && !combinationAllowed;
                   return (
                     <button
                       key={opt.value}
                       type="button"
-                      disabled={!opt.enabled}
+                      disabled={!interactable}
                       onClick={() => setCounterparty(opt.value)}
                       className={cn(
                         'group relative flex flex-col items-center text-center gap-2 rounded-xl border p-3 transition-all',
-                        opt.enabled && 'hover:border-primary/40 hover:shadow-sm',
+                        interactable && 'hover:border-primary/40 hover:shadow-sm',
                         active &&
                           'ring-2 ring-primary/40 border-primary/60 bg-primary/5',
-                        !opt.enabled && 'opacity-50 cursor-not-allowed',
+                        !interactable && 'opacity-50 cursor-not-allowed',
                       )}
                     >
                       {active && (
@@ -339,6 +373,14 @@ export function AddVoucherDialog({ open, onOpenChange, onPicked }: Props) {
                           className="absolute top-1.5 start-1.5 text-[9px] px-1.5 py-0 h-4"
                         >
                           قريباً
+                        </Badge>
+                      )}
+                      {unavailableForKind && (
+                        <Badge
+                          variant="outline"
+                          className="absolute top-1.5 start-1.5 text-[9px] px-1.5 py-0 h-4 border-rose-500/50 text-rose-700 dark:text-rose-400"
+                        >
+                          غير متوفر
                         </Badge>
                       )}
                       <div
