@@ -1,8 +1,19 @@
 import { ReactNode, useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { ReceiptActionsDialog, type VoucherActionRow } from './ReceiptActionsDialog';
+import { format, parseISO } from 'date-fns';
 import {
   ArrowDownRight,
   ArrowUpRight,
@@ -75,7 +86,7 @@ type SubTab = 'all' | 'issuances' | 'returns' | 'disbursements' | 'receipts';
 const TABS: { key: SubTab; label: string; Icon: LucideIcon }[] = [
   { key: 'all', label: 'الكل', Icon: LayoutGrid },
   { key: 'issuances', label: 'الإصدارات', Icon: FileText },
-  { key: 'returns', label: 'المرتجعات', Icon: RotateCcw },
+  { key: 'returns', label: 'الإصدارات الملغية', Icon: RotateCcw },
   { key: 'disbursements', label: 'سند الصرف', Icon: ArrowUpRight },
   { key: 'receipts', label: 'سند القبض', Icon: ArrowDownRight },
 ];
@@ -131,6 +142,49 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
   // customer picker on ClientsSection. When set, every list collapses
   // to that company's rows.
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
+  // Voucher action picker (print / SMS / WhatsApp) when the user
+  // clicks a settlement's voucher number — same dialog the customer
+  // accounting page uses. Company settlements live in their own table
+  // (`company_settlements`); the receipts mirror gives us the
+  // `voucher_receipt_id` send-voucher / generate-voucher expects, so
+  // we resolve it lazily on click.
+  const [voucherActionRow, setVoucherActionRow] = useState<VoucherActionRow | null>(null);
+
+  const openSettlementVoucher = async (row: SettlementRow, kind: 'disbursement' | 'payment') => {
+    // company_settlements rows are mirrored into the receipts table
+    // via `company_settlement_id`. Look up the mirror so the action
+    // dialog has a real receipts.id to feed generate-voucher /
+    // send-voucher. Old settlement rows without a mirror fall back
+    // to a print-only message.
+    const { data: mirror, error } = await supabase
+      .from('receipts')
+      .select('id, receipt_type, payment_id, voucher_number, client_id, broker_id')
+      .eq('company_settlement_id', row.id)
+      .maybeSingle();
+    if (error || !mirror) {
+      toast.error('السند غير متوفر للطباعة/الإرسال');
+      return;
+    }
+    const r = mirror as {
+      id: string;
+      receipt_type: string;
+      payment_id: string | null;
+      voucher_number: string | null;
+    };
+    setVoucherActionRow({
+      id: r.id,
+      receipt_type: r.receipt_type || kind,
+      voucher_number: r.voucher_number ?? row.cheque_number ?? null,
+      payment_id: r.payment_id ?? null,
+      client_name: row.entity_name ?? null,
+      // Companies don't have a "to-customer" phone for SMS/WhatsApp
+      // in the receipts mirror — send-voucher handles broker rows but
+      // for company-counterparty vouchers we'd need agency-side
+      // wiring. Pass null for now; the dialog disables SMS/WhatsApp
+      // and the user can still print.
+      client_phone: null,
+    });
+  };
 
   const data = useAccountingData(filters, branchId);
 
@@ -689,37 +743,27 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
           />
         </TabsContent>
         <TabsContent value="disbursements" className="m-0">
-          <SettlementsTable
+          <CompanySettlementsTable
             rows={companySettlements}
             loading={data.loading}
-            voucherKind="disbursement"
-            visible={settlementCols.visible}
-            entityLabel="شركة التأمين"
-            onEdit={handleEdit}
-            onDelete={handleDelete}
-            focusSettlementId={focusSettlementId}
-            onSettlementChanged={() => data.refresh()}
+            kind="disbursement"
+            onVoucherClick={(r) => openSettlementVoucher(r, 'disbursement')}
           />
         </TabsContent>
         <TabsContent value="receipts" className="m-0">
-          <SettlementsTable
+          <CompanySettlementsTable
             rows={companyReceipts}
             loading={data.loading}
-            voucherKind="receipt"
-            visible={settlementCols.visible}
-            entityLabel="شركة التأمين"
-            onEdit={handleEdit}
-            onDelete={handleDelete}
-            focusSettlementId={focusSettlementId}
-            onSettlementChanged={() => data.refresh()}
+            kind="payment"
+            onVoucherClick={(r) => openSettlementVoucher(r, 'payment')}
           />
-          {!data.loading && companyReceipts.length === 0 && (
-            <p className="text-center text-xs text-muted-foreground mt-3">
-              لا يوجد سندات قبض — استخدم زر "إضافة سند قبض" لتسجيل دفعة واردة من شركة.
-            </p>
-          )}
         </TabsContent>
       </Tabs>
+
+      <ReceiptActionsDialog
+        row={voucherActionRow}
+        onClose={() => setVoucherActionRow(null)}
+      />
 
       <AddSettlementDialog
         open={addOpen}
@@ -944,5 +988,133 @@ function CompanyPicker({
         </Command>
       </PopoverContent>
     </Popover>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────
+// CompanySettlementsTable — simple voucher list, customer-style
+// ──────────────────────────────────────────────────────────────
+//
+// Used by the سند الصرف / سند القبض sub-tabs. Mirrors the customer
+// receipts table: blue clickable voucher number on the right,
+// minimal columns (date, شركة, طريقة الدفع, مبلغ, ملاحظات), no
+// inline editing. Heavy lifting (cheque image, status badges,
+// edit/delete actions) lives on the /receipts page where it
+// belongs — the accounting page is read-only on the receipt rows.
+
+function formatSettlementVoucher(row: SettlementRow): string {
+  if (row.cheque_number) return `شيك ${row.cheque_number}`;
+  if (row.settlement_date) {
+    const parts = row.settlement_date.split('-');
+    if (parts.length === 3) return `تسوية ${parts[2]}/${parts[1]}/${parts[0]}`;
+  }
+  return `تسوية ${row.id.slice(0, 6)}`;
+}
+
+function formatSettlementDate(iso: string): string {
+  if (!iso) return '—';
+  try {
+    return format(parseISO(iso), 'dd/MM/yyyy');
+  } catch {
+    return iso;
+  }
+}
+
+const SETTLEMENT_PAYMENT_LABELS: Record<string, string> = {
+  cash: 'نقدي',
+  cheque: 'شيك',
+  customer_cheque: 'شيك عميل',
+  transfer: 'تحويل بنكي',
+  bank_transfer: 'تحويل بنكي',
+  visa: 'فيزا',
+  multiple: 'متعدد',
+};
+
+function CompanySettlementsTable({
+  rows,
+  loading,
+  kind,
+  onVoucherClick,
+}: {
+  rows: SettlementRow[];
+  loading: boolean;
+  kind: 'disbursement' | 'payment';
+  onVoucherClick: (row: SettlementRow) => void;
+}) {
+  if (loading) {
+    return (
+      <div className="space-y-2">
+        {[1, 2, 3].map((i) => (
+          <Skeleton key={i} className="h-12 w-full" />
+        ))}
+      </div>
+    );
+  }
+  if (rows.length === 0) {
+    return (
+      <div className="rounded-md border border-dashed bg-muted/30 p-8 text-center text-sm text-muted-foreground">
+        {kind === 'disbursement'
+          ? 'لا توجد سندات صرف في هذا النطاق'
+          : 'لا توجد سندات قبض في هذا النطاق'}
+      </div>
+    );
+  }
+  const amountClass =
+    kind === 'disbursement' ? 'text-amber-700' : 'text-emerald-700';
+  return (
+    <div className="rounded-md border bg-card overflow-x-auto">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="whitespace-nowrap text-right">رقم السند</TableHead>
+            <TableHead className="whitespace-nowrap text-right">التاريخ</TableHead>
+            <TableHead className="whitespace-nowrap text-right">الشركة</TableHead>
+            <TableHead className="whitespace-nowrap text-right">طريقة الدفع</TableHead>
+            <TableHead className="whitespace-nowrap text-left">المبلغ</TableHead>
+            <TableHead className="whitespace-nowrap text-right">ملاحظات</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((r) => {
+            const voucherLabel = formatSettlementVoucher(r);
+            const methodLabel = r.payment_type
+              ? SETTLEMENT_PAYMENT_LABELS[r.payment_type] ?? r.payment_type
+              : '—';
+            return (
+              <TableRow key={r.id} className="text-sm">
+                <TableCell className="font-mono ltr-nums whitespace-nowrap">
+                  <button
+                    type="button"
+                    onClick={() => onVoucherClick(r)}
+                    className="text-blue-600 underline-offset-2 hover:underline focus:outline-none focus-visible:underline"
+                  >
+                    {voucherLabel}
+                  </button>
+                </TableCell>
+                <TableCell className="whitespace-nowrap ltr-nums">
+                  {formatSettlementDate(r.settlement_date)}
+                </TableCell>
+                <TableCell className="whitespace-nowrap">
+                  {r.entity_name ?? '—'}
+                </TableCell>
+                <TableCell>
+                  <Badge variant="outline" className="text-xs">
+                    {methodLabel}
+                  </Badge>
+                </TableCell>
+                <TableCell
+                  className={`text-left ltr-nums font-semibold tabular-nums whitespace-nowrap ${amountClass}`}
+                >
+                  ₪{Math.round(r.total_amount).toLocaleString('en-US')}
+                </TableCell>
+                <TableCell className="max-w-[240px] truncate text-xs text-muted-foreground">
+                  {r.notes ?? '—'}
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </div>
   );
 }
