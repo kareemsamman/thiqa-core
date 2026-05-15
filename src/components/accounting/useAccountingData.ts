@@ -52,13 +52,26 @@ interface UseAccountingDataReturn {
   companySettlements: SettlementRow[];
   companyReceipts: SettlementRow[];
   brokerSettlements: SettlementRow[];
+  /** سند قبض rows — payments received FROM clients (the agency's
+   *  income side). Mirrored from `policy_payments` by the receipts
+   *  trigger so a bulk cheque collection still appears as one row per
+   *  policy share. */
+  clientPayments: ClientReceiptRow[];
+  /** سند إلغاء rows — refused/voided cheques. Each row reverses a
+   *  prior سند قبض (linked via `cancels_receipt_id`) but isn't itself
+   *  a cash movement; it just removes the earlier payment from the
+   *  customer's running balance. */
+  clientCancellations: ClientReceiptRow[];
   /** سند الصرف rows — actual cash leaving the agency to a client
    *  (refunds on cancel/transfer or manual disbursements). One row per
    *  voucher (multi-method sessions are already aggregated by the
    *  client_settlements → receipts mirror trigger). */
   clientDisbursements: ClientReceiptRow[];
-  /** إشعار دائن rows — credit balance issued to a client (wallet
-   *  credit, no cash out). Counts as money the agency owes the client. */
+  /** إشعار دائن / إشعار مدين rows. Both share receipt_type='credit_note'
+   *  in the DB; the SIGN of `amount` flips the user-facing label:
+   *    • amount > 0 → إشعار دائن (office owes customer — wallet credit)
+   *    • amount < 0 → إشعار مدين (customer owes office extra — paper debit)
+   *  Sections that need only one flavor split on `amount` themselves. */
   clientCreditNotes: ClientReceiptRow[];
   /** إشعار مدين للوسطاء — paper credits the office issued against
    *  brokers' outstanding debt. Subtracted from the broker debt
@@ -209,6 +222,8 @@ export function useAccountingData(
     (SettlementRow & { direction?: 'outgoing' | 'incoming' })[]
   >([]);
   const [brokerSettlements, setBrokerSettlements] = useState<SettlementRow[]>([]);
+  const [clientPaymentsRaw, setClientPaymentsRaw] = useState<ClientReceiptRow[]>([]);
+  const [clientCancellationsRaw, setClientCancellationsRaw] = useState<ClientReceiptRow[]>([]);
   const [clientDisbursementsRaw, setClientDisbursementsRaw] = useState<ClientReceiptRow[]>([]);
   const [clientCreditNotesRaw, setClientCreditNotesRaw] = useState<ClientReceiptRow[]>([]);
   const [brokerCreditNotesRaw, setBrokerCreditNotesRaw] = useState<ClientReceiptRow[]>([]);
@@ -488,13 +503,13 @@ export function useAccountingData(
       }));
       setBrokerSettlements(bsRows);
 
-      // 6. Client receipts — fetch the two outflow flavors that hit a
-      //    client's account from the agency's side. We read both in
-      //    one query and split client-side by receipt_type so the
-      //    accounting page can show سند صرف and إشعار دائن totals
-      //    next to the company/broker views. Cancelled receipts are
-      //    excluded from totals downstream; we keep them in the raw
-      //    list for surface display.
+      // 6. Client receipts — fetch every flavor that hits a client's
+      //    account from the agency's side. We read them all in one
+      //    query and split client-side by receipt_type so the
+      //    accounting page can show سند قبض / سند صرف / سند إلغاء /
+      //    إشعار دائن / إشعار مدين totals next to the company/broker
+      //    views. Cancelled (refused) rows are excluded from totals
+      //    downstream; we keep them in the raw list for display.
       let crQuery = supabase
         .from('receipts')
         .select(
@@ -503,7 +518,7 @@ export function useAccountingData(
            broker_id, policy_id, cancelled_at, receipt_type,
            policies(document_number, policy_number)`,
         )
-        .in('receipt_type', ['disbursement', 'credit_note'])
+        .in('receipt_type', ['payment', 'cancellation', 'disbursement', 'credit_note'])
         .eq('is_imported', false)
         .order('receipt_date', { ascending: false });
       if (agentId) crQuery = crQuery.eq('agent_id', agentId);
@@ -529,6 +544,20 @@ export function useAccountingData(
         receipt_type: string;
         broker_id?: string | null;
       })[];
+      // payment + cancellation: client-side. Both ignore broker_id —
+      // broker payments don't flow through the customer receipts
+      // table. We keep cancelled (refused) rows in the raw list so
+      // the سند الغاء sub-tab can render them; totals filter them.
+      setClientPaymentsRaw(
+        crRows
+          .filter((r) => r.receipt_type === 'payment' && !r.broker_id)
+          .map(mapClientReceipt),
+      );
+      setClientCancellationsRaw(
+        crRows
+          .filter((r) => r.receipt_type === 'cancellation' && !r.broker_id)
+          .map(mapClientReceipt),
+      );
       // disbursement rows: client-only (the broker disbursement
       // path uses the broker_settlements table directly, not the
       // receipts mirror).
@@ -660,6 +689,14 @@ export function useAccountingData(
   // the same AccountingFiltersValue used for company / broker tables.
   // Company / type filters don't apply (a client receipt isn't tied
   // to a single insurance company or policy type).
+  const filteredClientPayments = useMemo(
+    () => applyClientReceiptFilters(clientPaymentsRaw, filters),
+    [clientPaymentsRaw, filters],
+  );
+  const filteredClientCancellations = useMemo(
+    () => applyClientReceiptFilters(clientCancellationsRaw, filters),
+    [clientCancellationsRaw, filters],
+  );
   const filteredClientDisbursements = useMemo(
     () => applyClientReceiptFilters(clientDisbursementsRaw, filters),
     [clientDisbursementsRaw, filters],
@@ -697,6 +734,8 @@ export function useAccountingData(
     companySettlements: companyDisbursements,
     companyReceipts,
     brokerSettlements: filteredBrokerSettlements,
+    clientPayments: filteredClientPayments,
+    clientCancellations: filteredClientCancellations,
     clientDisbursements: filteredClientDisbursements,
     clientCreditNotes: filteredClientCreditNotes,
     brokerCreditNotes: filteredBrokerCreditNotes,

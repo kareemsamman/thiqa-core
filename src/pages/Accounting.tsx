@@ -66,7 +66,7 @@ export default function Accounting() {
               </TabsTrigger>
               <TabsTrigger value="expenses" className="gap-2">
                 <Receipt className="h-4 w-4" />
-                المصاريف
+                مصاريف
               </TabsTrigger>
             </TabsList>
             <div className="flex items-center gap-2">
