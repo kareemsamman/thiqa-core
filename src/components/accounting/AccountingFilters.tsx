@@ -17,6 +17,8 @@ export interface FilterOption {
 
 export type CounterpartyFilter = 'all' | 'broker' | 'client' | 'company';
 
+export type SortOrder = 'newest' | 'oldest';
+
 export interface AccountingFiltersValue {
   /** First day of selected range (or month), ISO yyyy-MM-dd. */
   dateFrom: string;
@@ -27,6 +29,9 @@ export interface AccountingFiltersValue {
   paymentMethods: string[];
   /** Limit رows to a counterparty kind — broker vs customer. Default 'all'. */
   counterparty?: CounterpartyFilter;
+  /** Row order. Consumers opt in via `show.sort`; default behavior
+   *  (when undefined) preserves each surface's existing ordering. */
+  sort?: SortOrder;
 }
 
 interface Props {
@@ -42,6 +47,7 @@ interface Props {
     paymentMethods?: boolean;
     hideElzami?: boolean;
     counterparty?: boolean;
+    sort?: boolean;
   };
   // Optional standalone toggle wired only on /receipts. Lives outside
   // AccountingFiltersValue because other pages (e.g. /accounting) don't
@@ -58,6 +64,7 @@ const ALL_SHOWN: Required<NonNullable<Props['show']>> = {
   paymentMethods: true,
   hideElzami: false,
   counterparty: false,
+  sort: false,
 };
 
 type DateMode = 'month' | 'range';
@@ -290,6 +297,33 @@ export function AccountingFilters({
                     {opt.l}
                   </button>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {visible.sort && (
+            <div className="space-y-1.5">
+              <Label className="text-xs">الترتيب</Label>
+              <div className="inline-flex rounded-md border bg-muted p-0.5 text-[12px] w-full">
+                {([
+                  { v: 'newest', l: 'الأجدد أولاً' },
+                  { v: 'oldest', l: 'الأقدم أولاً' },
+                ] as Array<{ v: SortOrder; l: string }>).map((opt) => {
+                  const active = (value.sort ?? 'newest') === opt.v;
+                  return (
+                    <button
+                      key={opt.v}
+                      type="button"
+                      onClick={() => onChange({ ...value, sort: opt.v })}
+                      className={cn(
+                        'flex-1 px-2.5 py-1 rounded transition-colors',
+                        active ? 'bg-white shadow-sm font-medium' : 'text-muted-foreground',
+                      )}
+                    >
+                      {opt.l}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}

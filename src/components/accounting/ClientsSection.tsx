@@ -263,45 +263,70 @@ export function ClientsSection({ branchId }: ClientsSectionProps = {}) {
   // "في حال بحثت على اسم عميل او فلترت على اسم عميل التنتين لازم
   // تشتغل نفس بعض" — both paths funnel through the same predicate.
   const clientId = selectedClient?.id ?? null;
+  // Sort direction from the filter — 'newest' by default. Each list
+  // applies it against its natural date field (issue_date for packages,
+  // receipt_date for receipt rows).
+  const sortDir: 'newest' | 'oldest' = filters.sort ?? 'newest';
+  const compareDates = (aIso: string | null | undefined, bIso: string | null | undefined): number => {
+    const a = aIso ? new Date(aIso).getTime() : 0;
+    const b = bIso ? new Date(bIso).getTime() : 0;
+    return sortDir === 'newest' ? b - a : a - b;
+  };
   const filteredPackages = useMemo(
     () =>
-      allPackages.filter(
-        (r) =>
-          (!clientId || r.client_id === clientId) &&
-          matchesIssuanceSearch(r, search),
-      ),
-    [allPackages, search, clientId],
+      allPackages
+        .filter(
+          (r) =>
+            (!clientId || r.client_id === clientId) &&
+            matchesIssuanceSearch(r, search),
+        )
+        .slice()
+        .sort((a, b) =>
+          compareDates(
+            a.main.issue_date ?? a.main.start_date,
+            b.main.issue_date ?? b.main.start_date,
+          ),
+        ),
+    [allPackages, search, clientId, sortDir],
   );
 
   // ── Receipt sub-tabs (live rows after free-text search) ───────
+  const sortReceipts = (rows: ClientReceiptRow[]): ClientReceiptRow[] =>
+    rows.slice().sort((a, b) => compareDates(a.receipt_date, b.receipt_date));
   const payments = useMemo(
     () =>
-      data.clientPayments.filter(
-        (r) =>
-          !r.cancelled_at &&
-          (!clientId || r.client_id === clientId) &&
-          matchesClientReceiptSearch(r, search),
+      sortReceipts(
+        data.clientPayments.filter(
+          (r) =>
+            !r.cancelled_at &&
+            (!clientId || r.client_id === clientId) &&
+            matchesClientReceiptSearch(r, search),
+        ),
       ),
-    [data.clientPayments, search, clientId],
+    [data.clientPayments, search, clientId, sortDir],
   );
   const cancellations = useMemo(
     () =>
-      data.clientCancellations.filter(
-        (r) =>
-          (!clientId || r.client_id === clientId) &&
-          matchesClientReceiptSearch(r, search),
+      sortReceipts(
+        data.clientCancellations.filter(
+          (r) =>
+            (!clientId || r.client_id === clientId) &&
+            matchesClientReceiptSearch(r, search),
+        ),
       ),
-    [data.clientCancellations, search, clientId],
+    [data.clientCancellations, search, clientId, sortDir],
   );
   const disbursements = useMemo(
     () =>
-      data.clientDisbursements.filter(
-        (r) =>
-          !r.cancelled_at &&
-          (!clientId || r.client_id === clientId) &&
-          matchesClientReceiptSearch(r, search),
+      sortReceipts(
+        data.clientDisbursements.filter(
+          (r) =>
+            !r.cancelled_at &&
+            (!clientId || r.client_id === clientId) &&
+            matchesClientReceiptSearch(r, search),
+        ),
       ),
-    [data.clientDisbursements, search, clientId],
+    [data.clientDisbursements, search, clientId, sortDir],
   );
   // Two كinds of إشعار live in the same bucket here:
   //   • receipt_type='credit_note', amount > 0  → إشعار دائن
@@ -312,26 +337,30 @@ export function ClientsSection({ branchId }: ClientsSectionProps = {}) {
   // in the right bucket regardless of sign convention.
   const creditNotes = useMemo(
     () =>
-      data.clientCreditNotes.filter(
-        (r) =>
-          !r.cancelled_at &&
-          r.receipt_type === 'credit_note' &&
-          r.amount > 0 &&
-          (!clientId || r.client_id === clientId) &&
-          matchesClientReceiptSearch(r, search),
+      sortReceipts(
+        data.clientCreditNotes.filter(
+          (r) =>
+            !r.cancelled_at &&
+            r.receipt_type === 'credit_note' &&
+            r.amount > 0 &&
+            (!clientId || r.client_id === clientId) &&
+            matchesClientReceiptSearch(r, search),
+        ),
       ),
-    [data.clientCreditNotes, search, clientId],
+    [data.clientCreditNotes, search, clientId, sortDir],
   );
   const debitNotes = useMemo(
     () =>
-      data.clientCreditNotes.filter(
-        (r) =>
-          !r.cancelled_at &&
-          (r.receipt_type === 'debit_note' || (r.receipt_type === 'credit_note' && r.amount < 0)) &&
-          (!clientId || r.client_id === clientId) &&
-          matchesClientReceiptSearch(r, search),
+      sortReceipts(
+        data.clientCreditNotes.filter(
+          (r) =>
+            !r.cancelled_at &&
+            (r.receipt_type === 'debit_note' || (r.receipt_type === 'credit_note' && r.amount < 0)) &&
+            (!clientId || r.client_id === clientId) &&
+            matchesClientReceiptSearch(r, search),
+        ),
       ),
-    [data.clientCreditNotes, search, clientId],
+    [data.clientCreditNotes, search, clientId, sortDir],
   );
 
   // ── Summary pills ────────────────────────────────────────────
@@ -456,7 +485,7 @@ export function ClientsSection({ branchId }: ClientsSectionProps = {}) {
             companyOptions={[]}
             typeOptions={[]}
             paymentMethodOptions={[]}
-            show={{ dateRange: true, companies: false, types: false, paymentMethods: false }}
+            show={{ dateRange: true, companies: false, types: false, paymentMethods: false, sort: true }}
           />
           {/* Column visibility — the list switches by active tab so
               the issuances tab manages package columns and the
