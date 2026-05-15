@@ -305,6 +305,20 @@ const queryClient = new QueryClient({
     queries: {
       // Prevent "reload-like" behavior when returning to the tab
       refetchOnWindowFocus: false,
+      // Treat data as fresh for 30s after fetch — second mounts of the
+      // same hook within that window reuse the cached payload instead
+      // of firing another network request. This is what kills the
+      // "same query × N components" duplicates the Network tab keeps
+      // showing (profiles?select=permissions × 3, branches × 2, etc.).
+      // Tune individual queries higher (e.g. branches at 10min) when
+      // their data changes rarely.
+      staleTime: 30 * 1000,
+      // Keep cached payloads in memory for 5 minutes after the last
+      // observer unmounts, so navigating away and back doesn't refetch.
+      gcTime: 5 * 60 * 1000,
+      // Retry once on network failure — the default of 3 amplifies
+      // user-visible latency on flaky connections.
+      retry: 1,
     },
   },
 });

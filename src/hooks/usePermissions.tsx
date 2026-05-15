@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { useAgentContext } from './useAgentContext';
@@ -68,44 +68,41 @@ export type PermissionKey = string;
  *   2. Explicit override on profiles.permissions[key].
  *   3. Agent template agents.default_employee_permissions[key].
  *   4. Missing → false.
+ *
+ * Backed by React Query so every component that calls usePermissions()
+ * shares one fetch — no matter how many places in the tree mount it.
+ * Before this, each call site had its own useState + useEffect, which
+ * is why the Network tab showed `profiles?select=permissions` firing
+ * 3 times on a single page load.
  */
 export function usePermissions() {
   const { user, isAdmin } = useAuth();
   const { agent, loading: agentLoading } = useAgentContext();
-  const [userPermissions, setUserPermissions] = useState<Record<string, boolean>>({});
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (!user) {
-      setUserPermissions({});
-      setLoading(false);
-      return;
-    }
-    let cancelled = false;
-
-    (async () => {
-      try {
-        const { data } = await supabase
-          .from('profiles')
-          .select('permissions')
-          .eq('id', user.id)
-          .maybeSingle();
-        if (cancelled) return;
-        const raw = data?.permissions as unknown;
-        const map =
-          typeof raw === 'string' ? JSON.parse(raw) : (raw as Record<string, boolean> | null) ?? {};
-        setUserPermissions(map ?? {});
-      } catch (error) {
+  const { data: userPermissions = {}, isLoading: loading } = useQuery({
+    queryKey: ['user-permissions', user?.id],
+    enabled: !!user,
+    // Permissions change rarely (admin edits via the user dialog);
+    // 5 min lets a tab return cleanly without forcing a refetch.
+    // Edits invalidate via queryClient elsewhere when we wire that up.
+    staleTime: 5 * 60 * 1000,
+    queryFn: async (): Promise<Record<string, boolean>> => {
+      if (!user) return {};
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('permissions')
+        .eq('id', user.id)
+        .maybeSingle();
+      if (error) {
         console.error('Error loading permissions:', error);
-      } finally {
-        if (!cancelled) setLoading(false);
+        return {};
       }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [user?.id]);
+      const raw = data?.permissions as unknown;
+      const map =
+        typeof raw === 'string' ? JSON.parse(raw) : (raw as Record<string, boolean> | null) ?? {};
+      return map ?? {};
+    },
+  });
 
   const defaults = (agent?.default_employee_permissions ?? {}) as Record<string, boolean>;
 
