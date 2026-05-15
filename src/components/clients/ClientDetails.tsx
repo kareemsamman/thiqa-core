@@ -824,297 +824,127 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
 
   const fetchPaymentSummary = async () => {
     try {
-      // Fetch every policy the customer signed up for (active +
-      // cancelled + transferred-source) so the debt math matches the
-      // kashf. Per the user's rule "إلغاء المعاملة ≠ إلغاء الدين" —
-      // cancellation alone doesn't remove what the customer owes;
-      // only the إشعار دائن / سند صرف refund flow does. Transferred
-      // DESTINATIONS (`transferred_from_policy_id` set) are excluded
-      // because they double-count the source.
-      const { data: policiesData } = await supabase
-        .from('policies')
-        .select('id, insurance_price, office_commission, profit, policy_type_parent, cancelled, transferred, group_id, broker_id, broker:brokers(id, name)')
-        .eq('client_id', client.id)
-        .is('transferred_from_policy_id', null)
-        .is('deleted_at', null);
+      // Single source of truth for the main numbers — the
+      // get_client_balance RPC encapsulates the entire kashf
+      // formula on the SQL side (billed − credits with all the
+      // ELZAMI-passthrough / cancelled-stays-in-debt /
+      // transfer-adjustment / receipt-vs-wallet rules baked in).
+      // Pulling it as one round-trip replaces six client-side
+      // queries (policies × 2 + policy_payments + receipts × 2 +
+      // policy_transfers + customer_wallet_transactions) that
+      // re-implemented the same math and were prone to drifting
+      // from the printed كشف.
+      //
+      // Profit + broker debts aren't in the RPC's return shape so
+      // we still need ONE policies query plus ONE policy_payments
+      // query to compute them — broker math splits payments per
+      // group between client claim and broker claim, which lives
+      // client-side. Net: 7 queries → 3.
+      const [{ data: balanceRows, error: balanceErr }, { data: policiesData, error: policiesErr }] = await Promise.all([
+        supabase.rpc('get_client_balance', { p_client_id: client.id }),
+        supabase
+          .from('policies')
+          .select('id, insurance_price, office_commission, profit, policy_type_parent, cancelled, transferred, group_id, broker_id, broker:brokers(id, name)')
+          .eq('client_id', client.id)
+          .is('transferred_from_policy_id', null)
+          .is('deleted_at', null),
+      ]);
+      if (balanceErr) throw balanceErr;
+      if (policiesErr) throw policiesErr;
 
-      // Per-policy refund total (credit_note + disbursement amounts
-      // mirrored to this policy). The kashf treats a cancelled policy
-      // with NO refund as "skip from debt" (because no money moved on
-      // either side; the customer never paid and the office never owes
-      // back). We mirror that so the in-app card matches the kashf.
-      // A cancelled policy WITH a refund stays in the debt total at
-      // full price; the refund amount is netted out via wallet/
-      // disbursement logic below — same as the kashf's ledger.
-      const everyPolicyIdForRefunds = (policiesData || []).map((p: any) => p.id);
-      let refundByPolicy = new Map<string, number>();
-      if (everyPolicyIdForRefunds.length > 0) {
-        const { data: refundRows } = await supabase
-          .from('receipts')
-          .select('policy_id, amount, receipt_type')
-          .in('policy_id', everyPolicyIdForRefunds)
-          .in('receipt_type', ['credit_note', 'disbursement']);
-        for (const r of (refundRows || []) as any[]) {
-          if (!r.policy_id) continue;
-          const cur = refundByPolicy.get(r.policy_id) || 0;
-          refundByPolicy.set(r.policy_id, cur + Math.abs(Number(r.amount || 0)));
-        }
-      }
+      const balance = Array.isArray(balanceRows) ? balanceRows[0] : balanceRows;
+      const totalPaid = Number(balance?.total_paid ?? 0);
+      const totalRemaining = Number(balance?.total_remaining ?? 0);
 
       if (!policiesData || policiesData.length === 0) {
-        setPaymentSummary({ total_paid: 0, total_remaining: 0, total_profit: 0 });
+        setPaymentSummary({
+          total_paid: totalPaid,
+          total_remaining: totalRemaining,
+          total_profit: 0,
+        });
         setBrokerDebts([]);
         return;
       }
 
-      const allPolicyIds = policiesData.map(p => p.id);
-
-      // We also need every NON-DELETED policy (including cancelled
-      // and transferred ones) so the "gross paid" tile shows what
-      // the customer actually handed over — cancelling a transaction
-      // doesn't refund the cash the customer already paid for it.
-      // The kashf does the same; without this the page tile and the
-      // kashf disagree by exactly the cancelled-side payments.
-      const { data: everyPolicyRow } = await supabase
-        .from('policies')
-        .select('id, policy_type_parent, office_commission')
-        .eq('client_id', client.id)
-        .is('deleted_at', null);
-      const everyPolicyById = new Map<string, any>(
-        (everyPolicyRow || []).map(p => [p.id, p]),
-      );
-      const isElzamiPassthrough = (payment: { payment_type?: string | null; policy_id: string }) => {
-        if (payment.payment_type !== 'visa_external') return false;
-        const pol = everyPolicyById.get(payment.policy_id);
-        if (!pol) return false;
-        return pol.policy_type_parent === 'ELZAMI';
-      };
-
-      // paymentsMap is keyed by active policy id and feeds the
-      // outstanding-debt math below (paidTowardClient). It only
-      // accepts payments tied to ACTIVE policies — payments on
-      // cancelled/transferred policies don't reduce the active
-      // obligation.
-      let paymentsMap: Record<string, number> = {};
-      // grossPaid is the customer's TOTAL cash collected, across
-      // every non-deleted policy (active + cancelled + transferred)
-      // minus إلزامي pass-through. This is what we display as
-      // "إجمالي المدفوع" so the customer reads what he actually paid.
-      let grossPaid = 0;
-      const everyPolicyId = (everyPolicyRow || []).map(p => p.id);
-      if (everyPolicyId.length > 0) {
-        const { data: paymentsData } = await supabase
-          .from('policy_payments')
-          .select('policy_id, amount, refused, payment_type')
-          .in('policy_id', everyPolicyId);
-        (paymentsData || []).forEach(p => {
-          if (p.refused) return;
-          if (isElzamiPassthrough(p as any)) return;
-          grossPaid += Number(p.amount || 0);
-          // Only contribute to the active-only map when the policy
-          // is currently in the active set — otherwise the cancelled
-          // payment would leak into the outstanding-debt math.
-          if (allPolicyIds.includes(p.policy_id)) {
-            paymentsMap[p.policy_id] = (paymentsMap[p.policy_id] || 0) + (p.amount || 0);
-          }
-        });
-      }
-
-      // Profit is a raw per-policy figure — keep summing across every
-      // active policy so the profit card stays the same.
+      // Profit summed across every active (non-destination) policy.
+      // The RPC doesn't return this — it's a UI-only number for the
+      // "صافي الأرباح" tile, not part of the customer-facing balance.
       const totalProfit = policiesData.reduce((sum, p) => sum + (p.profit || 0), 0);
 
-      // Group by group_id (standalone policies get their own bucket).
+      // Broker debt math needs per-group payment totals so we can
+      // split a group's payment pool between the client's claim and
+      // the broker's claim. Pull payments only for the policies we
+      // already fetched — keeps the query tight and excludes
+      // ELZAMI passthrough / refused inline below.
+      const allPolicyIds = policiesData.map(p => p.id);
+      const { data: paymentsData } = await supabase
+        .from('policy_payments')
+        .select('policy_id, amount, refused, payment_type')
+        .in('policy_id', allPolicyIds);
+
+      // ELZAMI passthrough = customer paid the insurance company
+      // directly (visa_external) on a policy with no office
+      // commission. Same rule the RPC uses server-side.
+      const policyById = new Map(policiesData.map(p => [p.id, p]));
+      const paymentsMap: Record<string, number> = {};
+      for (const p of (paymentsData || []) as Array<{ policy_id: string; amount: number; refused: boolean | null; payment_type: string | null }>) {
+        if (p.refused) continue;
+        const pol = policyById.get(p.policy_id);
+        const isElzamiPassthrough =
+          p.payment_type === 'visa_external' &&
+          pol?.policy_type_parent === 'ELZAMI' &&
+          Number(pol?.office_commission || 0) <= 0;
+        if (isElzamiPassthrough) continue;
+        paymentsMap[p.policy_id] = (paymentsMap[p.policy_id] || 0) + Number(p.amount || 0);
+      }
+
+      // Group policies by group_id and split each group's payment
+      // pool between client claim and broker claim.
       const groupMap = new Map<string, typeof policiesData>();
-      policiesData.forEach(p => {
+      for (const p of policiesData) {
         const key = p.group_id || `single_${p.id}`;
         if (!groupMap.has(key)) groupMap.set(key, []);
         groupMap.get(key)!.push(p);
-      });
+      }
 
-      let clientOwed = 0;
-      let clientPaid = 0;
-      const brokerTotals = new Map<string, { brokerId: string; brokerName: string; amount: number }>();
-
-      // إلزامي base price is paid directly to the insurance company
-      // via external Visa and never enters the office's books. The
-      // policy itself records the base price for historical/regulatory
-      // reasons, but the office's claim is only the (rare) commission
-      // on it — and for non-إلزامي the full price + commission.
       const officeClaimFor = (p: any) => {
         const commission = Number(p.office_commission || 0);
         if (p.policy_type_parent === 'ELZAMI') return commission;
         return Number(p.insurance_price || 0) + commission;
       };
-      // Match the kashf formula exactly: every non-destination,
-      // non-broker policy contributes its office_claim to clientOwed.
-      // Cancellation/transfer status doesn't matter at this step —
-      // the refunds (credit_note + disbursement) and transfer
-      // adjustments net out separately via the wallet/transfer
-      // queries below. Without this consistency the in-app debt tile
-      // drifts from the printed kashf.
+
+      const brokerTotals = new Map<string, { brokerId: string; brokerName: string; amount: number }>();
       groupMap.forEach(groupPolicies => {
         const nonBrokerInGroup = groupPolicies.filter(p => !(p as any).broker_id);
         const brokerInGroup = groupPolicies.filter(p => (p as any).broker_id);
+        if (brokerInGroup.length === 0) return;
 
-        const nonBrokerClaim = nonBrokerInGroup.reduce(
-          (sum, p) => sum + officeClaimFor(p),
-          0,
-        );
-        const groupPool = groupPolicies.reduce(
-          (sum, p) => sum + (paymentsMap[p.id] || 0),
-          0,
-        );
+        const nonBrokerClaim = nonBrokerInGroup.reduce((sum, p) => sum + officeClaimFor(p), 0);
+        const groupPool = groupPolicies.reduce((sum, p) => sum + (paymentsMap[p.id] || 0), 0);
         const paidTowardClient = Math.min(groupPool, nonBrokerClaim);
         const paidTowardBroker = Math.max(0, groupPool - paidTowardClient);
 
-        clientOwed += nonBrokerClaim;
-        clientPaid += paidTowardClient;
+        const brokerOwed = brokerInGroup.reduce((sum, p) => sum + officeClaimFor(p), 0);
+        const brokerRemaining = Math.max(0, brokerOwed - paidTowardBroker);
+        if (brokerRemaining <= 0) return;
 
-        if (brokerInGroup.length > 0) {
-          const brokerOwed = brokerInGroup.reduce(
-            (sum, p) => sum + officeClaimFor(p),
-            0,
-          );
-          const brokerRemaining = Math.max(0, brokerOwed - paidTowardBroker);
-          if (brokerRemaining > 0) {
-            const broker = (brokerInGroup[0] as any).broker;
-            if (broker?.id) {
-              const existing = brokerTotals.get(broker.id);
-              if (existing) {
-                existing.amount += brokerRemaining;
-              } else {
-                brokerTotals.set(broker.id, {
-                  brokerId: broker.id,
-                  brokerName: broker.name || 'وسيط',
-                  amount: brokerRemaining,
-                });
-              }
-            }
-          }
+        const broker = (brokerInGroup[0] as any).broker;
+        if (!broker?.id) return;
+        const existing = brokerTotals.get(broker.id);
+        if (existing) {
+          existing.amount += brokerRemaining;
+        } else {
+          brokerTotals.set(broker.id, {
+            brokerId: broker.id,
+            brokerName: broker.name || 'وسيط',
+            amount: brokerRemaining,
+          });
         }
       });
 
-      // Transfer adjustments — both directions:
-      //   • customer_pays: ADDS to debt (تكلفة التحويل على الزبون)
-      //   • office_pays:   SUBTRACTS from debt (المكتب بيرجّع للزبون)
-      // The kashf nets both inside yearBalance; without this the
-      // tile drifts whenever a transfer involves a refund leg.
-      const allClientPolicyIds = (everyPolicyRow || []).map((p: any) => p.id);
-      let transferCustomerPaysTotal = 0;
-      let transferOfficePaysTotal = 0;
-      if (allClientPolicyIds.length > 0) {
-        const { data: transferRows } = await supabase
-          .from('policy_transfers')
-          .select('adjustment_amount, adjustment_type')
-          .in('policy_id', allClientPolicyIds);
-        for (const t of (transferRows || []) as any[]) {
-          const amt = Number(t.adjustment_amount || 0);
-          if (amt <= 0.01) continue;
-          if (t.adjustment_type === 'customer_pays') transferCustomerPaysTotal += amt;
-          else if (t.adjustment_type === 'office_pays') transferOfficePaysTotal += amt;
-        }
-      }
-
-      // Receipts the office issued to the customer this whole time —
-      // both flavours reduce the customer's debt and so must be
-      // subtracted from the running outstanding to match the kashf.
-      //   • credit_note: paper credit (wallet IOU)
-      //   • disbursement: cash actually paid back
-      //   • debit_note:   ADDS to debt (we charged him extra)
-      // Cancelled receipts (cancelled_at != null) are skipped — same
-      // rule as the kashf's filter.
-      const { data: clientReceiptRows } = await supabase
-        .from('receipts')
-        .select('amount, receipt_type, cancelled_at')
-        .eq('client_id', client.id)
-        .in('receipt_type', ['credit_note', 'disbursement', 'debit_note'])
-        .is('cancelled_at', null);
-      let totalCreditNotesIssued = 0;
-      let totalDisbursementsPaid = 0;
-      let totalDebitNotesBilled = 0;
-      for (const r of (clientReceiptRows ?? []) as any[]) {
-        const amt = Math.abs(Number(r.amount || 0));
-        if (r.receipt_type === 'credit_note') totalCreditNotesIssued += amt;
-        else if (r.receipt_type === 'disbursement') totalDisbursementsPaid += amt;
-        else if (r.receipt_type === 'debit_note') totalDebitNotesBilled += amt;
-      }
-
-      // Wallet credit consumed by a new transaction at sale time
-      // ('credit_consumed' wallet entry). The policy's gross price is
-      // already in clientOwed, but the customer effectively only owes
-      // (gross − consumed) — same netting the kashf does.
-      // 'manual_debit' (إشعار مدين) goes the OTHER way: the office
-      // recorded that the customer owes extra for some reason, so it
-      // ADDS to the remaining. Fetched in the same query and bucketed
-      // by transaction_type so the SQL round-trip stays at one.
-      const { data: walletAdjustmentRows } = await supabase
-        .from('customer_wallet_transactions')
-        .select('amount, transaction_type')
-        .eq('client_id', client.id)
-        .in('transaction_type', ['credit_consumed', 'manual_debit']);
-      let totalCreditConsumed = 0;
-      let totalManualDebit = 0;
-      for (const r of (walletAdjustmentRows ?? []) as any[]) {
-        const amt = Number(r.amount || 0);
-        if (r.transaction_type === 'credit_consumed') totalCreditConsumed += amt;
-        else if (r.transaction_type === 'manual_debit') totalManualDebit += amt;
-      }
-
-      // Outstanding = the kashf's exact formula (also matches the
-      // get_client_balance RPC on the SQL side). Mirrors the printed
-      // كشف totals box so the tile, the RPC, and the printout never
-      // disagree:
-      //   billed   = policy office_claim + transfer_customer_pays + debit_notes
-      //   credits  = paid + credit_notes + transfer_office_pays
-      //   remaining = max(0, billed - credits)
-      //
-      // We pull debit/credit/disbursement amounts from RECEIPTS (not
-      // the wallet) to match exactly what generate-customer-statement
-      // does — using the wallet would double-count, since each
-      // credit_note / debit_note already writes a paired wallet entry
-      // and the kashf reads from receipts only. Disbursements aren't
-      // in the kashf credit total either ("each voucher is independent
-      // — سند صرف doesn't auto-settle a credit_note"); we follow that
-      // rule here for consistency.
-      //
-      // grossPaid (not clientPaid clamped per package) is critical:
-      // payments mirrored onto a transfer DESTINATION policy sit
-      // outside policiesData because we filter destinations out, so
-      // clientPaid's per-package clamp loses them. grossPaid sweeps
-      // every policy_payments row (refused / إلزامي passthrough
-      // excluded), exactly like the kashf's totalYearPaid.
-      void totalManualDebit;        // wallet mirror of debit_notes — kept for legacy callers
-      void totalCreditConsumed;     // legacy netting — superseded by credit_note subtraction below
-      void totalDisbursementsPaid;  // independent voucher per user rule — not netted here
-      const grossPaidEffective = grossPaid;
-      const billedTotal =
-        clientOwed
-        + transferCustomerPaysTotal
-        + totalDebitNotesBilled;
-      const creditsTotal =
-        grossPaidEffective
-        + totalCreditNotesIssued
-        + transferOfficePaysTotal;
-      // Diagnostic: temporary log so we can see exactly what each
-      // term contributes when the tile disagrees with the kashf.
-      // Safe to remove once the discrepancy is resolved.
-      console.log('[ClientDetails.fetchPaymentSummary]', {
-        clientId: client.id,
-        clientName: client.full_name,
-        clientOwed,
-        transferCustomerPaysTotal,
-        totalDebitNotesBilled,
-        billedTotal,
-        grossPaidEffective,
-        totalCreditNotesIssued,
-        transferOfficePaysTotal,
-        creditsTotal,
-        remaining: Math.max(0, billedTotal - creditsTotal),
-      });
       setPaymentSummary({
-        total_paid: grossPaidEffective,
-        total_remaining: Math.max(0, billedTotal - creditsTotal),
+        total_paid: totalPaid,
+        total_remaining: totalRemaining,
         total_profit: totalProfit,
       });
       setBrokerDebts(Array.from(brokerTotals.values()));
