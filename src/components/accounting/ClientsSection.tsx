@@ -621,6 +621,28 @@ export function ClientsSection({ branchId }: ClientsSectionProps = {}) {
         </TabsContent>
       </Tabs>
 
+      {/* Sticky floating action — mirrors the شركات tab's "طباعة
+          الإصدارات" pill. Only appears when a client is in scope
+          (explicit pick or search narrowed to one) so the user
+          discovers كشف-حساب the moment the data points at a single
+          customer, without scrolling back up to the toolbar. */}
+      {effectiveClient ? (
+        <div className="fixed bottom-5 inset-x-0 z-40 flex justify-center pointer-events-none">
+          <div className="pointer-events-auto bg-foreground text-background rounded-full shadow-2xl px-4 py-1.5">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setStatementOpen(true)}
+              className="gap-2 text-background hover:bg-background/10 hover:text-background rounded-full"
+            >
+              <FileText className="h-4 w-4" />
+              <span>كشف حساب — {effectiveClient.full_name}</span>
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
       {effectiveClient ? (
         <CustomerStatementModal
           open={statementOpen}
