@@ -6,6 +6,10 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import {
   ArrowDownRight,
   ArrowUpRight,
+  Building2,
+  CalendarRange,
+  Check,
+  ChevronsUpDown,
   FileText,
   Loader2,
   Plus,
@@ -13,8 +17,23 @@ import {
   RotateCcw,
   LayoutGrid,
   Search,
+  X,
   type LucideIcon,
 } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import {
+  Command,
+  CommandEmpty,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
+import { cn } from '@/lib/utils';
 import { AddSettlementDialog, SettlementKind } from './AddSettlementDialog';
 import { EditSettlementDialog } from './EditSettlementDialog';
 import { QuickIssuanceDialog, IssuanceMode } from './QuickIssuanceDialog';
@@ -91,13 +110,27 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
   const [editLocal, setEditLocal] = useState<IssuanceEditOverlay>({});
   const onPatch = (rowId: string, patch: IssuanceEditPatch) =>
     setEditLocal((prev) => ({ ...prev, [rowId]: { ...(prev[rowId] ?? {}), ...patch } }));
-  const [filters, setFilters] = useState<AccountingFiltersValue>({
-    dateFrom: '',
-    dateTo: '',
-    companies: [],
-    types: [],
-    paymentMethods: [],
+  // Default to the current calendar month to match the customer
+  // accounting tab — the page loads pre-scoped so opening it on the
+  // 18th doesn't dump the whole year onto the screen.
+  const [filters, setFilters] = useState<AccountingFiltersValue>(() => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = d.getMonth();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const lastDay = new Date(y, m + 1, 0).getDate();
+    return {
+      dateFrom: `${y}-${pad(m + 1)}-01`,
+      dateTo: `${y}-${pad(m + 1)}-${pad(lastDay)}`,
+      companies: [],
+      types: [],
+      paymentMethods: [],
+    };
   });
+  // Single-company picker outside the Filter popover — mirrors the
+  // customer picker on ClientsSection. When set, every list collapses
+  // to that company's rows.
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
 
   const data = useAccountingData(filters, branchId);
 
@@ -194,34 +227,72 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
   // owe the broker (broker_buy_price), tracked under the brokers tab.
   const isCompanyRelevant = (r: IssuanceRow) =>
     r.main.broker_direction !== 'from_broker';
+  // Sort + per-company filter pulled from the same source-of-truth so
+  // every list reflects the picker / sort selection consistently.
+  const sortDirCo: 'newest' | 'oldest' = filters.sort ?? 'newest';
+  const compareIssuanceDates = (a: IssuanceRow, b: IssuanceRow): number => {
+    const at = a.main.issue_date ?? a.main.start_date;
+    const bt = b.main.issue_date ?? b.main.start_date;
+    const av = at ? new Date(at).getTime() : 0;
+    const bv = bt ? new Date(bt).getTime() : 0;
+    return sortDirCo === 'newest' ? bv - av : av - bv;
+  };
+  const compareSettlementDates = (a: SettlementRow, b: SettlementRow): number => {
+    const av = a.settlement_date ? new Date(a.settlement_date).getTime() : 0;
+    const bv = b.settlement_date ? new Date(b.settlement_date).getTime() : 0;
+    return sortDirCo === 'newest' ? bv - av : av - bv;
+  };
+  const matchesSelectedCompany = (r: IssuanceRow) =>
+    !selectedCompanyId || r.main.company_id === selectedCompanyId;
+  const matchesSelectedCompanyOnSettlement = (r: SettlementRow) =>
+    !selectedCompanyId || r.entity_id === selectedCompanyId;
   const issuancesAll = useMemo(
     () =>
       [...data.issuances, ...data.returns]
         .filter(isCompanyRelevant)
-        .filter((r) => matchesIssuanceSearch(r, search)),
-    [data.issuances, data.returns, search],
+        .filter(matchesSelectedCompany)
+        .filter((r) => matchesIssuanceSearch(r, search))
+        .slice()
+        .sort(compareIssuanceDates),
+    [data.issuances, data.returns, search, selectedCompanyId, sortDirCo],
   );
   const issuancesActive = useMemo(
     () =>
       data.issuances
         .filter(isCompanyRelevant)
-        .filter((r) => matchesIssuanceSearch(r, search)),
-    [data.issuances, search],
+        .filter(matchesSelectedCompany)
+        .filter((r) => matchesIssuanceSearch(r, search))
+        .slice()
+        .sort(compareIssuanceDates),
+    [data.issuances, search, selectedCompanyId, sortDirCo],
   );
   const returns = useMemo(
     () =>
       data.returns
         .filter(isCompanyRelevant)
-        .filter((r) => matchesIssuanceSearch(r, search)),
-    [data.returns, search],
+        .filter(matchesSelectedCompany)
+        .filter((r) => matchesIssuanceSearch(r, search))
+        .slice()
+        .sort(compareIssuanceDates),
+    [data.returns, search, selectedCompanyId, sortDirCo],
   );
   const companySettlements = useMemo(
-    () => data.companySettlements.filter((r) => matchesSettlementSearch(r, search)),
-    [data.companySettlements, search],
+    () =>
+      data.companySettlements
+        .filter(matchesSelectedCompanyOnSettlement)
+        .filter((r) => matchesSettlementSearch(r, search))
+        .slice()
+        .sort(compareSettlementDates),
+    [data.companySettlements, search, selectedCompanyId, sortDirCo],
   );
   const companyReceipts = useMemo(
-    () => data.companyReceipts.filter((r) => matchesSettlementSearch(r, search)),
-    [data.companyReceipts, search],
+    () =>
+      data.companyReceipts
+        .filter(matchesSelectedCompanyOnSettlement)
+        .filter((r) => matchesSettlementSearch(r, search))
+        .slice()
+        .sort(compareSettlementDates),
+    [data.companyReceipts, search, selectedCompanyId, sortDirCo],
   );
 
   // from_broker policies don't appear in issuancesActive (they belong
@@ -515,55 +586,25 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
               className="h-8 w-full pr-8 text-sm"
             />
           </div>
-          {(tab === 'disbursements' || tab === 'receipts') && (
-            <Button
-              size="sm"
-              className="h-8 gap-1.5"
-              onClick={() => {
-                setAddKind(tab === 'disbursements' ? 'disbursement' : 'receipt');
-                setAddOpen(true);
-              }}
-            >
-              <Plus className="h-3.5 w-3.5" />
-              {tab === 'disbursements' ? 'إضافة سند صرف' : 'إضافة سند قبض'}
-            </Button>
-          )}
-          {(tab === 'issuances' || tab === 'returns' || tab === 'all') && (
-            <Button
-              size="sm"
-              className="h-8 gap-1.5"
-              onClick={() => {
-                setIssuanceMode(tab === 'returns' ? 'return' : 'issue');
-                setIssuanceOpen(true);
-              }}
-            >
-              <Plus className="h-3.5 w-3.5" />
-              {tab === 'returns' ? 'إضافة مرتجع يدوي' : 'إضافة إصدار يدوي'}
-            </Button>
-          )}
+          {/* Per the user: remove every action button from the
+              accounting toolbar — print, "إضافة إصدار يدوي",
+              "إضافة سند صرف/قبض" — "كل الزرار شيلهم بعدين منشتغل
+              عليهم". The QuickIssuanceDialog + AddSettlementDialog
+              state/render stays mounted below so we can re-wire
+              triggers later without losing the dialog plumbing. */}
           <span className="text-xs text-muted-foreground">
             {data.loading ? '...' : `${activeRowCount} ${countLabel}`}
           </span>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 gap-1.5"
-            disabled={printing || data.loading || activeRowCount === 0}
-            onClick={handlePrint}
-            title="طباعة الجدول"
-          >
-            {printing ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Printer className="h-3.5 w-3.5" />
-            )}
-            <span className="hidden sm:inline">طباعة</span>
-          </Button>
           <ManageColumnsDropdown
             columns={activeColumns}
             visible={activeState.visible}
             onToggle={activeState.toggle}
             onReset={activeState.reset}
+          />
+          <CompanyPicker
+            value={selectedCompanyId}
+            options={companyOptions}
+            onChange={setSelectedCompanyId}
           />
           <AccountingFilters
             value={filters}
@@ -573,12 +614,41 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
             paymentMethodOptions={paymentOptions}
             show={{
               dateRange: true,
-              companies: true,
+              // Company multi-select moves to the dedicated picker
+              // above so only one source-of-truth narrows by company.
+              companies: false,
               types: !isSettlementTab,
               paymentMethods: true,
+              sort: true,
             }}
           />
         </div>
+      </div>
+
+      {/* Active-filter strip — same pattern as the customers tab so the
+          two surfaces feel like one product. Shows the date scope
+          (Arabic month name when it's a clean first-to-last range,
+          raw range otherwise) and a chip for the locked company that
+          can be cleared with an X. */}
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <Badge variant="secondary" className="gap-1.5 font-medium">
+          <CalendarRange className="h-3.5 w-3.5" />
+          {describeAccountingRange(filters.dateFrom, filters.dateTo)}
+        </Badge>
+        {selectedCompanyId ? (
+          <Badge variant="secondary" className="gap-1.5 font-medium">
+            <Building2 className="h-3.5 w-3.5" />
+            {companyOptions.find((c) => c.value === selectedCompanyId)?.label ?? '—'}
+            <button
+              type="button"
+              onClick={() => setSelectedCompanyId(null)}
+              className="ml-1 -mr-0.5 rounded-full hover:bg-foreground/10"
+              aria-label="مسح فلتر الشركة"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </Badge>
+        ) : null}
       </div>
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as SubTab)}>
@@ -745,5 +815,134 @@ function BreakdownLines({ title, lines }: { title: string; lines: BreakdownLine[
         ))}
       </div>
     </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────
+// Helpers — date range chip + company picker
+// ──────────────────────────────────────────────────────────────
+// Mirrors ClientsSection's identically-named helpers so the two
+// surfaces format the same way. Kept inline (small + tight scope);
+// if a third surface ever needs them we can lift to a shared file.
+
+const AR_MONTH_NAMES_CO = [
+  'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
+  'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر',
+];
+
+function formatAccountingDate(iso: string): string {
+  if (!iso) return '—';
+  const parts = iso.split('-');
+  if (parts.length !== 3) return iso;
+  return `${parts[2]}/${parts[1]}/${parts[0]}`;
+}
+
+function describeAccountingRange(from: string, to: string): string {
+  if (!from && !to) return 'كل التواريخ';
+  if (!from || !to) return `${from || '...'} → ${to || '...'}`;
+  const f = from.split('-');
+  const t = to.split('-');
+  if (f.length === 3 && t.length === 3 && f[0] === t[0] && f[1] === t[1]) {
+    const y = Number(f[0]);
+    const mIdx = Number(f[1]) - 1;
+    const lastDay = new Date(y, mIdx + 1, 0).getDate();
+    if (Number(f[2]) === 1 && Number(t[2]) === lastDay) {
+      return `شهر ${AR_MONTH_NAMES_CO[mIdx] ?? f[1]} ${y}`;
+    }
+  }
+  return `${formatAccountingDate(from)} → ${formatAccountingDate(to)}`;
+}
+
+function CompanyPicker({
+  value,
+  options,
+  onChange,
+}: {
+  value: string | null;
+  options: { value: string; label: string }[];
+  onChange: (next: string | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const filtered = useMemo(() => {
+    const term = query.trim().toLowerCase();
+    if (!term) return options;
+    return options.filter((o) => o.label.toLowerCase().includes(term));
+  }, [options, query]);
+  const selectedLabel = value ? options.find((o) => o.value === value)?.label ?? '' : '';
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          role="combobox"
+          aria-expanded={open}
+          className={cn(
+            'h-8 gap-2 min-w-[180px] justify-between',
+            value && 'border-primary/40',
+          )}
+        >
+          <Building2 className="h-3.5 w-3.5" />
+          <span className="truncate flex-1 text-right">
+            {value ? selectedLabel : 'اختر شركة...'}
+          </span>
+          <ChevronsUpDown className="h-3.5 w-3.5 opacity-60" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[280px] p-0" align="end" dir="rtl">
+        <Command>
+          <CommandInput
+            placeholder="ابحث باسم الشركة..."
+            value={query}
+            onValueChange={setQuery}
+          />
+          <CommandList>
+            {filtered.length === 0 ? (
+              <CommandEmpty>لا توجد شركات</CommandEmpty>
+            ) : (
+              filtered.map((c) => (
+                <CommandItem
+                  key={c.value}
+                  value={c.value}
+                  onSelect={() => {
+                    onChange(c.value);
+                    setOpen(false);
+                    setQuery('');
+                  }}
+                  className="flex items-center gap-2 data-[selected=true]:bg-muted data-[selected=true]:text-foreground aria-selected:bg-muted aria-selected:text-foreground"
+                >
+                  <Check
+                    className={cn(
+                      'h-3.5 w-3.5',
+                      value === c.value ? 'opacity-100' : 'opacity-0',
+                    )}
+                  />
+                  <span className="truncate">{c.label}</span>
+                </CommandItem>
+              ))
+            )}
+          </CommandList>
+          {value ? (
+            <div className="border-t p-1.5">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full justify-start gap-2 text-destructive hover:text-destructive"
+                onClick={() => {
+                  onChange(null);
+                  setOpen(false);
+                  setQuery('');
+                }}
+              >
+                <X className="h-3.5 w-3.5" />
+                مسح اختيار الشركة
+              </Button>
+            </div>
+          ) : null}
+        </Command>
+      </PopoverContent>
+    </Popover>
   );
 }
