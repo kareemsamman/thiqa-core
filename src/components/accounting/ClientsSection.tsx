@@ -1239,14 +1239,16 @@ function ReceiptsTable({
 // buttons (طباعة / SMS / واتساب). Scoped to ONE voucher; per-type
 // edge-function routing:
 //
-//   • payment      → send-payment-receipt-sms  body={ payment_ids:[...] }
-//   • disbursement → send-disbursement-sms     body={ voucher_receipt_id }
-//   • credit_note  → send-credit-note-sms      body={ voucher_receipt_id }
-//   • debit_note   → no SMS sibling yet, only print
-//   • cancellation → no SMS sibling yet, only print
+// Print → `generate-voucher` for every type (it dispatches by
+//          receipt_type internally so the URL matches /receipts).
+// SMS + WhatsApp → `send-voucher`, the unified wrapper that
+//          handles every type (payment, disbursement, credit_note,
+//          debit_note, cancellation) and resolves the customer's
+//          phone via receipts.client_id or the linked policy.
 //
-// Print uses `generate-voucher` for every type (it dispatches
-// internally) so the URL matches what /receipts shows.
+// Body shape is identical to the print path: payment rows pass
+// payment_ids so the bulk session number is preserved; everything
+// else passes voucher_receipt_id.
 //
 // SMS-lock awareness comes from useSmsLock — when quota's gone the
 // SMS button gets an amber dot and clicking it opens the upgrade
@@ -1254,15 +1256,7 @@ function ReceiptsTable({
 
 type ActionChannelState = 'idle' | 'loading' | 'sent';
 
-const SEND_FUNCTION_BY_TYPE: Record<string, string | null> = {
-  payment: 'send-payment-receipt-sms',
-  disbursement: 'send-disbursement-sms',
-  credit_note: 'send-credit-note-sms',
-  // debit_note + cancellation have no dedicated send function yet;
-  // surface only the print button for those.
-  debit_note: null,
-  cancellation: null,
-};
+const SEND_VOUCHER_FUNCTION = 'send-voucher';
 
 const RECEIPT_TITLE_BY_TYPE: Record<string, string> = {
   payment: 'سند قبض',
@@ -1318,7 +1312,6 @@ function ReceiptActionsDialog({
 
   if (!row) return null;
 
-  const sendFunction = SEND_FUNCTION_BY_TYPE[row.receipt_type] ?? null;
   const title = RECEIPT_TITLE_BY_TYPE[row.receipt_type] ?? 'سند';
 
   // Body shape every send-* and generate-voucher accepts. Payment
@@ -1361,7 +1354,6 @@ function ReceiptActionsDialog({
   };
 
   const handleSms = async () => {
-    if (!sendFunction) return;
     if (!row.client_phone) {
       toast.error('لا يوجد رقم هاتف للعميل');
       return;
@@ -1374,7 +1366,7 @@ function ReceiptActionsDialog({
     setSmsState('loading');
     setErrorMessage(null);
     try {
-      const { data, error } = await supabase.functions.invoke(sendFunction, {
+      const { data, error } = await supabase.functions.invoke(SEND_VOUCHER_FUNCTION, {
         body: buildBody(),
       });
       if (error) {
@@ -1399,7 +1391,6 @@ function ReceiptActionsDialog({
   };
 
   const handleWhatsapp = async () => {
-    if (!sendFunction) return;
     if (!row.client_phone) {
       toast.error('لا يوجد رقم هاتف للعميل');
       return;
@@ -1407,7 +1398,7 @@ function ReceiptActionsDialog({
     setWhatsappState('loading');
     setErrorMessage(null);
     try {
-      const { data, error } = await supabase.functions.invoke(sendFunction, {
+      const { data, error } = await supabase.functions.invoke(SEND_VOUCHER_FUNCTION, {
         body: buildBody({ whatsapp_mode: true }),
       });
       if (error) {
@@ -1435,8 +1426,8 @@ function ReceiptActionsDialog({
     }
   };
 
-  const smsDisabled = !sendFunction || !row.client_phone || smsLoading;
-  const whatsappDisabled = !sendFunction || !row.client_phone;
+  const smsDisabled = !row.client_phone || smsLoading;
+  const whatsappDisabled = !row.client_phone;
   const anyLoading =
     printState === 'loading' || smsState === 'loading' || whatsappState === 'loading';
 
@@ -1496,17 +1487,15 @@ function ReceiptActionsDialog({
                   state={smsState}
                   onClick={handleSms}
                   disabled={smsDisabled}
-                  locked={!!sendFunction && smsLocked}
+                  locked={smsLocked}
                   icon={<MessageSquare className="h-5 w-5" />}
                   colorIdle="text-blue-600"
                   title={
-                    !sendFunction
-                      ? 'غير متوفر لهذا النوع'
-                      : !row.client_phone
-                        ? 'لا يوجد رقم هاتف'
-                        : smsLocked
-                          ? 'تجاوزت الباقة — اضغط للترقية'
-                          : 'إرسال SMS'
+                    !row.client_phone
+                      ? 'لا يوجد رقم هاتف'
+                      : smsLocked
+                        ? 'تجاوزت الباقة — اضغط للترقية'
+                        : 'إرسال SMS'
                   }
                 />
                 <ChannelButton
@@ -1516,11 +1505,9 @@ function ReceiptActionsDialog({
                   icon={<WhatsappLogo className="h-5 w-5" weight="fill" />}
                   colorIdle="text-green-600"
                   title={
-                    !sendFunction
-                      ? 'غير متوفر لهذا النوع'
-                      : !row.client_phone
-                        ? 'لا يوجد رقم هاتف'
-                        : 'إرسال واتساب'
+                    !row.client_phone
+                      ? 'لا يوجد رقم هاتف'
+                      : 'إرسال واتساب'
                   }
                 />
               </div>
@@ -1548,12 +1535,6 @@ function ReceiptActionsDialog({
                 </div>
               </div>
             </button>
-
-            {!sendFunction && (
-              <p className="text-xs text-muted-foreground text-right px-1">
-                هذا النوع يدعم الطباعة فقط حالياً
-              </p>
-            )}
           </div>
 
           <Button
