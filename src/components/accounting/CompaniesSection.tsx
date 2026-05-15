@@ -263,8 +263,14 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
     ISSUANCE_DEFAULT_VISIBLE,
     ISSUANCE_KEYS,
   );
+  // v5 forces a clean reset of the persisted visibility set. v4
+  // shipped briefly with the old broker-style key list still cached
+  // on some users, which meant رقم السند never surfaced even though
+  // COMPANY_SETTLEMENT_COLUMNS marks it required. Bumping the id
+  // drops the stale entry; the new one is seeded from
+  // SETTLEMENT_DEFAULT_VISIBLE which includes voucher_number.
   const settlementCols = useTableColumnVisibility(
-    'accounting-companies-settlements-v4',
+    'accounting-companies-settlements-v5',
     SETTLEMENT_DEFAULT_VISIBLE,
     SETTLEMENT_KEYS,
   );
@@ -719,16 +725,19 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
           <span className="text-xs text-muted-foreground">
             {data.loading ? '...' : `${activeRowCount} ${countLabel}`}
           </span>
+          {/* Per user: company picker sits before column manager so it
+              lands visually to the right of "إدارة الأعمدة" in RTL
+              flow — pick the company first, then refine columns. */}
+          <CompanyPicker
+            value={selectedCompanyId}
+            options={companyOptions}
+            onChange={setSelectedCompanyId}
+          />
           <ManageColumnsDropdown
             columns={activeColumns}
             visible={activeState.visible}
             onToggle={activeState.toggle}
             onReset={activeState.reset}
-          />
-          <CompanyPicker
-            value={selectedCompanyId}
-            options={companyOptions}
-            onChange={setSelectedCompanyId}
           />
           <AccountingFilters
             value={filters}
