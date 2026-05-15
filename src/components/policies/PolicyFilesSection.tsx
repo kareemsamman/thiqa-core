@@ -330,9 +330,10 @@ export function PolicyFilesSection({
     });
   };
 
-  // Convert base64 to Blob
-  const base64ToBlob = (base64: string): Blob => {
-    // Remove data URL prefix if present
+  // Convert base64 (with or without data URL prefix) to a typed Blob.
+  // Default mime is JPEG since most scan outputs are images, but the
+  // PDF flow passes 'application/pdf' to wrap multi-page scans.
+  const base64ToBlob = (base64: string, mimeType: string = 'image/jpeg'): Blob => {
     const base64Data = base64.includes(',') ? base64.split(',')[1] : base64;
     const byteCharacters = atob(base64Data);
     const byteNumbers = new Array(byteCharacters.length);
@@ -340,7 +341,7 @@ export function PolicyFilesSection({
       byteNumbers[i] = byteCharacters.charCodeAt(i);
     }
     const byteArray = new Uint8Array(byteNumbers);
-    return new Blob([byteArray], { type: 'image/jpeg' });
+    return new Blob([byteArray], { type: mimeType });
   };
 
   // Direct scan function - no dialog, auto-upload
@@ -358,9 +359,9 @@ export function PolicyFilesSection({
 
     // Safety timeout: when ScanApp isn't installed Asprise pops its
     // "complete one-time setup" overlay and never invokes the
-    // callback if the user dismisses it. Without this guard the
-    // مسح button would spin forever. 30s is well past any real
-    // scan, so a live device won't be cut short.
+    // callback if the user dismisses it. Multi-page sessions take
+    // a while, so 60s leaves room for ADF scanners while still
+    // catching the no-response case.
     let settled = false;
     const safetyTimer = window.setTimeout(() => {
       if (settled) return;
@@ -371,26 +372,31 @@ export function PolicyFilesSection({
         description: "ScanApp مش مثبت أو ما استجاب. نزّله من asprise.com وحاول تاني.",
         variant: "destructive",
       });
-    }, 30000);
+    }, 60000);
 
-    // Always let the user pick a scanner — caching a "preferred"
-    // scanner caused the button to spin forever when the saved
-    // device was unplugged or renamed.
+    // Scan profile tuned for insurance documents:
+    //   • Always show the scanner picker so the user explicitly
+    //     chooses the device (a cached pick used to spin forever
+    //     when the saved device was unplugged or renamed).
+    //   • Multi-page: after each page Asprise asks "scan another?".
+    //     ADF scanners auto-feed and skip the prompt.
+    //   • PDF output bundles every page into ONE combined file —
+    //     way nicer than N separate JPGs for a multi-page policy.
+    //   • 300dpi RGB is the standard for legible document scans.
     const scanRequest = {
       use_asprise_dialog: false,
       show_scanner_ui: false,
       source_name: 'select',
       scanner_name: 'select',
-      prompt_scan_more: false,
+      prompt_scan_more: true,
       twain_cap_setting: {
         ICAP_PIXELTYPE: 'TWPT_RGB',
-        ICAP_XRESOLUTION: '200',
-        ICAP_YRESOLUTION: '200',
+        ICAP_XRESOLUTION: '300',
+        ICAP_YRESOLUTION: '300',
       },
       output_settings: [{
         type: 'return-base64',
-        format: 'jpg',
-        jpeg_quality: 85,
+        format: 'pdf',
       }],
     };
 
@@ -417,38 +423,47 @@ export function PolicyFilesSection({
           return;
         }
 
-        const scannedImages = window.scanner.getScannedImages(response, true, false);
-        if (!scannedImages || scannedImages.length === 0) {
+        // With format:'pdf', Asprise returns one entry per output
+        // file — a multi-page session is bundled into a single PDF,
+        // so we typically get exactly one item back.
+        const scannedItems = window.scanner.getScannedImages(response, true, false);
+        if (!scannedItems || scannedItems.length === 0) {
           setScanning(null);
-          toast({ title: "تنبيه", description: "لم يتم العثور على صور ممسوحة" });
+          toast({ title: "تنبيه", description: "لم يتم العثور على صفحات ممسوحة" });
           return;
         }
 
-        // Auto-upload all scanned images
+        // Auto-upload all scanned PDFs.
         setUploading(fileType);
         try {
           const { data: { session } } = await supabase.auth.getSession();
           const entityType = fileType === 'insurance' ? 'policy_insurance' : 'policy_crm';
 
-          for (let i = 0; i < scannedImages.length; i++) {
-            const img = scannedImages[i];
-            const blob = base64ToBlob(img.src);
-            const file = new File([blob], `scan_${Date.now()}_${i}.jpg`, { type: 'image/jpeg' });
+          for (let i = 0; i < scannedItems.length; i++) {
+            const item = scannedItems[i];
+            const blob = base64ToBlob(item.src, 'application/pdf');
+            const filename = scannedItems.length === 1
+              ? `scan_${Date.now()}.pdf`
+              : `scan_${Date.now()}_${i + 1}.pdf`;
+            const file = new File([blob], filename, { type: 'application/pdf' });
 
-            setUploadProgress({ name: file.name, pct: 0, current: i + 1, total: scannedImages.length });
+            setUploadProgress({ name: file.name, pct: 0, current: i + 1, total: scannedItems.length });
             await uploadFileWithXhr(file, entityType, session?.access_token, (pct) => {
               setUploadProgress((prev) => (prev ? { ...prev, pct } : prev));
             });
           }
 
-          toast({ title: "تم", description: `تم مسح ورفع ${scannedImages.length} صورة بنجاح` });
+          const successMsg = scannedItems.length === 1
+            ? "تم رفع المستند الممسوح"
+            : `تم رفع ${scannedItems.length} مستندات ممسوحة`;
+          toast({ title: "تم", description: successMsg });
           fetchFiles();
         } catch (error: any) {
-          console.error('Error uploading scanned images:', error);
-          toast({ 
-            title: "خطأ", 
-            description: error.message || "فشل في رفع الصور الممسوحة", 
-            variant: "destructive" 
+          console.error('Error uploading scanned PDFs:', error);
+          toast({
+            title: "خطأ",
+            description: error.message || "فشل في رفع المستندات الممسوحة",
+            variant: "destructive"
           });
         } finally {
           setUploading(null);
