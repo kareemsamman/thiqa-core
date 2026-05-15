@@ -57,7 +57,6 @@ interface Props {
    *  user gets print / SMS / WhatsApp directly. Multi-receipt rows
    *  still fall through to the drawer below. */
   onPrimaryReceiptClick?: (row: IssuanceRow) => void;
-  pageSize?: number;
 }
 
 type PolicyPatch = Pick<
@@ -93,7 +92,6 @@ export function CompanyIssuancesTable({
   onPatch,
   onSubPolicySaved,
   onPrimaryReceiptClick,
-  pageSize = 10,
 }: Props) {
   const [calcRow, setCalcRow] = useState<IssuanceRow | null>(null);
   const [calcOpen, setCalcOpen] = useState(false);
@@ -101,7 +99,6 @@ export function CompanyIssuancesTable({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [packageRow, setPackageRow] = useState<IssuanceRow | null>(null);
   const [packageOpen, setPackageOpen] = useState(false);
-  const [page, setPage] = useState(1);
 
   // Scroll-pane plumbing for the side prev/next arrows. We forward the
   // ref into StickyHorizontalScroll so we can drive the same element
@@ -141,9 +138,6 @@ export function CompanyIssuancesTable({
   const policyDebounced = useDebouncedAutoSave<PolicyPatch>(savePolicy, 600);
   const carDebounced = useDebouncedAutoSave<CarPatch>(saveCar, 600);
 
-  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
-  const safePage = Math.min(page, totalPages);
-  const paged = rows.slice((safePage - 1) * pageSize, safePage * pageSize);
 
   // The shadcn <Table> component nests the actual <table> inside its
   // own div.overflow-x-auto. That nested div ends up being the real
@@ -225,7 +219,7 @@ export function CompanyIssuancesTable({
       if (bound) bound.removeEventListener('scroll', schedule);
       obs.disconnect();
     };
-  }, [paged.length, visible.length]);
+  }, [rows.length, visible.length]);
 
   const scrollByPage = (dir: 'prev' | 'next') => {
     const el = findRealScroller(scrollerRef.current);
@@ -429,7 +423,7 @@ export function CompanyIssuancesTable({
                       ))}
                     </TableRow>
                   ))
-                ) : paged.length === 0 ? (
+                ) : rows.length === 0 ? (
                   <TableRow className="hover:bg-transparent">
                     <TableCell colSpan={visibleCount} className="text-center py-12 text-muted-foreground">
                       <FileText className="h-10 w-10 mx-auto mb-2 opacity-40" />
@@ -437,7 +431,7 @@ export function CompanyIssuancesTable({
                     </TableCell>
                   </TableRow>
                 ) : (
-                  paged.map((rawRow, idx) => {
+                  rows.map((rawRow, idx) => {
                     const row = view(rawRow);
                     const isElzami = row.main.policy_type_parent === 'ELZAMI';
                     const isToBroker = row.main.broker_direction === 'to_broker';
@@ -822,31 +816,11 @@ export function CompanyIssuancesTable({
             </Table>
           </StickyHorizontalScroll>
 
-          {!loading && rows.length > pageSize && (
-            <div className="flex items-center justify-between border-t px-4 py-2.5">
+          {!loading && rows.length > 0 && (
+            <div className="border-t px-4 py-2.5">
               <p className="text-xs text-muted-foreground">
-                {rows.length} معاملة · صفحة {safePage} من {totalPages}
+                {rows.length} معاملة
               </p>
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-7 w-7"
-                  disabled={safePage <= 1}
-                  onClick={() => setPage((p) => p - 1)}
-                >
-                  <ChevronRight className="h-3.5 w-3.5" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-7 w-7"
-                  disabled={safePage >= totalPages}
-                  onClick={() => setPage((p) => p + 1)}
-                >
-                  <ChevronLeft className="h-3.5 w-3.5" />
-                </Button>
-              </div>
             </div>
           )}
         </div>
