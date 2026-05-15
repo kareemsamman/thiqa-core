@@ -1061,8 +1061,10 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
         else if (r.transaction_type === 'manual_debit') totalManualDebit += amt;
       }
 
-      // Outstanding = the kashf's exact formula. Mirrors the printed
-      // كشف totals box so the tile and the printout never disagree:
+      // Outstanding = the kashf's exact formula (also matches the
+      // get_client_balance RPC on the SQL side). Mirrors the printed
+      // كشف totals box so the tile, the RPC, and the printout never
+      // disagree:
       //   billed   = policy office_claim + transfer_customer_pays + debit_notes
       //   credits  = paid + credit_notes + transfer_office_pays
       //   remaining = max(0, billed - credits)
