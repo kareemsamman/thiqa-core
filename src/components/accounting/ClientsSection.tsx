@@ -361,7 +361,11 @@ export function ClientsSection({ branchId }: ClientsSectionProps = {}) {
         />
       </div>
 
-      {/* Search + filters */}
+      {/* Search + customer picker + filters. The customer picker is
+          separate from the AccountingFilters popover so we can keep
+          AccountingFilters shape-compatible with companies/brokers
+          while still offering the "lock to one customer" UX the user
+          asked for ("لما اكبس ع الفلترة بدو يخليني ابحث عن اسم عمل"). */}
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="relative flex-1 min-w-[200px] max-w-md">
           <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -372,14 +376,57 @@ export function ClientsSection({ branchId }: ClientsSectionProps = {}) {
             className="pr-9"
           />
         </div>
-        <AccountingFilters
-          value={filters}
-          onChange={setFilters}
-          companyOptions={[]}
-          typeOptions={[]}
-          paymentMethodOptions={[]}
-          show={{ dateRange: true, companies: false, types: false, paymentMethods: false }}
-        />
+        <div className="flex items-center gap-2">
+          <ClientPicker
+            value={selectedClient}
+            onChange={setSelectedClient}
+          />
+          {selectedClient ? (
+            <Button
+              variant="default"
+              size="sm"
+              className="gap-2"
+              onClick={() => setStatementOpen(true)}
+            >
+              <FileText className="h-4 w-4" />
+              كشف حساب
+            </Button>
+          ) : null}
+          <AccountingFilters
+            value={filters}
+            onChange={setFilters}
+            companyOptions={[]}
+            typeOptions={[]}
+            paymentMethodOptions={[]}
+            show={{ dateRange: true, companies: false, types: false, paymentMethods: false }}
+          />
+        </div>
+      </div>
+
+      {/* Active-filter strip — surfaces the date scope (and any locked
+          customer) above the tabs so the user always knows what subset
+          they're looking at. The user explicitly asked for this: "وفوق
+          لازم يكون مكتوب اشي غير بالفلترة عشان افهم انوا بفلتر ع شهر
+          معين". */}
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <Badge variant="secondary" className="gap-1.5 font-medium">
+          <CalendarRange className="h-3.5 w-3.5" />
+          {describeRange(filters.dateFrom, filters.dateTo)}
+        </Badge>
+        {selectedClient ? (
+          <Badge variant="secondary" className="gap-1.5 font-medium">
+            <UserIcon className="h-3.5 w-3.5" />
+            {selectedClient.full_name}
+            <button
+              type="button"
+              onClick={() => setSelectedClient(null)}
+              className="ml-1 -mr-0.5 rounded-full hover:bg-foreground/10"
+              aria-label="مسح فلتر العميل"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </Badge>
+        ) : null}
       </div>
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as SubTab)}>
@@ -457,7 +504,169 @@ export function ClientsSection({ branchId }: ClientsSectionProps = {}) {
           <ReceiptsTable rows={creditNotes} loading={data.loading} kind="credit_notes" />
         </TabsContent>
       </Tabs>
+
+      {selectedClient ? (
+        <CustomerStatementModal
+          open={statementOpen}
+          onOpenChange={setStatementOpen}
+          clientId={selectedClient.id}
+          clientName={selectedClient.full_name}
+          clientPhone={selectedClient.phone_number}
+          // The modal derives available years from start_date. We feed
+          // it every policy we already loaded for this client — both
+          // active and cancelled — so the year picker covers their
+          // whole history, not just the rows visible after date filter.
+          policies={allPackages
+            .filter((pkg) => pkg.client_id === selectedClient.id)
+            .flatMap((pkg) =>
+              pkg.sub_policies.map((s) => ({ start_date: s.start_date })),
+            )}
+        />
+      ) : null}
     </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────
+// ClientPicker — combobox for the customer-name filter
+// ──────────────────────────────────────────────────────────────
+//
+// Mirrors the AddVoucherDialog picker so the customer experience is
+// consistent: debounced search across name / phone / id, RLS-scoped
+// by agent, max 25 results per query. Returns the full ClientLite
+// object so the parent can pass id + name + phone straight into the
+// statement modal without an extra round trip.
+
+function ClientPicker({
+  value,
+  onChange,
+}: {
+  value: ClientLite | null;
+  onChange: (next: ClientLite | null) => void;
+}) {
+  const { agentId } = useAgentContext();
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<ClientLite[]>([]);
+  const [loading, setLoading] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Debounced fetch — only fires once typing has paused. A 2-char
+  // minimum keeps the dropdown from hammering the table on every
+  // first keystroke (and matches how the receipts dialog throttles).
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    const term = query.trim();
+    if (!open || term.length < 2) {
+      setResults([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    debounceRef.current = setTimeout(async () => {
+      let q = supabase
+        .from('clients')
+        .select('id, full_name, phone_number, id_number')
+        .or(
+          `full_name.ilike.%${term}%,phone_number.ilike.%${term}%,id_number.ilike.%${term}%`,
+        )
+        .limit(25);
+      if (agentId) q = q.eq('agent_id', agentId);
+      const { data } = await q;
+      setResults((data ?? []) as ClientLite[]);
+      setLoading(false);
+    }, 200);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [query, open, agentId]);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          role="combobox"
+          aria-expanded={open}
+          className={cn(
+            'gap-2 min-w-[180px] justify-between',
+            value && 'border-primary/40',
+          )}
+        >
+          <UserIcon className="h-4 w-4" />
+          <span className="truncate flex-1 text-right">
+            {value ? value.full_name : 'اختر عميل...'}
+          </span>
+          <ChevronsUpDown className="h-3.5 w-3.5 opacity-60" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[320px] p-0" align="end" dir="rtl">
+        <Command shouldFilter={false}>
+          <CommandInput
+            placeholder="ابحث باسم العميل، هاتف، أو رقم هوية..."
+            value={query}
+            onValueChange={setQuery}
+          />
+          <CommandList>
+            {loading ? (
+              <div className="flex items-center justify-center py-4 text-xs text-muted-foreground">
+                <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" />
+                جاري البحث...
+              </div>
+            ) : query.trim().length < 2 ? (
+              <CommandEmpty>اكتب حرفين على الأقل للبحث</CommandEmpty>
+            ) : results.length === 0 ? (
+              <CommandEmpty>لا توجد نتائج</CommandEmpty>
+            ) : (
+              results.map((c) => (
+                <CommandItem
+                  key={c.id}
+                  value={c.id}
+                  onSelect={() => {
+                    onChange(c);
+                    setOpen(false);
+                    setQuery('');
+                  }}
+                  className="flex items-center gap-2"
+                >
+                  <Check
+                    className={cn(
+                      'h-3.5 w-3.5',
+                      value?.id === c.id ? 'opacity-100' : 'opacity-0',
+                    )}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium truncate">{c.full_name}</div>
+                    <div className="text-[11px] text-muted-foreground truncate ltr-nums">
+                      {c.phone_number ?? '—'}
+                      {c.id_number ? ` · ${c.id_number}` : ''}
+                    </div>
+                  </div>
+                </CommandItem>
+              ))
+            )}
+          </CommandList>
+          {value ? (
+            <div className="border-t p-1.5">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full justify-start gap-2 text-destructive hover:text-destructive"
+                onClick={() => {
+                  onChange(null);
+                  setOpen(false);
+                  setQuery('');
+                }}
+              >
+                <X className="h-3.5 w-3.5" />
+                مسح اختيار العميل
+              </Button>
+            </div>
+          ) : null}
+        </Command>
+      </PopoverContent>
+    </Popover>
   );
 }
 
