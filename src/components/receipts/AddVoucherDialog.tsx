@@ -48,6 +48,7 @@ import {
   Receipt,
   Banknote,
   Wallet,
+  WalletMinus,
   User,
   Users,
   Building,
@@ -62,7 +63,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAgentContext } from '@/hooks/useAgentContext';
 import { useCompaniesOutstanding } from '@/hooks/useCompaniesOutstanding';
 
-export type VoucherKind = 'payment' | 'disbursement' | 'credit_note';
+export type VoucherKind = 'payment' | 'disbursement' | 'credit_note' | 'debit_note';
 export type CounterpartyKind = 'client' | 'broker' | 'company' | 'other';
 
 export interface ClientLite {
@@ -143,6 +144,16 @@ const VOUCHER_KIND_OPTIONS: Array<{
     iconColor: 'text-amber-600 dark:text-amber-400',
     ring: 'ring-amber-500/40 border-amber-500/60',
     selectedBg: 'bg-amber-50/60 dark:bg-amber-950/20',
+  },
+  {
+    value: 'debit_note',
+    label: 'إشعار مدين',
+    description: 'تسجيل مبلغ مستحق على الجهة للمكتب',
+    icon: WalletMinus,
+    iconWrap: 'bg-rose-100 dark:bg-rose-950/40',
+    iconColor: 'text-rose-600 dark:text-rose-400',
+    ring: 'ring-rose-500/40 border-rose-500/60',
+    selectedBg: 'bg-rose-50/60 dark:bg-rose-950/20',
   },
 ];
 
@@ -385,6 +396,12 @@ export function AddVoucherDialog({ open, onOpenChange, onPicked }: Props) {
                   رصيده عليك. لا يُصرف نقداً.
                 </p>
               )}
+              {kind === 'debit_note' && (
+                <p className="text-[11px] text-rose-700 dark:text-rose-400 pt-1">
+                  إشعار مدين على الوسيط: يُضاف إلى دينه تجاه المكتب ويُخصم من
+                  أول دفعة قادمة منه.
+                </p>
+              )}
             </section>
           )}
           {kind && counterparty === 'company' && (
@@ -399,8 +416,14 @@ export function AddVoucherDialog({ open, onOpenChange, onPicked }: Props) {
               />
               {kind === 'credit_note' && (
                 <p className="text-[11px] text-amber-700 dark:text-amber-400 pt-1">
-                  للشركات <strong>إشعار دائن</strong> يُضاف على الحساب المفتوح — يزيد
-                  المستحق للشركة بدون كاش. أي معاملة بتولّد إيصال.
+                  للشركات <strong>إشعار دائن</strong>: تسجيل الدفع على الحساب الجاري
+                  بدون كاش — يُقلِّل المستحق للشركة وينتظر التسوية لاحقاً عبر سند صرف.
+                </p>
+              )}
+              {kind === 'debit_note' && (
+                <p className="text-[11px] text-rose-700 dark:text-rose-400 pt-1">
+                  إشعار مدين على الشركة: تسجيل مبلغ مستحق علينا منها (استرداد عمولة،
+                  تعويض). يُقلِّل المستحق للشركة وقد يحوّله إلى رصيد دائن لدى الشركة.
                 </p>
               )}
             </section>

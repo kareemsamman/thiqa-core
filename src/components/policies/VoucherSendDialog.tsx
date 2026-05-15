@@ -39,7 +39,7 @@ import { cn } from "@/lib/utils";
 // callbacks so the agent can hand the voucher off without going
 // back to /receipts.
 
-export type VoucherKind = "credit_note" | "disbursement" | "payment";
+export type VoucherKind = "credit_note" | "debit_note" | "disbursement" | "payment";
 
 type ChannelKey = "print" | "sms" | "whatsapp";
 type ChannelState = "idle" | "loading" | "sent";
@@ -74,6 +74,18 @@ const COPY: Record<VoucherKind, {
     cardTitle: "طباعة أو إرسال الإشعار",
     cardDescription: "إثبات الرصيد الدائن للجهة لدى المكتب",
     tooltip: "إشعار دائن يثبت أن الجهة لها رصيد لدى المكتب يُحسم تلقائياً من أي دفعة قادمة.",
+    successPrint: "تم فتح الإشعار",
+    successSms: "تم إرسال الإشعار عبر SMS",
+    errorPrint: "فشل في تحميل الإشعار",
+    errorSms: "فشل في إرسال SMS",
+    errorWhatsapp: "فشل في تجهيز رسالة واتساب",
+  },
+  debit_note: {
+    title: "تم إصدار إشعار مدين بنجاح",
+    subtitle: "يمكنك طباعة أو إرسال الإشعار للجهة",
+    cardTitle: "طباعة أو إرسال الإشعار",
+    cardDescription: "إثبات مبلغ مستحق على الجهة للمكتب",
+    tooltip: "إشعار مدين يثبت أن الجهة عليها مبلغ مستحق للمكتب — يُضاف لدينها ويُخصم من أول دفعة قادمة.",
     successPrint: "تم فتح الإشعار",
     successSms: "تم إرسال الإشعار عبر SMS",
     errorPrint: "فشل في تحميل الإشعار",

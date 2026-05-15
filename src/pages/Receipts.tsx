@@ -88,6 +88,9 @@ import {
 import { AddCreditNoteDialog } from "@/components/receipts/AddCreditNoteDialog";
 import { AddBrokerCreditNoteDialog } from "@/components/receipts/AddBrokerCreditNoteDialog";
 import { AddCompanyCreditNoteDialog } from "@/components/receipts/AddCompanyCreditNoteDialog";
+import { AddDebitNoteDialog } from "@/components/receipts/AddDebitNoteDialog";
+import { AddBrokerDebitNoteDialog } from "@/components/receipts/AddBrokerDebitNoteDialog";
+import { AddCompanyDebitNoteDialog } from "@/components/receipts/AddCompanyDebitNoteDialog";
 import { AddSettlementDialog } from "@/components/accounting/AddSettlementDialog";
 import { DebtPaymentSuccessDialog } from "@/components/debt/DebtPaymentSuccessDialog";
 import { VoucherSendDialog, type VoucherKind as VoucherSendKind } from "@/components/policies/VoucherSendDialog";
@@ -167,6 +170,7 @@ const RECEIPT_TYPE_BADGE: Record<
   payment: { label: 'سند قبض', variant: 'success', icon: Receipt },
   cancellation: { label: 'سند إلغاء', variant: 'destructive', icon: Ban },
   credit_note: { label: 'إشعار دائن', variant: 'warning', icon: Wallet },
+  debit_note: { label: 'إشعار مدين', variant: 'destructive', icon: Wallet },
   disbursement: { label: 'سند صرف', variant: 'outline', icon: Banknote },
 };
 
@@ -572,7 +576,7 @@ export default function Receipts() {
   // combined view — receipt_type filter is dropped and per-row logic
   // takes over (labels, print routing, action visibility).
   const [activeTab, setActiveTab] = useState<
-    'all' | 'payment' | 'cancellation' | 'credit_note' | 'disbursement'
+    'all' | 'payment' | 'cancellation' | 'credit_note' | 'debit_note' | 'disbursement'
   >('all');
 
   // Filters — search stays inline in the toolbar; everything else lives
@@ -660,12 +664,14 @@ export default function Receipts() {
   const colsPayment = useTableColumnVisibility('receipts-payment-v1', RECEIPTS_DEFAULT_VISIBLE, RECEIPTS_COLUMN_KEYS);
   const colsCancel = useTableColumnVisibility('receipts-cancel-v1', RECEIPTS_DEFAULT_VISIBLE, RECEIPTS_COLUMN_KEYS);
   const colsCredit = useTableColumnVisibility('receipts-credit-v1', RECEIPTS_DEFAULT_VISIBLE, RECEIPTS_COLUMN_KEYS);
+  const colsDebit = useTableColumnVisibility('receipts-debit-v1', RECEIPTS_DEFAULT_VISIBLE, RECEIPTS_COLUMN_KEYS);
   const colsDisb = useTableColumnVisibility('receipts-disb-v1', RECEIPTS_DEFAULT_VISIBLE, RECEIPTS_COLUMN_KEYS);
   const colsState =
     activeTab === 'all' ? colsAll
       : activeTab === 'payment' ? colsPayment
       : activeTab === 'cancellation' ? colsCancel
       : activeTab === 'credit_note' ? colsCredit
+      : activeTab === 'debit_note' ? colsDebit
       : colsDisb;
   const isCol = (key: string) => colsState.visible.includes(key);
   // Per-tab column list — "النوع" only appears on الكل (and only there
@@ -774,6 +780,14 @@ export default function Receipts() {
     kind: 'disbursement' | 'receipt';
   } | null>(null);
   const [companyCreditNoteTarget, setCompanyCreditNoteTarget] = useState<CompanyLite | null>(null);
+  // إشعار مدين — the mirror of credit_note where the office records
+  // that the OTHER PARTY owes us money. Three targets, one per
+  // counterparty kind. Each routes to its own dialog because the
+  // wallet/balance integration differs slightly per side (customers
+  // get a wallet entry, companies/brokers don't).
+  const [debitNoteClient, setDebitNoteClient] = useState<ClientLite | null>(null);
+  const [brokerDebitNoteTarget, setBrokerDebitNoteTarget] = useState<BrokerLite | null>(null);
+  const [companyDebitNoteTarget, setCompanyDebitNoteTarget] = useState<CompanyLite | null>(null);
 
   // After a voucher is created, hand the agent the print / SMS / WhatsApp
   // popup the rest of the app already uses. Two flavours:
@@ -2149,10 +2163,13 @@ export default function Receipts() {
     setDebtModalOpen(false);
     setDisburseClient(null);
     setCreditNoteClient(null);
+    setDebitNoteClient(null);
     setBrokerSettlement(null);
     setBrokerCreditNoteTarget(null);
+    setBrokerDebitNoteTarget(null);
     setCompanySettlement(null);
     setCompanyCreditNoteTarget(null);
+    setCompanyDebitNoteTarget(null);
 
     if (result.counterparty === 'client' && result.client) {
       const c = result.client;
@@ -2165,6 +2182,8 @@ export default function Receipts() {
           setDisburseClient(c);
         } else if (result.kind === 'credit_note') {
           setCreditNoteClient(c);
+        } else if (result.kind === 'debit_note') {
+          setDebitNoteClient(c);
         }
       }, 100);
       return;
@@ -2179,6 +2198,11 @@ export default function Receipts() {
           // movement; just a receipts entry the accounting balance
           // reads back to subtract from "بدنا منه".
           setBrokerCreditNoteTarget(broker);
+        } else if (result.kind === 'debit_note') {
+          // The new proper "إشعار مدين" using receipt_type='debit_note'.
+          // Same accounting effect as the legacy broker credit_note
+          // route above — both reduce broker.owesUs in stage-6 math.
+          setBrokerDebitNoteTarget(broker);
         } else {
           // سند قبض / سند صرف map to broker_settlements via the
           // existing AddSettlementDialog path.
@@ -2193,9 +2217,14 @@ export default function Receipts() {
       const company = result.company;
       setTimeout(() => {
         if (result.kind === 'credit_note') {
-          // "إشعار دائن" for company — paper acknowledgment that
-          // ADDS to المستحق للشركة. No settlement row, no cash.
+          // "إشعار دائن" for company — paper credit on the running
+          // account. REDUCES المستحق للشركة (per stage 1 update).
           setCompanyCreditNoteTarget(company);
+        } else if (result.kind === 'debit_note') {
+          // "إشعار مدين" on company — the company owes us X
+          // (commission claw-back, refund, reconciliation). Also
+          // reduces المستحق للشركة and can flip it to a credit.
+          setCompanyDebitNoteTarget(company);
         } else {
           // سند قبض / سند صرف ride AddSettlementDialog (mode='company'),
           // which writes to company_settlements; the new DB trigger
@@ -2604,10 +2633,10 @@ export default function Receipts() {
           <Tabs
             value={activeTab}
             onValueChange={(v) =>
-              setActiveTab(v as 'all' | 'payment' | 'cancellation' | 'credit_note' | 'disbursement')
+              setActiveTab(v as 'all' | 'payment' | 'cancellation' | 'credit_note' | 'debit_note' | 'disbursement')
             }
           >
-            <TabsList className="grid w-full max-w-3xl grid-cols-5">
+            <TabsList className="grid w-full max-w-4xl grid-cols-6">
               <TabsTrigger value="all" className="gap-2">
                 <Layers className="h-3.5 w-3.5" />
                 الكل
@@ -2623,6 +2652,10 @@ export default function Receipts() {
               <TabsTrigger value="credit_note" className="gap-2">
                 <Wallet className="h-3.5 w-3.5" />
                 اشعار دائن
+              </TabsTrigger>
+              <TabsTrigger value="debit_note" className="gap-2">
+                <Wallet className="h-3.5 w-3.5" />
+                اشعار مدين
               </TabsTrigger>
               <TabsTrigger value="disbursement" className="gap-2">
                 <Banknote className="h-3.5 w-3.5" />
@@ -3170,6 +3203,76 @@ export default function Receipts() {
               kind: 'credit_note',
               receiptId,
               clientPhone: c.phone_number,
+            });
+          }}
+        />
+      )}
+
+      {/* Customer + إشعار مدين — the mirror of credit_note where
+          the office records the customer owes us money. Inserts
+          wallet (manual_debit) + receipts (debit_note) with an
+          M{nn}/{year} voucher number. */}
+      {debitNoteClient && (
+        <AddDebitNoteDialog
+          open={!!debitNoteClient}
+          onOpenChange={(o) => !o && setDebitNoteClient(null)}
+          client={debitNoteClient}
+          cancelLabel="رجوع"
+          onSaved={({ receiptId }) => {
+            const c = debitNoteClient;
+            setDebitNoteClient(null);
+            setAddVoucherOpen(false);
+            fetchReceipts();
+            setVoucherSend({
+              kind: 'debit_note',
+              receiptId,
+              clientPhone: c.phone_number,
+            });
+          }}
+        />
+      )}
+
+      {/* Broker + إشعار مدين (proper) — receipts row with
+          receipt_type='debit_note' and broker_id. Stage-6 broker
+          balance math subtracts these from owesUs (alongside the
+          legacy credit_note rows from AddBrokerCreditNoteDialog). */}
+      {brokerDebitNoteTarget && (
+        <AddBrokerDebitNoteDialog
+          open={!!brokerDebitNoteTarget}
+          onOpenChange={(o) => !o && setBrokerDebitNoteTarget(null)}
+          broker={brokerDebitNoteTarget}
+          cancelLabel="رجوع"
+          onSaved={({ receiptId }) => {
+            const b = brokerDebitNoteTarget;
+            setBrokerDebitNoteTarget(null);
+            setAddVoucherOpen(false);
+            fetchReceipts();
+            setVoucherSend({
+              kind: 'debit_note',
+              receiptId,
+              clientPhone: b.phone,
+            });
+          }}
+        />
+      )}
+
+      {/* Company + إشعار مدين — receipts row with debit_note type
+          and company_id. Stage-1 get_company_outstanding_summary
+          subtracts these from outstanding (can flip to credit). */}
+      {companyDebitNoteTarget && (
+        <AddCompanyDebitNoteDialog
+          open={!!companyDebitNoteTarget}
+          onOpenChange={(o) => !o && setCompanyDebitNoteTarget(null)}
+          company={companyDebitNoteTarget}
+          cancelLabel="رجوع"
+          onSaved={({ receiptId }) => {
+            setCompanyDebitNoteTarget(null);
+            setAddVoucherOpen(false);
+            fetchReceipts();
+            setVoucherSend({
+              kind: 'debit_note',
+              receiptId,
+              clientPhone: null,
             });
           }}
         />
