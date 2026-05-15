@@ -267,6 +267,9 @@ export function ClientsSection({ branchId }: ClientsSectionProps = {}) {
           value={filters}
           onChange={setFilters}
           companyOptions={[]}
+          typeOptions={[]}
+          paymentMethodOptions={[]}
+          show={{ dateRange: true, companies: false, types: false, paymentMethods: false }}
         />
       </div>
 
