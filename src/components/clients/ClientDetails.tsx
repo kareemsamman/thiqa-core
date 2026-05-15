@@ -472,6 +472,12 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   const [paymentSummary, setPaymentSummary] = useState<PaymentSummary>({ total_paid: 0, total_remaining: 0, total_profit: 0 });
   const [brokerDebts, setBrokerDebts] = useState<BrokerDebtInfo[]>([]);
   const [walletBalance, setWalletBalance] = useState<WalletBalance>({ total_refunds: 0, transaction_count: 0 });
+  const [reconciliationAlerts, setReconciliationAlerts] = useState<Array<{
+    id: string;
+    alert_type: string;
+    payload: Record<string, unknown> | null;
+    created_at: string;
+  }>>([]);
   const [initialLoading, setInitialLoading] = useState(true);
   const [loadingCars, setLoadingCars] = useState(true);
   const [loadingPolicies, setLoadingPolicies] = useState(true);
@@ -953,6 +959,26 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
     }
   };
 
+  const fetchReconciliationAlerts = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('reconciliation_alerts' as never)
+        .select('id, alert_type, payload, created_at')
+        .eq('client_id', client.id)
+        .is('resolved_at', null)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      setReconciliationAlerts((data as never as Array<{
+        id: string;
+        alert_type: string;
+        payload: Record<string, unknown> | null;
+        created_at: string;
+      }>) || []);
+    } catch (error) {
+      console.error('Error fetching reconciliation alerts:', error);
+    }
+  };
+
   const fetchWalletBalance = async () => {
     try {
       // Only outstanding rows count toward "نحن مدينون للعميل". A
@@ -1245,6 +1271,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
         fetchPayments(),
         fetchWalletBalance(),
         fetchCarPolicyCounts(),
+        fetchReconciliationAlerts(),
       ]);
       setNotesValue(client.notes || '');
       setInitialLoading(false);
@@ -2543,6 +2570,16 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       />
 
       <div className={`${sidebarCollapsed ? "max-w-[96rem]" : "max-w-[88rem]"} mx-auto space-y-4 sm:space-y-6`}>
+        {reconciliationAlerts.length > 0 && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 text-amber-900 px-3 py-2 sm:px-4 sm:py-3 flex items-start gap-2 sm:gap-3">
+            <AlertTriangle className="h-4 w-4 sm:h-5 sm:w-5 shrink-0 mt-0.5 text-amber-600" />
+            <div className="text-xs sm:text-sm leading-relaxed">
+              <strong>تنبيه:</strong> تم اكتشاف عدم تطابق محتمل في بيانات هذا العميل
+              ({reconciliationAlerts.length})
+              — يُرجى مراجعة كشف الحساب وإعادة توليده إذا لزم الأمر.
+            </div>
+          </div>
+        )}
         {/* Professional Header Card */}
         <Card className="overflow-hidden">
           <div className="bg-gradient-to-l from-primary/10 via-primary/5 to-transparent p-4 sm:p-6">
