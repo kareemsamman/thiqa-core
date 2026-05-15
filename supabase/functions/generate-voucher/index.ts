@@ -61,7 +61,7 @@ interface PhoneLink {
   href: string;
 }
 
-type ReceiptType = 'payment' | 'disbursement' | 'credit_note' | 'cancellation';
+type ReceiptType = 'payment' | 'disbursement' | 'credit_note' | 'debit_note' | 'cancellation';
 
 interface TypeConfig {
   title: string;
@@ -118,6 +118,23 @@ const TYPE_CONFIGS: Record<ReceiptType, TypeConfig> = {
     defaultDateLabel: 'تاريخ الإصدار',
     thanksLine: 'هذا الإشعار يثبت رصيداً دائناً لدى المكتب.',
     fileSlugPrefix: 'credit_note',
+  },
+  debit_note: {
+    // The mirror of credit_note — the office records that the OTHER
+    // PARTY owes US X. Rose accent (matches debt-side semantics on
+    // the receipts page; sits opposite the amber/dائن tone) so a
+    // reader scanning the document recognizes "this is money owed
+    // TO the office" at a glance.
+    title: 'إشعار مدين',
+    subtitle: 'إثبات مبلغ مستحق على الجهة',
+    accent: '#be123c',
+    accentBg: '#ffe4e6',
+    voucherNumberLabel: 'رقم الإشعار',
+    totalLabel: 'المبلغ المستحق',
+    detailsSectionTitle: 'تفاصيل الإشعار',
+    defaultDateLabel: 'تاريخ الإصدار',
+    thanksLine: 'هذا الإشعار يثبت مبلغاً مستحقاً على الجهة للمكتب.',
+    fileSlugPrefix: 'debit_note',
   },
   cancellation: {
     title: 'سند إلغاء',
@@ -221,8 +238,8 @@ interface VoucherLine {
 
 interface Counterparty {
   /** Drives the section title — 'معلومات العميل' vs 'معلومات الوسيط'
-   *  vs 'معلومات الجهة' — and the per-cell labels. */
-  kind: 'client' | 'broker' | 'manual';
+   *  vs 'معلومات الشركة' vs 'معلومات الجهة' — and the per-cell labels. */
+  kind: 'client' | 'broker' | 'company' | 'manual';
   full_name: string;
   id_number: string | null;
   phone_number: string | null;
@@ -267,9 +284,12 @@ function buildHtml(
   const counterpartySectionTitle =
     counterparty.kind === 'broker' ? 'معلومات الوسيط'
       : counterparty.kind === 'client' ? 'معلومات العميل'
-        : 'معلومات الجهة';
+        : counterparty.kind === 'company' ? 'معلومات الشركة'
+          : 'معلومات الجهة';
   const counterpartyNameLabel =
-    counterparty.kind === 'broker' ? 'اسم الوسيط' : 'الاسم';
+    counterparty.kind === 'broker' ? 'اسم الوسيط'
+      : counterparty.kind === 'company' ? 'اسم الشركة'
+        : 'الاسم';
 
   const accent = cfg.accent;
   const accentBg = cfg.accentBg;
@@ -1173,9 +1193,11 @@ serve(async (req) => {
     }
 
     // 3. Resolve counterparty. client_id has priority (matches the
-    // explicit data), then broker_id (broker mirror), then the
-    // policy join (legacy receipts without client_id), then the
-    // bare client_name string from the receipt row.
+    // explicit data), then broker_id (broker mirror), then
+    // company_id (insurance company — used by debit/credit notes
+    // raised against companies), then the policy join (legacy
+    // receipts without client_id), then the bare client_name string
+    // from the receipt row.
     let counterparty: Counterparty = {
       kind: 'manual',
       full_name: (receiptRow.client_name as string) || '-',
@@ -1210,6 +1232,21 @@ serve(async (req) => {
           full_name: (b.name as string) || (receiptRow.client_name as string) || '-',
           id_number: null,
           phone_number: (b.phone as string | null) ?? null,
+          phone_number_2: null,
+        };
+      }
+    } else if (receiptRow.company_id) {
+      const { data: co } = await supabase
+        .from('insurance_companies')
+        .select('name, name_ar')
+        .eq('id', receiptRow.company_id)
+        .maybeSingle();
+      if (co) {
+        counterparty = {
+          kind: 'company',
+          full_name: ((co as any).name_ar as string) || ((co as any).name as string) || (receiptRow.client_name as string) || '-',
+          id_number: null,
+          phone_number: null,
           phone_number_2: null,
         };
       }
