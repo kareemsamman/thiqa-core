@@ -199,8 +199,12 @@ const COUNTERPARTY_OPTIONS: Array<{
 // سند قبض ناقص؛ مش تركيب دين جانبي ما إله طريق دفع. التركيبة دي
 // disabled بصرياً هون عشان المستخدم يفهم انها مش متاحة بدل ما
 // يدخل ويعلق بدون flow تسديد.
+//
+// Signature accepts a nullable kind so the counterparty grid can call
+// this once per render without an early-return — when kind is null we
+// haven't picked a voucher type yet and nothing is blocked.
 const isCombinationAvailable = (
-  kind: VoucherKind,
+  kind: VoucherKind | null,
   counterparty: CounterpartyKind,
 ): boolean => {
   if (kind === 'debit_note' && counterparty === 'client') return false;
@@ -345,21 +349,32 @@ export function AddVoucherDialog({ open, onOpenChange, onPicked }: Props) {
                   // active voucher kind isn't valid for this counterparty
                   // (→ "غير متوفر"). The second case is dynamic — only
                   // appears once the user picks a kind that excludes it.
+                  // إشعار مدين + عميل is the canonical example.
                   const combinationAllowed = isCombinationAvailable(kind, opt.value);
                   const interactable = opt.enabled && combinationAllowed;
                   const unavailableForKind = opt.enabled && !combinationAllowed;
+                  const disabledReason = !opt.enabled
+                    ? 'قريباً'
+                    : !combinationAllowed
+                      ? `لا يمكن إصدار ${kind === 'debit_note' ? 'إشعار مدين' : 'هذا السند'} لعميل — راجع سند قبض أو رفع قيمة البوليصة`
+                      : undefined;
                   return (
                     <button
                       key={opt.value}
                       type="button"
                       disabled={!interactable}
-                      onClick={() => setCounterparty(opt.value)}
+                      aria-disabled={!interactable}
+                      title={disabledReason}
+                      onClick={() => {
+                        if (!interactable) return;
+                        setCounterparty(opt.value);
+                      }}
                       className={cn(
                         'group relative flex flex-col items-center text-center gap-2 rounded-xl border p-3 transition-all',
                         interactable && 'hover:border-primary/40 hover:shadow-sm',
                         active &&
                           'ring-2 ring-primary/40 border-primary/60 bg-primary/5',
-                        !interactable && 'opacity-50 cursor-not-allowed',
+                        !interactable && 'opacity-50 cursor-not-allowed pointer-events-none',
                       )}
                     >
                       {active && (
