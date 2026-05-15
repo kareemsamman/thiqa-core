@@ -29,6 +29,11 @@ export interface ClientReceiptRow {
   receipt_date: string;
   amount: number;
   payment_method: string | null;
+  /** User-facing voucher label (e.g. "R162/2026"). For payment rows we
+   *  prefer `policy_payments.receipt_number` (the shared session
+   *  number, so a bulk cheque collection prints one number across all
+   *  policies it covered). For other types we synthesize from the
+   *  receipts row's own `receipt_number` + a per-type prefix. */
   voucher_number: string | null;
   receipt_number: number | null;
   cheque_number: string | null;
@@ -36,6 +41,10 @@ export interface ClientReceiptRow {
   client_id: string | null;
   client_name: string | null;
   policy_id: string | null;
+  /** policy_payments.id — only set for payment + cancellation rows
+   *  mirrored from policy_payments. Used to print the bulk receipt
+   *  voucher via `generate-voucher` when the user clicks the row. */
+  payment_id: string | null;
   policy_document_number: string | null;
   policy_number: string | null;
   cancelled_at: string | null;
@@ -174,6 +183,7 @@ interface RawClientReceipt {
   client_id: string | null;
   client_name: string | null;
   policy_id: string | null;
+  payment_id: string | null;
   cancelled_at: string | null;
   policies: { document_number: string | null; policy_number: string | null } | null;
 }
@@ -528,7 +538,7 @@ export function useAccountingData(
         .select(
           `id, receipt_date, amount, payment_method, voucher_number,
            receipt_number, cheque_number, notes, client_id, client_name,
-           broker_id, policy_id, cancelled_at, receipt_type,
+           broker_id, policy_id, payment_id, cancelled_at, receipt_type,
            policies(document_number, policy_number)`,
         )
         .in('receipt_type', ['payment', 'cancellation', 'disbursement', 'credit_note', 'debit_note'])
@@ -549,6 +559,7 @@ export function useAccountingData(
         client_id: r.client_id,
         client_name: r.client_name,
         policy_id: r.policy_id,
+        payment_id: r.payment_id ?? null,
         policy_document_number: r.policies?.document_number ?? null,
         policy_number: r.policies?.policy_number ?? null,
         cancelled_at: r.cancelled_at,
@@ -558,6 +569,64 @@ export function useAccountingData(
         receipt_type: string;
         broker_id?: string | null;
       })[];
+
+      // Look up the SHARED policy_payments.receipt_number ("R162/2026")
+      // for every payment row in this fetch. That text is what the
+      // user expects to see — a single number that covers a bulk
+      // cheque collection across multiple policies. Without this
+      // enrichment the accounting table prints "—" since the
+      // receipts.voucher_number column is null on the auto-mirrored
+      // payment rows.
+      const paymentIdsToLookUp = Array.from(
+        new Set(
+          crRows
+            .filter((r) =>
+              (r.receipt_type === 'payment' || r.receipt_type === 'cancellation') &&
+              r.payment_id != null,
+            )
+            .map((r) => r.payment_id as string),
+        ),
+      );
+      const receiptNumberByPaymentId = new Map<string, string>();
+      if (paymentIdsToLookUp.length > 0) {
+        const { data: payMeta } = await supabase
+          .from('policy_payments')
+          .select('id, receipt_number')
+          .in('id', paymentIdsToLookUp);
+        for (const p of (payMeta ?? []) as { id: string; receipt_number: string | null }[]) {
+          if (p.receipt_number) receiptNumberByPaymentId.set(p.id, p.receipt_number);
+        }
+      }
+
+      // Build a per-type prefix used to synthesize a voucher label
+      // when the row lacks one. Mirrors the kashf's formatVoucherNumber
+      // so both surfaces agree on what "R12/2026" / "C5/2026" mean.
+      const prefixForType: Record<string, string> = {
+        payment: 'R',
+        cancellation: 'R',
+        credit_note: 'C',
+        debit_note: 'M',
+        disbursement: 'D',
+        accident_fee: 'A',
+      };
+      const enrichVoucherNumber = (
+        row: ClientReceiptRow,
+      ): ClientReceiptRow => {
+        if (row.voucher_number) return row;
+        // Payment rows ride on the shared policy_payments.receipt_number
+        // so a bulk session prints one label everywhere it appears.
+        if (row.payment_id && receiptNumberByPaymentId.has(row.payment_id)) {
+          return { ...row, voucher_number: receiptNumberByPaymentId.get(row.payment_id)! };
+        }
+        // Fallback for non-payment rows (or payment rows missing the
+        // session text — older imports) — synthesize from the
+        // receipts.receipt_number int + the per-type prefix.
+        if (row.receipt_number == null) return row;
+        const year = new Date(row.receipt_date).getFullYear();
+        const prefix = prefixForType[row.receipt_type] ?? 'R';
+        return { ...row, voucher_number: `${prefix}${row.receipt_number}/${year}` };
+      };
+
       // payment + cancellation: client-side. Both ignore broker_id —
       // broker payments don't flow through the customer receipts
       // table. We keep cancelled (refused) rows in the raw list so
@@ -565,12 +634,14 @@ export function useAccountingData(
       setClientPaymentsRaw(
         crRows
           .filter((r) => r.receipt_type === 'payment' && !r.broker_id)
-          .map(mapClientReceipt),
+          .map(mapClientReceipt)
+          .map(enrichVoucherNumber),
       );
       setClientCancellationsRaw(
         crRows
           .filter((r) => r.receipt_type === 'cancellation' && !r.broker_id)
-          .map(mapClientReceipt),
+          .map(mapClientReceipt)
+          .map(enrichVoucherNumber),
       );
       // disbursement rows: client-only (the broker disbursement
       // path uses the broker_settlements table directly, not the
@@ -578,7 +649,8 @@ export function useAccountingData(
       setClientDisbursementsRaw(
         crRows
           .filter((r) => r.receipt_type === 'disbursement')
-          .map(mapClientReceipt),
+          .map(mapClientReceipt)
+          .map(enrichVoucherNumber),
       );
       // credit_note + debit_note rows: split by broker_id so the
       // broker pill and the client tile each see their own bucket.
@@ -592,12 +664,13 @@ export function useAccountingData(
       setClientCreditNotesRaw(
         creditNoteRows
           .filter((r) => !r.broker_id)
-          .map(mapClientReceipt),
+          .map(mapClientReceipt)
+          .map(enrichVoucherNumber),
       );
       setBrokerCreditNotesRaw(
         creditNoteRows
           .filter((r) => !!r.broker_id)
-          .map((r) => ({ ...mapClientReceipt(r), broker_id: r.broker_id ?? null }) as ClientReceiptRow & { broker_id: string | null }),
+          .map((r) => ({ ...enrichVoucherNumber(mapClientReceipt(r)), broker_id: r.broker_id ?? null }) as ClientReceiptRow & { broker_id: string | null }),
       );
 
       // 7. Expenses — only the sum is needed by the pills, but the full

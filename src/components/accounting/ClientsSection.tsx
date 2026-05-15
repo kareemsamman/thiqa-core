@@ -13,6 +13,7 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
 import {
   Popover,
   PopoverContent,
@@ -187,6 +188,11 @@ export function ClientsSection({ branchId }: ClientsSectionProps = {}) {
   // statement modal without leaving the accounting page.
   const [selectedClient, setSelectedClient] = useState<ClientLite | null>(null);
   const [statementOpen, setStatementOpen] = useState(false);
+  // Clicking a voucher number in any sub-tab opens a modal with the
+  // voucher's HTML — we track which receipt is being viewed so the
+  // modal can pick the right `generate-voucher` payload (payment_id
+  // for bulk session receipts vs voucher_receipt_id for everything else).
+  const [viewVoucherRow, setViewVoucherRow] = useState<ClientReceiptRow | null>(null);
 
   const data = useAccountingData(filters, branchId);
 
@@ -469,19 +475,19 @@ export function ClientsSection({ branchId }: ClientsSectionProps = {}) {
             <IssuancesTable rows={filteredPackages} loading={data.loading} />
           </AllTabSection>
           <AllTabSection title="سند قبض" count={payments.length}>
-            <ReceiptsTable rows={payments} loading={data.loading} kind="payments" />
+            <ReceiptsTable rows={payments} loading={data.loading} kind="payments" onVoucherClick={setViewVoucherRow} />
           </AllTabSection>
           <AllTabSection title="سند صرف" count={disbursements.length}>
-            <ReceiptsTable rows={disbursements} loading={data.loading} kind="disbursements" />
+            <ReceiptsTable rows={disbursements} loading={data.loading} kind="disbursements" onVoucherClick={setViewVoucherRow} />
           </AllTabSection>
           <AllTabSection title="سند إلغاء" count={cancellations.length}>
-            <ReceiptsTable rows={cancellations} loading={data.loading} kind="cancellations" />
+            <ReceiptsTable rows={cancellations} loading={data.loading} kind="cancellations" onVoucherClick={setViewVoucherRow} />
           </AllTabSection>
           <AllTabSection title="إشعار مدين" count={debitNotes.length}>
-            <ReceiptsTable rows={debitNotes} loading={data.loading} kind="debit_notes" />
+            <ReceiptsTable rows={debitNotes} loading={data.loading} kind="debit_notes" onVoucherClick={setViewVoucherRow} />
           </AllTabSection>
           <AllTabSection title="إشعار دائن" count={creditNotes.length}>
-            <ReceiptsTable rows={creditNotes} loading={data.loading} kind="credit_notes" />
+            <ReceiptsTable rows={creditNotes} loading={data.loading} kind="credit_notes" onVoucherClick={setViewVoucherRow} />
           </AllTabSection>
         </TabsContent>
 
@@ -489,19 +495,19 @@ export function ClientsSection({ branchId }: ClientsSectionProps = {}) {
           <IssuancesTable rows={filteredPackages} loading={data.loading} />
         </TabsContent>
         <TabsContent value="payments" className="mt-3">
-          <ReceiptsTable rows={payments} loading={data.loading} kind="payments" />
+          <ReceiptsTable rows={payments} loading={data.loading} kind="payments" onVoucherClick={setViewVoucherRow} />
         </TabsContent>
         <TabsContent value="disbursements" className="mt-3">
-          <ReceiptsTable rows={disbursements} loading={data.loading} kind="disbursements" />
+          <ReceiptsTable rows={disbursements} loading={data.loading} kind="disbursements" onVoucherClick={setViewVoucherRow} />
         </TabsContent>
         <TabsContent value="cancellations" className="mt-3">
-          <ReceiptsTable rows={cancellations} loading={data.loading} kind="cancellations" />
+          <ReceiptsTable rows={cancellations} loading={data.loading} kind="cancellations" onVoucherClick={setViewVoucherRow} />
         </TabsContent>
         <TabsContent value="debit_notes" className="mt-3">
-          <ReceiptsTable rows={debitNotes} loading={data.loading} kind="debit_notes" />
+          <ReceiptsTable rows={debitNotes} loading={data.loading} kind="debit_notes" onVoucherClick={setViewVoucherRow} />
         </TabsContent>
         <TabsContent value="credit_notes" className="mt-3">
-          <ReceiptsTable rows={creditNotes} loading={data.loading} kind="credit_notes" />
+          <ReceiptsTable rows={creditNotes} loading={data.loading} kind="credit_notes" onVoucherClick={setViewVoucherRow} />
         </TabsContent>
       </Tabs>
 
@@ -523,6 +529,11 @@ export function ClientsSection({ branchId }: ClientsSectionProps = {}) {
             )}
         />
       ) : null}
+
+      <VoucherViewerModal
+        row={viewVoucherRow}
+        onClose={() => setViewVoucherRow(null)}
+      />
     </div>
   );
 }
@@ -912,10 +923,12 @@ function ReceiptsTable({
   rows,
   loading,
   kind,
+  onVoucherClick,
 }: {
   rows: ClientReceiptRow[];
   loading: boolean;
   kind: ReceiptKind;
+  onVoucherClick?: (row: ClientReceiptRow) => void;
 }) {
   const labels = RECEIPT_LABELS[kind];
   if (loading) {
@@ -952,7 +965,17 @@ function ReceiptsTable({
           {rows.map((r) => (
             <TableRow key={r.id} className="text-sm">
               <TableCell className="font-mono ltr-nums whitespace-nowrap">
-                {r.voucher_number ?? '—'}
+                {r.voucher_number && onVoucherClick ? (
+                  <button
+                    type="button"
+                    onClick={() => onVoucherClick(r)}
+                    className="text-primary underline-offset-2 hover:underline focus:outline-none focus-visible:underline"
+                  >
+                    {r.voucher_number}
+                  </button>
+                ) : (
+                  r.voucher_number ?? '—'
+                )}
               </TableCell>
               <TableCell className="whitespace-nowrap ltr-nums">
                 {formatDate(r.receipt_date)}
@@ -981,5 +1004,122 @@ function ReceiptsTable({
         </TableBody>
       </Table>
     </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────
+// VoucherViewerModal — opens the HTML voucher in an iframe
+// ──────────────────────────────────────────────────────────────
+//
+// Mirrors the CustomerStatementModal pattern: invoke the unified
+// `generate-voucher` edge function, get a CDN-hosted URL back, drop
+// it into an iframe. Single-purpose modal so clicking R162/2026 in
+// the accounting table opens the actual receipt the user printed
+// (not a fresh generation) — matches what they expect from /receipts.
+//
+// Inputs are decided per receipt type:
+//   • payment row with payment_id → pass payment_ids: [payment_id]
+//     so the bulk session number prints the way it does on /receipts.
+//   • everything else            → pass voucher_receipt_id: receipt.id.
+function VoucherViewerModal({
+  row,
+  onClose,
+}: {
+  row: ClientReceiptRow | null;
+  onClose: () => void;
+}) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!row) {
+      setUrl(null);
+      setError(null);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    setUrl(null);
+    const body: Record<string, unknown> =
+      row.receipt_type === 'payment' && row.payment_id
+        ? { payment_ids: [row.payment_id] }
+        : { voucher_receipt_id: row.id };
+    supabase.functions
+      .invoke('generate-voucher', { body })
+      .then(({ data: resp, error: err }) => {
+        if (cancelled) return;
+        if (err) {
+          setError(err.message || 'فشل توليد السند');
+          setLoading(false);
+          return;
+        }
+        const next = (resp as { receipt_url?: string } | null)?.receipt_url ?? null;
+        if (!next) {
+          setError('لم يتم إرجاع رابط السند');
+          setLoading(false);
+          return;
+        }
+        setUrl(next);
+        setLoading(false);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : 'فشل توليد السند');
+        setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [row]);
+
+  return (
+    <Dialog open={!!row} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="max-w-5xl w-[95vw] h-[88vh] p-0 gap-0 overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 border-b bg-foreground text-background">
+          <div>
+            <div className="font-bold text-sm">عرض السند</div>
+            {row?.voucher_number ? (
+              <div className="text-xs opacity-80 ltr-nums">{row.voucher_number}</div>
+            ) : null}
+          </div>
+          <div className="flex items-center gap-2">
+            {url ? (
+              <Button
+                variant="secondary"
+                size="sm"
+                className="gap-2"
+                onClick={() => window.open(url, '_blank', 'noopener')}
+              >
+                فتح في تبويب جديد
+              </Button>
+            ) : null}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onClose}
+              className="text-background hover:bg-background/10"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+        <div className="flex-1 bg-muted overflow-hidden">
+          {loading ? (
+            <div className="h-full flex items-center justify-center text-sm text-muted-foreground gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              جاري توليد السند...
+            </div>
+          ) : error ? (
+            <div className="h-full flex items-center justify-center text-sm text-destructive">
+              {error}
+            </div>
+          ) : url ? (
+            <iframe src={url} className="w-full h-full border-0" title="voucher" />
+          ) : null}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
