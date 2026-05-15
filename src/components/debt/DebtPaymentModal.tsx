@@ -529,7 +529,7 @@ export function DebtPaymentModal({
         if (payment.payment_type !== 'visa_external') return false;
         const pol = everyPolicyById.get(payment.policy_id);
         if (!pol) return false;
-        return pol.policy_type_parent === 'ELZAMI' && Number(pol.office_commission || 0) <= 0;
+        return pol.policy_type_parent === 'ELZAMI';
       };
 
       let paymentsMap: Record<string, number> = {};

@@ -470,7 +470,7 @@ export function usePolicyWizardState({ open, instanceId, defaultBrokerId, defaul
           if (pay.refused) continue;
           if (pay.payment_type === 'visa_external') {
             const pol = policyById.get(pay.policy_id);
-            if (pol?.policy_type_parent === 'ELZAMI' && Number(pol.office_commission || 0) <= 0) continue;
+            if (pol?.policy_type_parent === 'ELZAMI') continue;
           }
           grossPaid += Number(pay.amount || 0);
         }
