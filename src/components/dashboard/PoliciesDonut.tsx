@@ -1,16 +1,8 @@
-import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
-import { supabase } from "@/integrations/supabase/client";
 import { PeriodRange } from "./PeriodPills";
-
-interface Overview {
-  active_count: number;
-  expiring_30d_count: number;
-  expired_count: number;
-  cancelled_count: number;
-}
+import { useDashboardSummary } from "@/hooks/useDashboardSummary";
 
 const COLORS = {
   active: "hsl(142 76% 36%)",
@@ -26,42 +18,14 @@ export function PoliciesDonut({
   range: PeriodRange;
   branchId?: string | null;
 }) {
-  const [data, setData] = useState<Overview | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    (async () => {
-      try {
-        const { data: rows, error } = await (supabase.rpc as any)(
-          "dashboard_policies_overview_range",
-          { p_start_date: range.start, p_end_date: range.end, p_branch_id: branchId ?? null }
-        );
-        if (error) throw error;
-        if (cancelled) return;
-        const row = Array.isArray(rows) ? rows[0] : rows;
-        setData({
-          active_count: Number(row?.active_count ?? 0),
-          expiring_30d_count: Number(row?.expiring_30d_count ?? 0),
-          expired_count: Number(row?.expired_count ?? 0),
-          cancelled_count: Number(row?.cancelled_count ?? 0),
-        });
-      } catch (e) {
-        console.error("Error loading policies overview:", e);
-        if (!cancelled) setData({ active_count: 0, expiring_30d_count: 0, expired_count: 0, cancelled_count: 0 });
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [range.start, range.end, branchId]);
+  const { data, isLoading } = useDashboardSummary(range, branchId);
+  const overview = data.policies_overview;
 
   const chartData = [
-    { name: "سارية", value: data?.active_count ?? 0, color: COLORS.active },
-    { name: "تنتهي قريباً", value: data?.expiring_30d_count ?? 0, color: COLORS.expiring },
-    { name: "منتهية", value: data?.expired_count ?? 0, color: COLORS.expired },
-    { name: "ملغاة", value: data?.cancelled_count ?? 0, color: COLORS.cancelled },
+    { name: "سارية", value: overview.active_count, color: COLORS.active },
+    { name: "تنتهي قريباً", value: overview.expiring_30d_count, color: COLORS.expiring },
+    { name: "منتهية", value: overview.expired_count, color: COLORS.expired },
+    { name: "ملغاة", value: overview.cancelled_count, color: COLORS.cancelled },
   ].filter((d) => d.value > 0);
 
   const total = chartData.reduce((s, d) => s + d.value, 0);
@@ -73,7 +37,7 @@ export function PoliciesDonut({
       </CardHeader>
       <CardContent className="flex-1 flex flex-col">
         <div className="flex-1 min-h-[200px] relative">
-          {loading ? (
+          {isLoading ? (
             <div className="flex items-center justify-center h-full">
               <Skeleton className="h-32 w-32 rounded-full" />
             </div>
@@ -127,10 +91,10 @@ export function PoliciesDonut({
           )}
         </div>
         <div className="grid grid-cols-2 gap-x-4 gap-y-2 mt-4 text-sm">
-          <LegendRow color={COLORS.active} label="سارية" value={data?.active_count ?? 0} />
-          <LegendRow color={COLORS.expiring} label="تنتهي قريباً" value={data?.expiring_30d_count ?? 0} />
-          <LegendRow color={COLORS.expired} label="منتهية" value={data?.expired_count ?? 0} />
-          <LegendRow color={COLORS.cancelled} label="ملغاة" value={data?.cancelled_count ?? 0} />
+          <LegendRow color={COLORS.active} label="سارية" value={overview.active_count} />
+          <LegendRow color={COLORS.expiring} label="تنتهي قريباً" value={overview.expiring_30d_count} />
+          <LegendRow color={COLORS.expired} label="منتهية" value={overview.expired_count} />
+          <LegendRow color={COLORS.cancelled} label="ملغاة" value={overview.cancelled_count} />
         </div>
       </CardContent>
     </Card>

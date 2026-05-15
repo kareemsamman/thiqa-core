@@ -1,20 +1,12 @@
-import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Building2 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { useAgentContext } from "@/hooks/useAgentContext";
 import { useUpgradePrompt } from "@/components/pricing/UpgradePromptProvider";
 import { PeriodRange } from "./PeriodPills";
 import { SeeAllButton } from "./SeeAllButton";
-
-interface Company {
-  company_id: string;
-  company_name: string;
-  tx_count: number;
-  total_profit: number;
-}
+import { useDashboardSummary } from "@/hooks/useDashboardSummary";
 
 const BAR_COLORS = [
   "hsl(210 90% 55%)",
@@ -34,45 +26,11 @@ export function TopCompanies({
   const navigate = useNavigate();
   const { hasFeature } = useAgentContext();
   const { showUpgradePrompt } = useUpgradePrompt();
-  const [rows, setRows] = useState<Company[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      setLoading(true);
-      try {
-        const { data, error } = await (supabase.rpc as any)("dashboard_top_companies", {
-          p_start_date: range.start,
-          p_end_date: range.end,
-          p_limit: 5,
-          p_branch_id: branchId ?? null,
-        });
-        if (error) throw error;
-        if (cancelled) return;
-        setRows(
-          (data ?? []).map((r: any) => ({
-            company_id: r.company_id,
-            company_name: r.company_name,
-            tx_count: Number(r.tx_count ?? 0),
-            total_profit: Number(r.total_profit ?? 0),
-          }))
-        );
-      } catch (e) {
-        console.error("Error loading top companies:", e);
-        if (!cancelled) setRows([]);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-    load();
-    const handler = () => load();
-    window.addEventListener("thiqa:policy-created", handler);
-    return () => {
-      cancelled = true;
-      window.removeEventListener("thiqa:policy-created", handler);
-    };
-  }, [range.start, range.end, branchId]);
+  // 'thiqa:policy-created' refresh is handled centrally by
+  // Dashboard.tsx — invalidating the shared dashboard-summary
+  // query updates this widget along with the others.
+  const { data, isLoading } = useDashboardSummary(range, branchId);
+  const rows = data.top_companies;
 
   const max = Math.max(1, ...rows.map((r) => Math.abs(r.total_profit)));
   const canAccounting = hasFeature("accounting");
@@ -98,7 +56,7 @@ export function TopCompanies({
         <SeeAllButton locked={!canAccounting} onClick={handleSeeAll} />
       </CardHeader>
       <CardContent className="space-y-3">
-        {loading ? (
+        {isLoading ? (
           Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-10 w-full rounded-lg" />)
         ) : rows.length === 0 ? (
           <div className="text-center py-6 text-sm text-muted-foreground">

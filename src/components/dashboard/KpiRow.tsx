@@ -1,10 +1,9 @@
-import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Users, Car, FileText, TrendingUp, LucideIcon } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { PeriodRange } from "./PeriodPills";
+import { useDashboardSummary } from "@/hooks/useDashboardSummary";
 
 interface KpiTileProps {
   title: string;
@@ -58,13 +57,6 @@ function KpiTile({ title, value, icon: Icon, tone, loading }: KpiTileProps) {
   );
 }
 
-interface Kpis {
-  total_clients: number;
-  cars_insured: number;
-  policies_count: number;
-  period_profit: number;
-}
-
 export function KpiRow({
   range,
   branchId,
@@ -77,68 +69,39 @@ export function KpiRow({
   branchId?: string | null;
   canViewFinancial: boolean;
 }) {
-  const [data, setData] = useState<Kpis | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    (async () => {
-      try {
-        const { data: rows, error } = await (supabase.rpc as any)("dashboard_kpis_v2", {
-          p_start_date: range.start,
-          p_end_date: range.end,
-          p_branch_id: branchId ?? null,
-        });
-        if (error) throw error;
-        if (cancelled) return;
-        const row = Array.isArray(rows) ? rows[0] : rows;
-        setData({
-          total_clients: Number(row?.total_clients ?? 0),
-          cars_insured: Number(row?.cars_insured ?? 0),
-          policies_count: Number(row?.policies_count ?? 0),
-          period_profit: Number(row?.period_profit ?? 0),
-        });
-      } catch (e) {
-        console.error("Error loading KPIs:", e);
-        if (!cancelled) setData({ total_clients: 0, cars_insured: 0, policies_count: 0, period_profit: 0 });
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [range.start, range.end, branchId]);
+  const { data, isLoading } = useDashboardSummary(range, branchId);
+  const kpis = data.kpis;
 
   return (
     <div className="grid gap-4 grid-cols-2 xl:grid-cols-4">
       <KpiTile
         title="عملاء جدد"
-        value={(data?.total_clients ?? 0).toLocaleString("en-US")}
+        value={kpis.total_clients.toLocaleString("en-US")}
         icon={Users}
         tone="primary"
-        loading={loading}
+        loading={isLoading}
       />
       <KpiTile
         title="سيارات جديدة"
-        value={(data?.cars_insured ?? 0).toLocaleString("en-US")}
+        value={kpis.cars_insured.toLocaleString("en-US")}
         icon={Car}
         tone="blue"
-        loading={loading}
+        loading={isLoading}
       />
       <KpiTile
         title="معاملات"
-        value={(data?.policies_count ?? 0).toLocaleString("en-US")}
+        value={kpis.policies_count.toLocaleString("en-US")}
         icon={FileText}
         tone="amber"
-        loading={loading}
+        loading={isLoading}
       />
       {canViewFinancial && (
         <KpiTile
           title="صافي الأرباح"
-          value={`₪${Math.round(data?.period_profit ?? 0).toLocaleString("en-US")}`}
+          value={`₪${Math.round(kpis.period_profit).toLocaleString("en-US")}`}
           icon={TrendingUp}
           tone="success"
-          loading={loading}
+          loading={isLoading}
         />
       )}
     </div>

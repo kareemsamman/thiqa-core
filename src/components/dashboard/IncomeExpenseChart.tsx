@@ -1,19 +1,12 @@
-import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
-import { supabase } from "@/integrations/supabase/client";
 import { useAgentContext } from "@/hooks/useAgentContext";
 import { useUpgradePrompt } from "@/components/pricing/UpgradePromptProvider";
 import { SeeAllButton } from "./SeeAllButton";
 import { PeriodRange, DashboardPeriod } from "./PeriodPills";
-
-interface Row {
-  month: string;
-  income: number;
-  expense: number;
-}
+import { useDashboardSummary, useDashboardMonthly } from "@/hooks/useDashboardSummary";
 
 const INCOME_COLOR = "hsl(210 90% 55%)";
 const EXPENSE_COLOR = "hsl(25 95% 55%)";
@@ -36,61 +29,17 @@ export function IncomeExpenseChart({
   const navigate = useNavigate();
   const { hasFeature } = useAgentContext();
   const { showUpgradePrompt } = useUpgradePrompt();
-  const [rows, setRows] = useState<Row[]>([]);
-  const [totals, setTotals] = useState({ income: 0, expense: 0 });
-  const [loading, setLoading] = useState(true);
 
-  // Monthly trend (always 6 months — it's a trend chart)
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const { data, error } = await (supabase.rpc as any)("dashboard_income_expense_monthly", {
-          p_months: 6,
-          p_branch_id: branchId ?? null,
-        });
-        if (error) throw error;
-        if (cancelled) return;
-        setRows(
-          (data ?? []).map((r: any) => ({
-            month: r.month,
-            income: Number(r.income ?? 0),
-            expense: Number(r.expense ?? 0),
-          }))
-        );
-      } catch (e) {
-        console.error("Error loading income/expense monthly:", e);
-        if (!cancelled) setRows([]);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [branchId]);
+  // Period-scoped totals (top-line numbers) come from the shared
+  // dashboard-summary cache — same key as KpiRow/Donut/etc., so
+  // toggling period fires ONE refetch that updates every widget.
+  const { data: summary } = useDashboardSummary(range, branchId);
+  const totals = summary.income_expense_totals;
 
-  // Period-scoped totals (track the period pill)
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const { data, error } = await (supabase.rpc as any)("dashboard_income_expense_totals", {
-          p_start_date: range.start,
-          p_end_date: range.end,
-          p_branch_id: branchId ?? null,
-        });
-        if (error) throw error;
-        if (cancelled) return;
-        const row = Array.isArray(data) ? data[0] : data;
-        setTotals({
-          income: Number(row?.income ?? 0),
-          expense: Number(row?.expense ?? 0),
-        });
-      } catch (e) {
-        console.error("Error loading income/expense totals:", e);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [range.start, range.end, branchId]);
+  // Six-month trend (the area graph itself) is independent of the
+  // dashboard period — it stays at its own cache key so period
+  // toggles don't cause it to refetch unnecessarily.
+  const { rows, isLoading: monthlyLoading } = useDashboardMonthly(branchId);
 
   const canAccounting = hasFeature("accounting");
 
@@ -130,7 +79,7 @@ export function IncomeExpenseChart({
           </div>
         </div>
         <div className="flex-1 min-h-[220px]">
-          {loading ? (
+          {monthlyLoading ? (
             <Skeleton className="h-full w-full rounded-lg" />
           ) : (
             <ResponsiveContainer width="100%" height="100%">

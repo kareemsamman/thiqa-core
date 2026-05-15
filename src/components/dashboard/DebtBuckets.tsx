@@ -1,20 +1,13 @@
-import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { supabase } from "@/integrations/supabase/client";
 import { useAgentContext } from "@/hooks/useAgentContext";
 import { useUpgradePrompt } from "@/components/pricing/UpgradePromptProvider";
 import { SeeAllButton } from "./SeeAllButton";
 import { PeriodRange } from "./PeriodPills";
+import { useDashboardSummary } from "@/hooks/useDashboardSummary";
 
 type BucketKey = "overdue_60" | "overdue_30" | "current" | "paid";
-
-interface Bucket {
-  bucket: BucketKey;
-  tx_count: number;
-  amount: number;
-}
 
 const CFG: Record<BucketKey, { label: string; color: string; track: string }> = {
   overdue_60: {
@@ -51,44 +44,14 @@ export function DebtBuckets({
   const navigate = useNavigate();
   const { hasFeature } = useAgentContext();
   const { showUpgradePrompt } = useUpgradePrompt();
-  const [rows, setRows] = useState<Bucket[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Refetch on 'thiqa:policy-created' is handled centrally by
+  // Dashboard.tsx — invalidating the shared 'dashboard-summary'
+  // queryKey updates this widget along with the others in one
+  // network call instead of each widget firing its own.
+  const { data, isLoading } = useDashboardSummary(range, branchId);
+  const rows = data.debt_buckets;
 
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      setLoading(true);
-      try {
-        const { data, error } = await (supabase.rpc as any)(
-          "dashboard_client_debt_buckets_range",
-          { p_start_date: range.start, p_end_date: range.end, p_branch_id: branchId ?? null }
-        );
-        if (error) throw error;
-        if (cancelled) return;
-        setRows(
-          (data ?? []).map((r: any) => ({
-            bucket: r.bucket as BucketKey,
-            tx_count: Number(r.tx_count ?? 0),
-            amount: Number(r.amount ?? 0),
-          }))
-        );
-      } catch (e) {
-        console.error("Error loading debt buckets:", e);
-        if (!cancelled) setRows([]);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-    load();
-    const handler = () => load();
-    window.addEventListener("thiqa:policy-created", handler);
-    return () => {
-      cancelled = true;
-      window.removeEventListener("thiqa:policy-created", handler);
-    };
-  }, [range.start, range.end, branchId]);
-
-  const byKey = new Map(rows.map((r) => [r.bucket, r]));
+  const byKey = new Map(rows.map((r) => [r.bucket as BucketKey, r]));
   const maxAmount = Math.max(
     1,
     ...ORDER.filter((k) => k !== "paid").map((k) => byKey.get(k)?.amount ?? 0)
@@ -117,7 +80,7 @@ export function DebtBuckets({
         <SeeAllButton locked={!canDebt} onClick={handleSeeAll} />
       </CardHeader>
       <CardContent className="space-y-4">
-        {loading ? (
+        {isLoading ? (
           Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-12 w-full rounded-lg" />)
         ) : (
           ORDER.map((key) => {

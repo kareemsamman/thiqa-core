@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Header } from "@/components/layout/Header";
 import { useAuth } from "@/hooks/useAuth";
@@ -29,6 +30,23 @@ export default function Dashboard() {
   // hides itself for branch-scoped users). null = no extra filter, the
   // user's natural scope still applies.
   const [branchId, setBranchId] = useState<string | null>(null);
+
+  // Centralized refresh trigger. Several pages dispatch
+  // 'thiqa:policy-created' after a policy entry lands; before, each
+  // dashboard widget registered its own listener and refetched its
+  // own RPC. Now KpiRow / Donut / DebtBuckets / TopCompanies /
+  // IncomeExpenseChart share one cached query, so we invalidate
+  // that one key here and they all refresh from a single network
+  // round-trip.
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    const handler = () => {
+      queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-monthly"] });
+    };
+    window.addEventListener("thiqa:policy-created", handler);
+    return () => window.removeEventListener("thiqa:policy-created", handler);
+  }, [queryClient]);
 
   return (
     <MainLayout>
