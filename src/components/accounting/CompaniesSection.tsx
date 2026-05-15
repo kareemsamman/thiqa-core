@@ -488,13 +488,37 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
     const disbursedSum = companySettlements
       .filter((r) => !r.refused)
       .reduce((s, r) => s + Number(r.total_amount || 0), 0);
+    // Paper adjustments — both إشعار دائن and إشعار مدين on companies
+    // SUBTRACT from the outstanding, per the canonical formula in
+    // get_company_outstanding_summary (migration 20260515110000):
+    //   outstanding = payable − paid_out − credit_notes − debit_notes
+    // - إشعار دائن: company logging our payment "على الحساب" → pays
+    //   down the debt like سند صرف but without cash moving.
+    // - إشعار مدين: company owes us (commission claw-back, refund
+    //   pending) → directly reduces what we owe them.
+    const companyCreditNotesTotal = companyCreditNotes.reduce(
+      (s, r) => s + Math.abs(Number(r.amount || 0)),
+      0,
+    );
+    const companyDebitNotesTotal = companyDebitNotes.reduce(
+      (s, r) => s + Math.abs(Number(r.amount || 0)),
+      0,
+    );
     // Gross "owed to companies" — lifetime obligation across active
-    // policies, after netting in the returns delta but BEFORE we
-    // subtract what we've already paid them.
-    const dueGrossSum = Math.max(0, totalDue + returnsDueDelta);
-    // Net "still owe the companies" — today's debt, after also
-    // subtracting outgoing settlements.
-    const dueSum = Math.max(0, totalDue + returnsDueDelta - disbursedSum);
+    // policies, after netting in the returns delta and paper-note
+    // adjustments, BEFORE subtracting what we've actually paid out.
+    const dueGrossSum = Math.max(
+      0,
+      totalDue + returnsDueDelta - companyCreditNotesTotal - companyDebitNotesTotal,
+    );
+    // Net "still owe the companies" — also subtracts outgoing settlements.
+    // Matches get_company_outstanding_summary one-for-one so this pill,
+    // the in-app debt tile, and the AddCompanyDebitNoteDialog balance
+    // line all read the same number.
+    const dueSum = Math.max(
+      0,
+      totalDue + returnsDueDelta - disbursedSum - companyCreditNotesTotal - companyDebitNotesTotal,
+    );
     // Net profit = (companies profit + commission + brokers profit +
     // returns adjustments) − expenses. issuancesActive already excludes
     // cancelled policies, so the cancellation rule ("no profit on
@@ -517,12 +541,16 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
       commissionOnly,
       brokerProfit,
       netProfitSum,
+      companyCreditNotesTotal,
+      companyDebitNotesTotal,
       activeCount: overlayed.length,
     };
   }, [
     issuancesActive,
     returns,
     companySettlements,
+    companyCreditNotes,
+    companyDebitNotes,
     editLocal,
     data.expensesTotal,
     brokerProfit,
@@ -625,6 +653,12 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
                         ? `+ ${fmt(totals.returnsDueDelta)}`
                         : `− ${fmt(Math.abs(totals.returnsDueDelta))}`,
                   },
+                  ...(totals.companyCreditNotesTotal > 0
+                    ? [{ label: 'إشعار دائن للشركة', value: `− ${fmt(totals.companyCreditNotesTotal)}` }]
+                    : []),
+                  ...(totals.companyDebitNotesTotal > 0
+                    ? [{ label: 'إشعار مدين على الشركة', value: `− ${fmt(totals.companyDebitNotesTotal)}` }]
+                    : []),
                   { label: 'الإجمالي قبل المدفوعات', value: fmt(totals.dueGrossSum), strong: true },
                   {
                     label: 'ملاحظة',
@@ -654,6 +688,12 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
                         : `− ${fmt(Math.abs(totals.returnsDueDelta))}`,
                   },
                   { label: 'مدفوع للشركات', value: `− ${fmt(totals.disbursedSum)}` },
+                  ...(totals.companyCreditNotesTotal > 0
+                    ? [{ label: 'إشعار دائن للشركة', value: `− ${fmt(totals.companyCreditNotesTotal)}` }]
+                    : []),
+                  ...(totals.companyDebitNotesTotal > 0
+                    ? [{ label: 'إشعار مدين على الشركة', value: `− ${fmt(totals.companyDebitNotesTotal)}` }]
+                    : []),
                   { label: 'المتبقي', value: fmt(totals.dueSum), strong: true },
                 ]}
               />
