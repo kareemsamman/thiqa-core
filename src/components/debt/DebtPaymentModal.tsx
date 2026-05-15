@@ -1341,12 +1341,6 @@ export function DebtPaymentModal({
                   <p className="text-sm sm:text-lg font-bold text-destructive tabular-nums leading-tight mt-0.5">
                     ₪{effectiveRemaining.toLocaleString('en-US')}
                   </p>
-                  {appliedCredit > 0 && (
-                    <div className="text-[9px] sm:text-[10px] text-muted-foreground mt-1 space-y-0.5 leading-tight">
-                      <p>المطلوب: ₪{(totalRemaining - paidVisaTotal).toLocaleString('en-US')}</p>
-                      <p className="text-amber-600">المرتجع: -₪{appliedCredit.toLocaleString('en-US')}</p>
-                    </div>
-                  )}
                 </div>
               </div>
             </div>

@@ -181,24 +181,22 @@ const getPolicyTypeLabel = (parent: string, child: string | null): string => {
 
 // Direction rules for the ledger.
 //
-// The "مدين" column collects every event that AFFECTS the customer's
-// balance from the office's side (billings, refunds, debt-side
-// adjustments). The "دائن" column collects payments that come FROM
-// the customer. Sign on balanceDelta determines whether the running
-// total grows or shrinks — the column placement is purely visual.
+// Standard double-entry semantics from the customer's account at the
+// office:
+//   • مدين (debit, +): customer's debt to office GROWS — new
+//     transactions, refused cheques, debit notes, accident fees on the
+//     customer's side.
+//   • دائن (credit, −): customer's debt to office SHRINKS — payments
+//     received, credit notes issued (his account credited), سند صرف
+//     (cash handed back to him), transfer refunds owed.
 //
-// • payment, accident_fee  → دائن (customer paid us)
-// • cancellation           → مدين (refused cheque → debt grows back)
-// • disbursement           → مدين (we paid cash to customer)
-// • credit_note            → مدين (we OWE / credited the customer)
-// • debit_note             → مدين (customer owes us — billing event,
-//   same column placement as cancellation since both push balance UP)
+// balanceDelta is decoupled from the column placement so we can pick
+// "which column the amount appears in" purely on the accounting view,
+// while the running balance still gets the right sign elsewhere.
 const isDebitForCustomer = (receiptType: string): boolean => {
   return (
-    receiptType === 'cancellation' ||
-    receiptType === 'disbursement' ||
-    receiptType === 'credit_note' ||
-    receiptType === 'debit_note'
+    receiptType === 'cancellation' ||  // refused cheque → debt restored
+    receiptType === 'debit_note'       // extra charge on the customer
   );
 };
 
@@ -2076,8 +2074,8 @@ function buildStatementHtml(args: BuildArgs): string {
     <div class="ledger">
       <div class="section-title">كشف الحركة (${year})</div>
       <div class="ledger-legend">
-        <span class="legend-item"><span class="legend-dot legend-debit"></span>مدين — يضاف لما على العميل (معاملة جديدة / سند صرف)</span>
-        <span class="legend-item"><span class="legend-dot legend-credit"></span>دائن — يطرح من ما على العميل (سند قبض / إشعار دائن / إلغاء معاملة)</span>
+        <span class="legend-item"><span class="legend-dot legend-debit"></span><strong>مدين (+)</strong> — يضاف على دين العميل (معاملة جديدة / إلغاء سند قبض / إشعار مدين)</span>
+        <span class="legend-item"><span class="legend-dot legend-credit"></span><strong>دائن (−)</strong> — يطرح من دين العميل (سند قبض / إشعار دائن / سند صرف)</span>
         <span class="legend-item legend-note">اضغط على رقم السند لعرض الوثيقة الأصلية</span>
       </div>
       <table class="ledger-table">
@@ -2087,12 +2085,10 @@ function buildStatementHtml(args: BuildArgs): string {
             <th style="width:85px">التاريخ</th>
             <th>البيان</th>
             <th style="width:100px">
-              <span class="th-main">للعميل</span>
-              <span class="th-sub">مدين (−)</span>
+              <span class="th-main">مدين</span>
             </th>
             <th style="width:100px">
-              <span class="th-main">من العميل</span>
-              <span class="th-sub">دائن (+)</span>
+              <span class="th-main">دائن</span>
             </th>
             <th style="width:110px">الرصيد</th>
           </tr>
