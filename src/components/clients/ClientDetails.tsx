@@ -1096,6 +1096,22 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
         grossPaidEffective
         + totalCreditNotesIssued
         + transferOfficePaysTotal;
+      // Diagnostic: temporary log so we can see exactly what each
+      // term contributes when the tile disagrees with the kashf.
+      // Safe to remove once the discrepancy is resolved.
+      console.log('[ClientDetails.fetchPaymentSummary]', {
+        clientId: client.id,
+        clientName: client.full_name,
+        clientOwed,
+        transferCustomerPaysTotal,
+        totalDebitNotesBilled,
+        billedTotal,
+        grossPaidEffective,
+        totalCreditNotesIssued,
+        transferOfficePaysTotal,
+        creditsTotal,
+        remaining: Math.max(0, billedTotal - creditsTotal),
+      });
       setPaymentSummary({
         total_paid: grossPaidEffective,
         total_remaining: Math.max(0, billedTotal - creditsTotal),
