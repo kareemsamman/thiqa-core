@@ -52,6 +52,11 @@ interface Props {
    *  parent uses this to patch its data state optimistically instead
    *  of triggering a full refetch. */
   onSubPolicySaved?: (subPolicyId: string, patch: IssuanceEditPatch) => void;
+  /** Fired when the user clicks the receipts cell on a row with a
+   *  single receipt — the parent opens ReceiptActionsDialog so the
+   *  user gets print / SMS / WhatsApp directly. Multi-receipt rows
+   *  still fall through to the drawer below. */
+  onPrimaryReceiptClick?: (row: IssuanceRow) => void;
   pageSize?: number;
 }
 
@@ -87,6 +92,7 @@ export function CompanyIssuancesTable({
   editLocal,
   onPatch,
   onSubPolicySaved,
+  onPrimaryReceiptClick,
   pageSize = 10,
 }: Props) {
   const [calcRow, setCalcRow] = useState<IssuanceRow | null>(null);
@@ -465,22 +471,44 @@ export function CompanyIssuancesTable({
 
                         {showCol('receipts') && (
                           <TableCell>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setDrawerRow(rawRow);
-                                setDrawerOpen(true);
-                              }}
-                              className={cn(
-                                'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors',
-                                row.receipts_count > 0
-                                  ? 'border-emerald-500/30 text-emerald-700 bg-emerald-500/5 hover:bg-emerald-500/10'
-                                  : 'border-dashed text-muted-foreground hover:bg-slate-50',
-                              )}
-                            >
-                              <Receipt className="h-3.5 w-3.5" />
-                              {row.receipts_count > 0 ? `${row.receipts_count} سند` : 'لا يوجد'}
-                            </button>
+                            {/* Single-receipt rows render the actual
+                                voucher number and open the print/send
+                                dialog on click (per user feedback —
+                                "في سند واحد بدو يكون رقم السند
+                                وينكبس عليه يفتح البوب اب تبع الإرسال
+                                او الطباعة"). Rows with 0 or >1
+                                receipts keep the existing drawer
+                                pill behavior. */}
+                            {row.receipts_count === 1 && row.primary_receipt && onPrimaryReceiptClick ? (
+                              <button
+                                type="button"
+                                onClick={() => onPrimaryReceiptClick(rawRow)}
+                                className={cn(
+                                  'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-mono ltr-nums transition-colors',
+                                  'border-emerald-500/30 text-emerald-700 bg-emerald-500/5 hover:bg-emerald-500/10',
+                                )}
+                              >
+                                <Receipt className="h-3.5 w-3.5" />
+                                {row.primary_receipt.voucher_number ?? '1 سند'}
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setDrawerRow(rawRow);
+                                  setDrawerOpen(true);
+                                }}
+                                className={cn(
+                                  'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors',
+                                  row.receipts_count > 0
+                                    ? 'border-emerald-500/30 text-emerald-700 bg-emerald-500/5 hover:bg-emerald-500/10'
+                                    : 'border-dashed text-muted-foreground hover:bg-slate-50',
+                                )}
+                              >
+                                <Receipt className="h-3.5 w-3.5" />
+                                {row.receipts_count > 0 ? `${row.receipts_count} سند` : 'لا يوجد'}
+                              </button>
+                            )}
                           </TableCell>
                         )}
 

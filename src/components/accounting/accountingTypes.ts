@@ -84,6 +84,18 @@ export interface IssuanceRow {
   receipts_count: number;
   receipts_total: number;
   primary_payment_method: string | null;
+  /** When receipts_count === 1, the single receipt that covers this
+   *  package — surfaced so the receipts cell can render the user-facing
+   *  voucher number AND open ReceiptActionsDialog on click without an
+   *  async lookup. null when the package has 0 or >1 receipts (the
+   *  multi-receipt case opens the drawer instead). */
+  primary_receipt: {
+    receipt_id: string;
+    voucher_number: string | null;
+    receipt_type: string;
+    payment_id: string | null;
+    client_phone: string | null;
+  } | null;
   /** True when ANY sub-policy in the row is manually overridden. Drives
    *  the lock badge in the table; unlocking clears it on every sub. */
   manual_override: boolean;

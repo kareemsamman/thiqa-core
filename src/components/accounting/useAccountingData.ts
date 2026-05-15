@@ -323,6 +323,18 @@ export function useAccountingData(
         string,
         { count: number; total: number; primaryType: string | null; primaryNumber: string | null }
       > = new Map();
+      // Mirror receipts grouped by policy_id — used to compute the
+      // primary_receipt on each IssuanceRow so the "سندات القبض" cell
+      // can show the real voucher number AND open the print/send
+      // dialog when the row only has ONE receipt.
+      type PaymentMirror = {
+        receipt_id: string;
+        voucher_number: string | null;
+        receipt_type: string;
+        payment_id: string | null;
+        client_phone: string | null;
+      };
+      const paymentMirrorsByPolicy = new Map<string, PaymentMirror[]>();
       if (policyIds.length > 0) {
         const { data: paymentsData } = await supabase
           .from('policy_payments')
@@ -344,6 +356,38 @@ export function useAccountingData(
           }
           receiptsByPolicy.set(p.policy_id, cur);
         });
+
+        // Separate query for the mirror receipts — joining clients so
+        // the dialog can send via SMS / WhatsApp without a follow-up
+        // lookup. Filtered to payment-type mirrors that aren't
+        // cancelled so the cell can't open a stale voucher.
+        const { data: payMirrors } = await supabase
+          .from('receipts')
+          .select(
+            'id, policy_id, voucher_number, receipt_type, payment_id, cancelled_at, clients(phone_number)',
+          )
+          .in('policy_id', policyIds)
+          .eq('receipt_type', 'payment');
+        for (const m of (payMirrors ?? []) as Array<{
+          id: string;
+          policy_id: string | null;
+          voucher_number: string | null;
+          receipt_type: string;
+          payment_id: string | null;
+          cancelled_at: string | null;
+          clients?: { phone_number: string | null } | null;
+        }>) {
+          if (!m.policy_id || m.cancelled_at) continue;
+          const arr = paymentMirrorsByPolicy.get(m.policy_id) ?? [];
+          arr.push({
+            receipt_id: m.id,
+            voucher_number: m.voucher_number,
+            receipt_type: m.receipt_type,
+            payment_id: m.payment_id,
+            client_phone: m.clients?.phone_number ?? null,
+          });
+          paymentMirrorsByPolicy.set(m.policy_id, arr);
+        }
       }
 
       // Flatten each raw row into a SubPolicy used for grouping below.
@@ -461,6 +505,20 @@ export function useAccountingData(
             ) ?? main.document_number;
 
           const clientInfo = clientByPolicy.get(main.id);
+          // Collect every mirror receipt across the group's sub-
+          // policies so the cell knows whether a single voucher
+          // covers the whole package. Only when EXACTLY one mirror
+          // exists do we surface it as primary_receipt — otherwise
+          // the cell stays "N سند" + drawer.
+          const groupMirrors = group.flatMap(
+            (s) => paymentMirrorsByPolicy.get(s.id) ?? [],
+          );
+          const primary_receipt = groupMirrors.length === 1
+            ? {
+                ...groupMirrors[0],
+                client_phone: groupMirrors[0].client_phone ?? clientInfo?.phone ?? null,
+              }
+            : null;
           return {
             id: main.group_id ?? main.id,
             document_number: documentNumber,
@@ -479,6 +537,7 @@ export function useAccountingData(
             receipts_count: aggregate.receipts_count,
             receipts_total: aggregate.receipts_total,
             primary_payment_method: aggregate.primary_payment_method,
+            primary_receipt,
             manual_override: group.some((s) => s.manual_override),
           };
         },
@@ -504,25 +563,68 @@ export function useAccountingData(
       if (agentId) csQuery = csQuery.eq('agent_id', agentId);
       if (branchId) csQuery = csQuery.eq('branch_id', branchId);
       const { data: csData } = await csQuery;
-      const csRows: (Omit<SettlementRow, 'direction'> & { direction: 'outgoing' | 'incoming' })[] = (
-        (csData ?? []) as unknown as RawCompanySettlement[]
-      ).map((s) => ({
-        id: s.id,
-        settlement_date: s.settlement_date,
-        total_amount: Number(s.total_amount ?? 0),
-        payment_type: s.payment_type,
-        cheque_number: s.cheque_number,
-        bank_code: s.bank_code,
-        branch_code: s.branch_code,
-        cheque_image_urls: hydrateChequeImages(s.cheque_image_urls, s.cheque_image_url),
-        customer_cheque_count: Array.isArray(s.customer_cheque_ids) ? s.customer_cheque_ids.length : 0,
-        status: s.status,
-        refused: s.refused,
-        notes: s.notes,
-        entity_id: s.company_id ?? null,
-        entity_name: s.insurance_companies?.name_ar || s.insurance_companies?.name || null,
-        direction: s.direction ?? 'outgoing',
-      }));
+      const csRowsBase = (csData ?? []) as unknown as RawCompanySettlement[];
+
+      // Eagerly fetch the mirror receipts for every company settlement
+      // we just loaded so the accounting table can render real voucher
+      // numbers AND open ReceiptActionsDialog without an async lookup.
+      // Without this, the cell printed "تسوية" and clicking sometimes
+      // threw "السند غير متوفر للطباعة/الإرسال" on rows whose mirror
+      // hadn't been read yet.
+      const csIds = csRowsBase.map((s) => s.id);
+      type SettlementMirror = {
+        voucher_number: string | null;
+        receipt_id: string;
+        receipt_type: string;
+        payment_id: string | null;
+      };
+      const mirrorByCompanySettlementId = new Map<string, SettlementMirror>();
+      if (csIds.length > 0) {
+        const { data: mirrorRows } = await supabase
+          .from('receipts')
+          .select('id, company_settlement_id, voucher_number, receipt_type, payment_id')
+          .in('company_settlement_id', csIds);
+        for (const m of (mirrorRows ?? []) as Array<{
+          id: string;
+          company_settlement_id: string;
+          voucher_number: string | null;
+          receipt_type: string;
+          payment_id: string | null;
+        }>) {
+          if (!m.company_settlement_id) continue;
+          mirrorByCompanySettlementId.set(m.company_settlement_id, {
+            receipt_id: m.id,
+            voucher_number: m.voucher_number,
+            receipt_type: m.receipt_type,
+            payment_id: m.payment_id,
+          });
+        }
+      }
+
+      const csRows: (Omit<SettlementRow, 'direction'> & { direction: 'outgoing' | 'incoming' })[] = csRowsBase.map((s) => {
+        const mirror = mirrorByCompanySettlementId.get(s.id) ?? null;
+        return {
+          id: s.id,
+          settlement_date: s.settlement_date,
+          total_amount: Number(s.total_amount ?? 0),
+          payment_type: s.payment_type,
+          cheque_number: s.cheque_number,
+          bank_code: s.bank_code,
+          branch_code: s.branch_code,
+          cheque_image_urls: hydrateChequeImages(s.cheque_image_urls, s.cheque_image_url),
+          customer_cheque_count: Array.isArray(s.customer_cheque_ids) ? s.customer_cheque_ids.length : 0,
+          status: s.status,
+          refused: s.refused,
+          notes: s.notes,
+          entity_id: s.company_id ?? null,
+          entity_name: s.insurance_companies?.name_ar || s.insurance_companies?.name || null,
+          direction: s.direction ?? 'outgoing',
+          voucher_number: mirror?.voucher_number ?? null,
+          receipt_id: mirror?.receipt_id ?? null,
+          receipt_type: mirror?.receipt_type ?? null,
+          payment_id: mirror?.payment_id ?? null,
+        };
+      });
       setCompanySettlements(csRows);
 
       // 5. Broker settlements

@@ -166,32 +166,21 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
   // we resolve it lazily on click.
   const [voucherActionRow, setVoucherActionRow] = useState<VoucherActionRow | null>(null);
 
-  const openSettlementVoucher = async (row: SettlementRow, kind: 'disbursement' | 'payment') => {
-    // company_settlements rows are mirrored into the receipts table
-    // via `company_settlement_id`. Look up the mirror so the action
-    // dialog has a real receipts.id to feed generate-voucher /
-    // send-voucher. Old settlement rows without a mirror fall back
-    // to a print-only message.
-    const { data: mirror, error } = await supabase
-      .from('receipts')
-      .select('id, receipt_type, payment_id, voucher_number, client_id, broker_id')
-      .eq('company_settlement_id', row.id)
-      .maybeSingle();
-    if (error || !mirror) {
+  const openSettlementVoucher = (row: SettlementRow, kind: 'disbursement' | 'payment') => {
+    // Mirror info is now hydrated eagerly by useAccountingData, so
+    // this handler is purely synchronous — feed the cached id /
+    // voucher_number / receipt_type straight into the dialog.
+    // Legacy rows that never got a mirror (no `receipt_id`) surface
+    // the same "السند غير متوفر" toast they used to.
+    if (!row.receipt_id) {
       toast.error('السند غير متوفر للطباعة/الإرسال');
       return;
     }
-    const r = mirror as {
-      id: string;
-      receipt_type: string;
-      payment_id: string | null;
-      voucher_number: string | null;
-    };
     setVoucherActionRow({
-      id: r.id,
-      receipt_type: r.receipt_type || kind,
-      voucher_number: r.voucher_number ?? row.cheque_number ?? null,
-      payment_id: r.payment_id ?? null,
+      id: row.receipt_id,
+      receipt_type: row.receipt_type || kind,
+      voucher_number: row.voucher_number ?? row.cheque_number ?? null,
+      payment_id: row.payment_id ?? null,
       client_name: row.entity_name ?? null,
       // Companies don't have a "to-customer" phone for SMS/WhatsApp
       // in the receipts mirror — send-voucher handles broker rows but
@@ -214,6 +203,22 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
       payment_id: row.payment_id ?? null,
       client_name: row.client_name,
       client_phone: row.client_phone,
+    });
+  };
+
+  // Issuance row's "سندات القبض" cell — when receipts_count === 1
+  // the cell shows the voucher number; clicking it opens the same
+  // print/send dialog the receipts page uses. Multi-receipt rows
+  // still fall through to the package drawer inside the table.
+  const openPrimaryReceiptVoucher = (row: IssuanceRow) => {
+    if (!row.primary_receipt) return;
+    setVoucherActionRow({
+      id: row.primary_receipt.receipt_id,
+      receipt_type: row.primary_receipt.receipt_type,
+      voucher_number: row.primary_receipt.voucher_number,
+      payment_id: row.primary_receipt.payment_id,
+      client_name: row.client_name,
+      client_phone: row.primary_receipt.client_phone ?? row.client_phone ?? null,
     });
   };
 
@@ -836,6 +841,7 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
             editLocal={editLocal}
             onPatch={onPatch}
             onSubPolicySaved={(id, patch) => data.patchSubPolicy(id, patch)}
+            onPrimaryReceiptClick={openPrimaryReceiptVoucher}
           />
         </TabsContent>
         <TabsContent value="issuances" className="mt-3 m-0">
@@ -848,6 +854,7 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
             editLocal={editLocal}
             onPatch={onPatch}
             onSubPolicySaved={(id, patch) => data.patchSubPolicy(id, patch)}
+            onPrimaryReceiptClick={openPrimaryReceiptVoucher}
           />
         </TabsContent>
         <TabsContent value="returns" className="mt-3 m-0">
@@ -860,6 +867,7 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
             editLocal={editLocal}
             onPatch={onPatch}
             onSubPolicySaved={(id, patch) => data.patchSubPolicy(id, patch)}
+            onPrimaryReceiptClick={openPrimaryReceiptVoucher}
           />
         </TabsContent>
         <TabsContent value="disbursements" className="mt-3 m-0">
@@ -1160,11 +1168,11 @@ function CompanyPicker({
 // edit/delete actions) lives on the /receipts page where it
 // belongs — the accounting page is read-only on the receipt rows.
 
-function formatSettlementVoucher(_row: SettlementRow): string {
-  // Per user: keep the voucher cell to just "تسوية" — the التاريخ
-  // column already carries the date, and cheque number was redundant
-  // alongside it. The clickable cell still opens the print/send
-  // dialog where the underlying receipt's voucher_number renders.
+function formatSettlementVoucher(row: SettlementRow): string {
+  // Prefer the real mirror voucher number (e.g. R229/2026, D45/2026)
+  // hydrated by useAccountingData from the receipts row. Legacy rows
+  // without a mirror fall back to "تسوية" so the cell isn't empty.
+  if (row.voucher_number) return row.voucher_number;
   return 'تسوية';
 }
 

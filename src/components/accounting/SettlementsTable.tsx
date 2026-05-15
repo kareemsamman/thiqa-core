@@ -58,6 +58,15 @@ export interface SettlementRow {
   entity_id: string | null; // company_id or broker_id
   entity_name: string | null; // company or broker name
   direction?: 'we_owe' | 'broker_owes' | 'incoming' | 'outgoing' | null;
+  /** Mirror receipt (when company_settlements/broker_settlements
+   *  triggered a row into `receipts`). Hydrated up-front by
+   *  useAccountingData so the accounting table can render the user-
+   *  facing voucher number AND feed ReceiptActionsDialog without an
+   *  async lookup on click. null when no mirror exists (legacy rows). */
+  voucher_number?: string | null;
+  receipt_id?: string | null;
+  receipt_type?: string | null;
+  payment_id?: string | null;
 }
 
 interface ConsumedCheque {
