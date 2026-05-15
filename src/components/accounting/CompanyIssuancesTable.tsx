@@ -443,7 +443,10 @@ export function CompanyIssuancesTable({
                     // the package details drawer. Only car_number (text
                     // display) keeps the simple per-sub lock via editable.
                     const mainEditable = true;
-                    const rowNumber = (safePage - 1) * pageSize + idx + 1;
+                    // Pagination was removed; the row number is simply
+                    // the table-local index. Keeping the # column in
+                    // sync with what the user actually sees on screen.
+                    const rowNumber = idx + 1;
                     return (
                       <TableRow
                         key={row.id}

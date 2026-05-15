@@ -463,7 +463,22 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
     // Apply the live edit overlay so the pills move in lock-step with
     // the table cells the user is typing into.
     const overlayed = issuancesActive.map((r) => applyOverlay(r, editLocal));
+    // Office-billable insurance — IssuanceRow.insurance_price already
+    // excludes إلزامي in mixed packages (per useAccountingData's
+    // moneySubs filter). Keeps every downstream pill (المستحق /
+    // الأرباح / الصافي) on its existing basis.
     const insuranceSum = overlayed.reduce((s, r) => s + Number(r.insurance_price || 0), 0);
+    // TRUE gross insurance — sums insurance_price across every sub-
+    // policy in every package, including إلزامي in mixed packages.
+    // This is what "إجمالي سعر التأمين" means to an accountant: gross
+    // premium written, irrespective of who eventually collects it.
+    // We show this on the headline pill and break it down (gross vs
+    // office-billable) in the tooltip so the user can see both.
+    const grossInsuranceSum = overlayed.reduce(
+      (s, r) => s + r.sub_policies.reduce((ss, p) => ss + Number(p.insurance_price || 0), 0),
+      0,
+    );
+    const elzamiPassthrough = grossInsuranceSum - insuranceSum;
     // Total owed to companies — sum across active policies.
     const totalDue = overlayed.reduce((s, r) => s + Number(r.payed_for_company || 0), 0);
     const profitOnly = overlayed.reduce((s, r) => s + Number(r.profit || 0), 0);
@@ -530,6 +545,8 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
       profitSum + brokerProfit + returnsProfitDelta - data.expensesTotal;
     return {
       insuranceSum,
+      grossInsuranceSum,
+      elzamiPassthrough,
       dueSum,
       dueGrossSum,
       profitSum,
@@ -623,14 +640,28 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
             icon={FileText}
             tone="slate"
             label="إجمالي سعر التأمين"
-            value={fmt(totals.insuranceSum)}
+            value={fmt(totals.grossInsuranceSum)}
             hint={`${totals.activeCount} معاملة`}
             tooltip={
               <BreakdownLines
                 title="إجمالي سعر التأمين"
                 lines={[
                   { label: 'عدد المعاملات', value: `${totals.activeCount}` },
-                  { label: 'مجموع سعر التأمين', value: fmt(totals.insuranceSum) },
+                  { label: 'إجمالي القسط المكتتب', value: fmt(totals.grossInsuranceSum), strong: true },
+                  ...(totals.elzamiPassthrough > 0
+                    ? [
+                        {
+                          label: 'إلزامي يدفعه العميل للشركة',
+                          value: `− ${fmt(totals.elzamiPassthrough)}`,
+                        },
+                      ]
+                    : []),
+                  { label: 'يدخل دفاتر المكتب', value: fmt(totals.insuranceSum) },
+                  {
+                    label: 'ملاحظة',
+                    value: 'الإلزامي ضمن الحزم المختلطة لا يدخل دفاتر المكتب — يدفعه العميل للشركة مباشرة',
+                    muted: true,
+                  },
                 ]}
               />
             }
