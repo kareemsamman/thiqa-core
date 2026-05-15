@@ -356,6 +356,23 @@ export function PolicyFilesSection({
 
     setScanning(fileType);
 
+    // Safety timeout: when ScanApp isn't installed Asprise pops its
+    // "complete one-time setup" overlay and never invokes the
+    // callback if the user dismisses it. Without this guard the
+    // مسح button would spin forever. 30s is well past any real
+    // scan, so a live device won't be cut short.
+    let settled = false;
+    const safetyTimer = window.setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      setScanning(null);
+      toast({
+        title: "تثبيت مطلوب",
+        description: "ScanApp مش مثبت أو ما استجاب. نزّله من asprise.com وحاول تاني.",
+        variant: "destructive",
+      });
+    }, 30000);
+
     // Always let the user pick a scanner — caching a "preferred"
     // scanner caused the button to spin forever when the saved
     // device was unplugged or renamed.
@@ -379,16 +396,19 @@ export function PolicyFilesSection({
 
     window.scanner.scan(
       async (successful, mesg, response) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(safetyTimer);
         if (!successful) {
           setScanning(null);
           // Don't show error for user cancellation
           if (mesg && !mesg.toLowerCase().includes('cancel')) {
             // Check if ScanApp not installed
             if (mesg.includes('Scanner.js') || mesg.includes('localhost')) {
-              toast({ 
-                title: "تثبيت مطلوب", 
+              toast({
+                title: "تثبيت مطلوب",
                 description: "يرجى تثبيت برنامج ScanApp من asprise.com",
-                variant: "destructive" 
+                variant: "destructive"
               });
             } else {
               toast({ title: "خطأ في المسح", description: mesg, variant: "destructive" });
