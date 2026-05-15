@@ -41,17 +41,18 @@ html {
   }
 }
 
-/* Asprise scanner.js renders its "complete one-time setup" overlay
-   straight into <body> with a low inline z-index, which lands BELOW
-   our open shadcn Dialog and swallows clicks. Hoist anything the
-   library injects (overlay, popup, dialog) above every modal. */
-[id*="scanner"][id*="dialog"],
-[id*="scanner"][id*="overlay"],
-[id*="scanner"][id*="popup"],
-[class*="scannerjs"],
-[id*="asprise"],
-[class*="asprise"] {
+/* Asprise scanner.js injects its "complete one-time setup" overlay
+   straight into <body> with no explicit z-index, so it lands BELOW
+   our open shadcn Dialog (z-50) and the Dialog's overlay swallows
+   every click. Real selectors use the `asprise-web-scan-*` prefix
+   (verified against cdn.asprise.com/scannerjs/scanner.js — the
+   library's own DOM structure). Force the wrapper + every dialog
+   piece above any modal AND restore pointer-events so the X / setup
+   links actually receive clicks. */
+[id^="asprise-web-scan"],
+[class*="asprise-web-scan"] {
   z-index: 900000 !important;
+  pointer-events: auto !important;
 }
 
 @layer base {
