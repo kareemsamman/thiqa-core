@@ -64,7 +64,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAgentContext } from '@/hooks/useAgentContext';
 import { cn } from '@/lib/utils';
 import { CustomerStatementModal } from '@/components/clients/CustomerStatementModal';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface ClientLite {
   id: string;
@@ -467,33 +466,6 @@ export function ClientsSection({ branchId }: ClientsSectionProps = {}) {
             onChange={setSelectedClient}
             showClear={!!selectedClient}
           />
-          <TooltipProvider delayDuration={150}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                {/* span wrapper lets the tooltip fire even while the
-                    button is disabled — disabled buttons don't emit
-                    mouse events directly. Removed when an effective
-                    client is available so it doesn't intercept focus. */}
-                <span tabIndex={effectiveClient ? -1 : 0}>
-                  <Button
-                    variant="default"
-                    size="sm"
-                    className="gap-2"
-                    disabled={!effectiveClient}
-                    onClick={() => effectiveClient && setStatementOpen(true)}
-                  >
-                    <FileText className="h-4 w-4" />
-                    كشف حساب
-                  </Button>
-                </span>
-              </TooltipTrigger>
-              {!effectiveClient && (
-                <TooltipContent side="bottom">
-                  اختر عميل من القائمة أو ابحث عن عميل واحد لطباعة كشف حسابه
-                </TooltipContent>
-              )}
-            </Tooltip>
-          </TooltipProvider>
           <AccountingFilters
             value={filters}
             onChange={setFilters}
