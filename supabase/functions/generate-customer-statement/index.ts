@@ -2083,9 +2083,19 @@ function buildStatementHtml(args: BuildArgs): string {
       }
       .ledger-legend .legend-note { width: 100%; margin-right: 0; }
 
-      .ledger-table { font-size: 10.5px; min-width: 560px; }
+      /* Bump the table's min-width so every column gets breathing
+         room — البيان especially, since the policy line items wrap
+         into very tall stacks when the column is < 200px wide.
+         The table scrolls horizontally inside .ledger-scroll if it
+         exceeds the viewport. */
+      .ledger-table { font-size: 10.5px; min-width: 880px; }
+      .ledger-table thead th:nth-child(1) { width: 110px !important; }
+      .ledger-table thead th:nth-child(2) { width: 100px !important; }
+      .ledger-table thead th:nth-child(4) { width: 115px !important; }
+      .ledger-table thead th:nth-child(5) { width: 115px !important; }
+      .ledger-table thead th:nth-child(6) { width: 125px !important; }
       .ledger-table thead th,
-      .ledger-table tbody td { padding: 6px 6px; }
+      .ledger-table tbody td { padding: 6px 8px; }
       .ledger-table .event-headline { font-size: 11.5px; line-height: 1.45; }
       .ledger-table .event-sublines { font-size: 10.5px; margin-top: 3px; }
       .ledger-table .line-item .line-amount { min-width: 56px; }
