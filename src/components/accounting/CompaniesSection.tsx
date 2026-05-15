@@ -1188,10 +1188,13 @@ function CompanyPicker({
 // belongs — the accounting page is read-only on the receipt rows.
 
 function formatSettlementVoucher(row: SettlementRow): string {
-  // Prefer the real mirror voucher number (e.g. R229/2026, D45/2026)
-  // hydrated by useAccountingData from the receipts row. Legacy rows
-  // without a mirror fall back to "تسوية" so the cell isn't empty.
+  // Cascade: real mirror voucher number (e.g. R229/2026, D45/2026) →
+  // cheque number (legacy rows mirror-less but with a cheque) → final
+  // 'تسوية' fallback so the cell is never empty. Pre-trigger
+  // settlements (created before 20260514170000) won't have a mirror,
+  // hence the fallback chain.
   if (row.voucher_number) return row.voucher_number;
+  if (row.cheque_number) return `شيك ${row.cheque_number}`;
   return 'تسوية';
 }
 

@@ -382,7 +382,7 @@ export function CompanyIssuancesTable({
                   {showCol('document_number') && (
                     <TableHead className="whitespace-nowrap min-w-[140px]">رقم المعاملة</TableHead>
                   )}
-                  {showCol('receipts') && <TableHead className="whitespace-nowrap min-w-[120px]">سندات القبض</TableHead>}
+                  {showCol('receipts') && <TableHead className="whitespace-nowrap min-w-[120px]">رقم السند</TableHead>}
                   {showCol('client_name') && <TableHead className="whitespace-nowrap min-w-[160px]">العميل</TableHead>}
                   {showCol('client_id_number') && <TableHead className="whitespace-nowrap min-w-[140px]">رقم الهوية</TableHead>}
                   {showCol('client_phone') && <TableHead className="whitespace-nowrap min-w-[140px]">رقم الهاتف</TableHead>}

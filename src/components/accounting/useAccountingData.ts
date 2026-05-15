@@ -580,21 +580,39 @@ export function useAccountingData(
       };
       const mirrorByCompanySettlementId = new Map<string, SettlementMirror>();
       if (csIds.length > 0) {
+        // Also fetch receipt_number + receipt_date so we can synthesize
+        // R{n}/{year} for incoming settlements where the trigger left
+        // voucher_number NULL (per 20260514170000 — the formatter on
+        // /receipts uses the serial to build the label).
         const { data: mirrorRows } = await supabase
           .from('receipts')
-          .select('id, company_settlement_id, voucher_number, receipt_type, payment_id')
+          .select('id, company_settlement_id, voucher_number, receipt_number, receipt_date, receipt_type, payment_id')
           .in('company_settlement_id', csIds);
         for (const m of (mirrorRows ?? []) as Array<{
           id: string;
           company_settlement_id: string;
           voucher_number: string | null;
+          receipt_number: number | null;
+          receipt_date: string | null;
           receipt_type: string;
           payment_id: string | null;
         }>) {
           if (!m.company_settlement_id) continue;
+          // Synthesize the voucher label when the mirror only has a
+          // serial receipt_number (incoming branch of the trigger).
+          // Prefix follows the same convention the kashf and /receipts
+          // pages use: R for payment, D for disbursement.
+          let label = m.voucher_number;
+          if (!label && m.receipt_number != null) {
+            const yr = m.receipt_date
+              ? new Date(m.receipt_date).getFullYear()
+              : new Date().getFullYear();
+            const prefix = m.receipt_type === 'disbursement' ? 'D' : 'R';
+            label = `${prefix}${m.receipt_number}/${yr}`;
+          }
           mirrorByCompanySettlementId.set(m.company_settlement_id, {
             receipt_id: m.id,
-            voucher_number: m.voucher_number,
+            voucher_number: label,
             receipt_type: m.receipt_type,
             payment_id: m.payment_id,
           });
