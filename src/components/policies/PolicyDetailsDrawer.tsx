@@ -790,11 +790,9 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
                 <div className="p-4 sm:p-5">
                   <PolicyFilesSection
                     policyId={policy.id}
-                    policyNumber={policy.policy_number}
                     clientId={policy.clients.id}
                     clientPhoneNumber={policy.clients.phone_number}
                     clientName={policy.clients.full_name}
-                    onPolicyNumberSaved={() => fetchPolicyDetails()}
                     packagePolicyIds={hasPackage ? [policy.id, ...relatedPolicies.map(rp => rp.id)] : undefined}
                     onFilesCountChanged={setPolicyFilesCount}
                   />
@@ -1611,11 +1609,9 @@ export function PolicyDetailsDrawer({ open, onOpenChange, policyId, onUpdated, o
                   <div className="p-4 sm:p-6">
                     <PolicyFilesSection
                       policyId={policy.id}
-                      policyNumber={policy.policy_number}
                       clientId={policy.clients.id}
                       clientPhoneNumber={policy.clients.phone_number}
                       clientName={policy.clients.full_name}
-                      onPolicyNumberSaved={() => fetchPolicyDetails()}
                       packagePolicyIds={hasPackage ? [policy.id, ...relatedPolicies.map(rp => rp.id)] : undefined}
                       onFilesCountChanged={setPolicyFilesCount}
                     />

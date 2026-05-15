@@ -1,18 +1,15 @@
 import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import {
   ImageIcon, Plus, Trash2, Download, X, Loader2, FileText, FolderOpen,
-  Save, Hash, CheckCircle2, Printer, ChevronLeft, ChevronRight,
+  Printer, ChevronLeft, ChevronRight,
   ExternalLink, Play, Upload
 } from "lucide-react";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
-import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { FilePreviewGallery } from "./FilePreviewGallery";
 import * as tus from "tus-js-client";
@@ -32,11 +29,9 @@ interface MediaFile {
 
 interface PolicyFilesSectionProps {
   policyId: string;
-  policyNumber?: string | null;
   clientId?: string;
   clientPhoneNumber?: string | null;
   clientName?: string;
-  onPolicyNumberSaved?: (policyNumber: string) => void;
   // Package support - array of all policy IDs in package for unified file view
   packagePolicyIds?: string[];
   // Lets the parent drawer keep its "ملفات (N)" badge in sync with
@@ -47,11 +42,9 @@ interface PolicyFilesSectionProps {
 
 export function PolicyFilesSection({
   policyId,
-  policyNumber: initialPolicyNumber,
   clientId,
   clientPhoneNumber,
   clientName,
-  onPolicyNumberSaved,
   packagePolicyIds,
   onFilesCountChanged
 }: PolicyFilesSectionProps) {
@@ -74,11 +67,6 @@ export function PolicyFilesSection({
   // visual treatment as the upload banner at the top of the page.
   const [deleteProgress, setDeleteProgress] = useState<{ name: string; pct: number } | null>(null);
   const [activeTab, setActiveTab] = useState("insurance");
-  
-  // Policy number state
-  const [policyNumber, setPolicyNumber] = useState(initialPolicyNumber || "");
-  const [savingPolicyNumber, setSavingPolicyNumber] = useState(false);
-  const [policyNumberSaved, setPolicyNumberSaved] = useState(!!initialPolicyNumber);
 
   // Scanner state
   const [scanning, setScanning] = useState<'insurance' | 'crm' | null>(null);
@@ -86,11 +74,6 @@ export function PolicyFilesSection({
   // Drag-and-drop state — tracks which tab card is currently being
   // dragged over so we can show the drop ring + overlay.
   const [isDragging, setIsDragging] = useState<'insurance' | 'crm' | null>(null);
-
-  useEffect(() => {
-    setPolicyNumber(initialPolicyNumber || "");
-    setPolicyNumberSaved(!!initialPolicyNumber);
-  }, [initialPolicyNumber]);
 
   const fetchFiles = async () => {
     setLoading(true);
@@ -482,36 +465,6 @@ export function PolicyFilesSection({
     );
   };
 
-  const handleSavePolicyNumber = async () => {
-    if (!policyNumber.trim()) {
-      toast({ title: "خطأ", description: "يرجى إدخال رقم البوليصة", variant: "destructive" });
-      return;
-    }
-
-    setSavingPolicyNumber(true);
-    try {
-      const { error } = await supabase
-        .from('policies')
-        .update({ policy_number: policyNumber.trim() })
-        .eq('id', policyId);
-
-      if (error) throw error;
-
-      toast({ title: "تم الحفظ", description: "تم حفظ رقم البوليصة بنجاح" });
-      setPolicyNumberSaved(true);
-      onPolicyNumberSaved?.(policyNumber.trim());
-    } catch (error: any) {
-      console.error('Error saving policy number:', error);
-      toast({ 
-        title: "خطأ", 
-        description: error.message || "فشل في حفظ رقم البوليصة", 
-        variant: "destructive" 
-      });
-    } finally {
-      setSavingPolicyNumber(false);
-    }
-  };
-
   const handleDelete = async () => {
     if (!deletingImage) return;
 
@@ -768,48 +721,6 @@ export function PolicyFilesSection({
           <Progress value={deleteProgress.pct} className="h-2" />
         </Card>
       )}
-      {/* Policy Number Section - Always visible at top */}
-      <Card className="p-4 mb-4 border-2 border-primary/20">
-        <div className="flex items-center gap-2 mb-3">
-          <Hash className="h-4 w-4 text-primary" />
-          <Label className="font-semibold text-primary">رقم البوليصة</Label>
-          {policyNumberSaved && (
-            <Badge variant="success" className="gap-1">
-              <CheckCircle2 className="h-3 w-3" />
-              محفوظ
-            </Badge>
-          )}
-        </div>
-        <div className="flex gap-2">
-          <Input
-            placeholder="أدخل رقم البوليصة..."
-            value={policyNumber}
-            onChange={(e) => {
-              setPolicyNumber(e.target.value);
-              setPolicyNumberSaved(false);
-            }}
-            className="flex-1 ltr-input"
-          />
-          <Button 
-            onClick={handleSavePolicyNumber}
-            disabled={savingPolicyNumber || !policyNumber.trim() || policyNumberSaved}
-            size="sm"
-          >
-            {savingPolicyNumber ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <>
-                <Save className="h-4 w-4 ml-1" />
-                حفظ
-              </>
-            )}
-          </Button>
-        </div>
-        <p className="text-xs text-muted-foreground mt-2">
-          هذا الرقم يستخدم للبحث السريع عن المعاملة
-        </p>
-      </Card>
-
       {/* Files Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} dir="rtl" className="space-y-4">
         <TabsList className="grid grid-cols-2 w-full" dir="rtl">
