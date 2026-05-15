@@ -35,6 +35,24 @@ export default function Accounting() {
   // to scroll their corresponding row into view + highlight it.
   const settlementParam = searchParams.get('settlement');
 
+  // Lazy-mount sections. Radix TabsContent renders all four children
+  // by default (just hidden via CSS), so previously every section
+  // fired its own data fetch on the first /accounting visit even
+  // when only one tab was visible. We track which tabs have been
+  // opened and only mount those — first-visit cost drops from
+  // 4 sections × 1-2 queries each to just the active tab's worth.
+  // Once visited, a section stays mounted so its filter/scroll state
+  // survives subsequent tab switches.
+  const [mountedTabs, setMountedTabs] = useState<Set<MainTab>>(() => new Set([initialTab]));
+  useEffect(() => {
+    setMountedTabs((prev) => {
+      if (prev.has(tab)) return prev;
+      const next = new Set(prev);
+      next.add(tab);
+      return next;
+    });
+  }, [tab]);
+
   // If the URL changes after mount (deep link from Cheques page), keep
   // the tab in sync without forcing remount.
   useEffect(() => {
@@ -76,16 +94,22 @@ export default function Accounting() {
           </div>
 
           <TabsContent value="companies" className="mt-3">
-            <CompaniesSection focusSettlementId={settlementParam} branchId={branchId} />
+            {mountedTabs.has('companies') && (
+              <CompaniesSection focusSettlementId={settlementParam} branchId={branchId} />
+            )}
           </TabsContent>
           <TabsContent value="brokers" className="mt-3">
-            <BrokersSection focusSettlementId={settlementParam} branchId={branchId} />
+            {mountedTabs.has('brokers') && (
+              <BrokersSection focusSettlementId={settlementParam} branchId={branchId} />
+            )}
           </TabsContent>
           <TabsContent value="clients" className="mt-3">
-            <ClientsSection branchId={branchId} />
+            {mountedTabs.has('clients') && <ClientsSection branchId={branchId} />}
           </TabsContent>
           <TabsContent value="expenses" className="mt-3">
-            <ExpensesSection focusSettlementId={settlementParam} branchId={branchId} />
+            {mountedTabs.has('expenses') && (
+              <ExpensesSection focusSettlementId={settlementParam} branchId={branchId} />
+            )}
           </TabsContent>
         </Tabs>
       </div>
