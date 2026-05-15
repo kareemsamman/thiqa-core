@@ -1,5 +1,6 @@
 import { ReactNode, useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -16,11 +17,13 @@ import { ReceiptActionsDialog, type VoucherActionRow } from './ReceiptActionsDia
 import { format, parseISO } from 'date-fns';
 import {
   ArrowDownRight,
+  ArrowDownLeft,
   ArrowUpRight,
   Building2,
   CalendarRange,
   Check,
   ChevronsUpDown,
+  CheckCircle2,
   FileText,
   Loader2,
   Plus,
@@ -28,6 +31,7 @@ import {
   RotateCcw,
   LayoutGrid,
   Search,
+  TrendingUp,
   X,
   type LucideIcon,
 } from 'lucide-react';
@@ -483,17 +487,18 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
 
   return (
     <div className="space-y-2.5">
-      {/* Compact summary strip — single horizontal row of pills.
-          المستحق shows TODAY's net debt (gross owed minus what we've
-          already paid) so adding a سند صرف visibly reduces the pill.
-          Hover any pill for a breakdown of how the number was computed
-          (respects the active filter set). */}
+      {/* Summary pills — six-card grid matching the customers tab
+          design. Tooltips still carry the breakdown on hover so the
+          power-user math stays accessible; the visual style aligns
+          with ClientsSection so the two surfaces read as one. */}
       <TooltipProvider delayDuration={150}>
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-2 rounded-lg border bg-card p-3 sm:flex sm:flex-wrap sm:items-center sm:gap-2 sm:p-0 sm:px-3 sm:py-2">
-          <SummaryPill
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+          <CompanyPillCard
+            icon={FileText}
+            tone="slate"
             label="إجمالي سعر التأمين"
             value={fmt(totals.insuranceSum)}
-            tone="primary"
+            hint={`${totals.activeCount} معاملة`}
             tooltip={
               <BreakdownLines
                 title="إجمالي سعر التأمين"
@@ -504,11 +509,12 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
               />
             }
           />
-          <Sep />
-          <SummaryPill
+          <CompanyPillCard
+            icon={ArrowUpRight}
+            tone="rose"
             label="المستحق للشركات (إجمالي)"
             value={fmt(totals.dueGrossSum)}
-            tone="destructive"
+            hint="قبل المدفوعات"
             tooltip={
               <BreakdownLines
                 title="المستحق للشركات (إجمالي)"
@@ -531,11 +537,12 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
               />
             }
           />
-          <Sep />
-          <SummaryPill
+          <CompanyPillCard
+            icon={ArrowDownLeft}
+            tone="rose"
             label="المستحق للشركات (صافي)"
             value={fmt(totals.dueSum)}
-            tone="destructive"
+            hint="بعد المدفوعات"
             tooltip={
               <BreakdownLines
                 title="المستحق للشركات (صافي)"
@@ -554,11 +561,12 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
               />
             }
           />
-          <Sep />
-          <SummaryPill
+          <CompanyPillCard
+            icon={TrendingUp}
+            tone="emerald"
             label="الأرباح + العمولات"
             value={fmt(totals.profitSum)}
-            tone="success"
+            hint="أرباح + عمولة المكتب"
             tooltip={
               <BreakdownLines
                 title="الأرباح + العمولات"
@@ -570,11 +578,12 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
               />
             }
           />
-          <Sep />
-          <SummaryPill
+          <CompanyPillCard
+            icon={ArrowUpRight}
+            tone="amber"
             label="مدفوع للشركات"
             value={fmt(totals.disbursedSum)}
-            tone="amber"
+            hint={`${companySettlements.filter((r) => !r.refused).length} سند صرف`}
             tooltip={
               <BreakdownLines
                 title="مدفوع للشركات"
@@ -588,11 +597,12 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
               />
             }
           />
-          <Sep />
-          <SummaryPill
+          <CompanyPillCard
+            icon={CheckCircle2}
+            tone={totals.netProfitSum >= 0 ? 'emerald' : 'rose'}
             label="الأرباح الصافية"
             value={fmt(totals.netProfitSum)}
-            tone={totals.netProfitSum >= 0 ? 'emerald' : 'destructive'}
+            hint="بعد المصاريف"
             tooltip={
               <BreakdownLines
                 title="الأرباح الصافية"
@@ -616,19 +626,11 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
         </div>
       </TooltipProvider>
 
-      {/* Single toolbar row: sub-tabs + count + manage columns + filter. */}
+      {/* Toolbar row — search + count + manage columns + filter +
+          company picker. The sub-tab strip moves below the active-
+          filter chip so the layout matches the customers tab order:
+          pills → search/filter row → active chips → tabs → content. */}
       <div className="flex flex-wrap items-center gap-2">
-        <Tabs value={tab} onValueChange={(v) => setTab(v as SubTab)}>
-          <TabsList className="h-9">
-            {TABS.map(({ key, label, Icon }) => (
-              <TabsTrigger key={key} value={key} className="gap-1.5 h-7 px-2.5">
-                <Icon className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">{label}</span>
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
-
         <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto sm:mr-auto">
           <div className="relative w-full sm:w-80 md:w-96">
             <Search className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
@@ -706,7 +708,29 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
       </div>
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as SubTab)}>
-        <TabsContent value="all" className="m-0">
+        <TabsList className="grid w-full grid-cols-3 lg:grid-cols-5">
+          {TABS.map(({ key, label, Icon }) => {
+            const count =
+              key === 'all'
+                ? issuancesAll.length
+                : key === 'issuances'
+                ? issuancesActive.length
+                : key === 'returns'
+                ? returns.length
+                : key === 'disbursements'
+                ? companySettlements.length
+                : companyReceipts.length;
+            return (
+              <TabsTrigger key={key} value={key} className="gap-1.5">
+                <Icon className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">{label}</span>
+                <span className="text-xs opacity-70">({count})</span>
+              </TabsTrigger>
+            );
+          })}
+        </TabsList>
+
+        <TabsContent value="all" className="mt-3 m-0">
           <CompanyIssuancesTable
             rows={issuancesAll}
             companies={data.companies}
@@ -718,7 +742,7 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
             onSubPolicySaved={(id, patch) => data.patchSubPolicy(id, patch)}
           />
         </TabsContent>
-        <TabsContent value="issuances" className="m-0">
+        <TabsContent value="issuances" className="mt-3 m-0">
           <CompanyIssuancesTable
             rows={issuancesActive}
             companies={data.companies}
@@ -730,7 +754,7 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
             onSubPolicySaved={(id, patch) => data.patchSubPolicy(id, patch)}
           />
         </TabsContent>
-        <TabsContent value="returns" className="m-0">
+        <TabsContent value="returns" className="mt-3 m-0">
           <CompanyIssuancesTable
             rows={returns}
             companies={data.companies}
@@ -742,7 +766,7 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
             onSubPolicySaved={(id, patch) => data.patchSubPolicy(id, patch)}
           />
         </TabsContent>
-        <TabsContent value="disbursements" className="m-0">
+        <TabsContent value="disbursements" className="mt-3 m-0">
           <CompanySettlementsTable
             rows={companySettlements}
             loading={data.loading}
@@ -750,7 +774,7 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
             onVoucherClick={(r) => openSettlementVoucher(r, 'disbursement')}
           />
         </TabsContent>
-        <TabsContent value="receipts" className="m-0">
+        <TabsContent value="receipts" className="mt-3 m-0">
           <CompanySettlementsTable
             rows={companyReceipts}
             loading={data.loading}
@@ -794,39 +818,57 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
   );
 }
 
-function Sep() {
-  return <span className="h-5 w-px bg-border hidden sm:inline-block" />;
-}
+// CompanyPillCard — mirrors ClientsSection's PillCard so the two
+// accounting surfaces share the same visual vocabulary. Adds a
+// breakdown tooltip on hover so the power-user math stays accessible
+// without making the card noisy.
+const CO_TONE_CLASSES: Record<string, { bg: string; text: string }> = {
+  slate: { bg: 'bg-slate-500/10', text: 'text-slate-700' },
+  emerald: { bg: 'bg-emerald-500/10', text: 'text-emerald-700' },
+  amber: { bg: 'bg-amber-500/10', text: 'text-amber-700' },
+  indigo: { bg: 'bg-indigo-500/10', text: 'text-indigo-700' },
+  sky: { bg: 'bg-sky-500/10', text: 'text-sky-700' },
+  rose: { bg: 'bg-rose-500/10', text: 'text-rose-700' },
+};
 
-function SummaryPill({
+function CompanyPillCard({
+  icon: Icon,
+  tone,
   label,
   value,
-  tone,
+  hint,
   tooltip,
 }: {
+  icon: LucideIcon;
+  tone: keyof typeof CO_TONE_CLASSES;
   label: string;
   value: string;
-  tone: 'primary' | 'destructive' | 'success' | 'amber' | 'emerald';
+  hint?: string;
   tooltip?: ReactNode;
 }) {
-  const cls =
-    tone === 'primary'
-      ? 'text-primary'
-      : tone === 'destructive'
-      ? 'text-destructive'
-      : tone === 'success' || tone === 'emerald'
-      ? 'text-emerald-600'
-      : 'text-amber-600';
-  const pill = (
-    <div className="inline-flex items-center gap-1.5 px-1 cursor-help">
-      <span className="text-[11px] text-muted-foreground">{label}</span>
-      <span className={`text-sm font-bold tabular-nums ${cls}`}>{value}</span>
-    </div>
+  const cls = CO_TONE_CLASSES[tone];
+  const card = (
+    <Card className={tooltip ? 'cursor-help' : undefined}>
+      <CardContent className="py-3 px-4 flex items-center gap-3">
+        <div className={`h-9 w-9 rounded-xl ${cls.bg} flex items-center justify-center shrink-0`}>
+          <Icon className={`h-4 w-4 ${cls.text}`} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-xs text-muted-foreground truncate">{label}</p>
+          <p className={`text-lg font-bold tabular-nums ${cls.text} whitespace-nowrap`}>
+            {value}
+          </p>
+          {hint ? (
+            <p className="text-[10px] text-muted-foreground truncate">{hint}</p>
+          ) : null}
+        </div>
+      </CardContent>
+    </Card>
   );
-  if (!tooltip) return pill;
+  if (!tooltip) return card;
   return (
     <Tooltip>
-      <TooltipTrigger asChild>{pill}</TooltipTrigger>
+      <TooltipTrigger asChild>{card}</TooltipTrigger>
       <TooltipContent side="bottom" className="p-2.5 max-w-xs">
         {tooltip}
       </TooltipContent>
