@@ -265,9 +265,9 @@ export function AddSettlementDialog({
           .eq('broker_id', entityId),
         supabase
           .from('receipts')
-          .select('amount, cancelled_at')
+          .select('amount, cancelled_at, receipt_type')
           .eq('broker_id', entityId)
-          .eq('receipt_type', 'credit_note'),
+          .in('receipt_type', ['credit_note', 'debit_note']),
       ]);
       if (cancelled) return;
 
@@ -301,6 +301,10 @@ export function AddSettlementDialog({
       // accounting model these write down what the broker still
       // owes us; the relationship is one-sided (only reduces the
       // owesUs side, never adds to weOwe).
+      // Both legacy 'credit_note' rows (from AddBrokerCreditNoteDialog,
+      // titled إشعار مدين but stored as credit_note for historical
+      // reasons) AND new 'debit_note' rows (from AddBrokerDebitNoteDialog)
+      // count here — they're semantically the same thing for brokers.
       const brokerCreditNotesSum = (brokerCreditNotes ?? [])
         .filter((r: any) => !r.cancelled_at)
         .reduce((s: number, r: any) => s + Number(r.amount || 0), 0);

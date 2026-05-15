@@ -273,11 +273,11 @@ export function SinglePolicyPaymentModal({
       if (error) throw error;
 
       // Net the live wallet: refunds the office still owes minus what
-      // the customer owes back (transfer-fee + credit_consumed). The
-      // credit_consumed subtraction is what stops an already-applied
-      // credit from showing as a still-available balance on the next
-      // payment dialog. Mirrors fetchPaymentSummary on ClientDetails
-      // and fetchCreditBalance on DebtPaymentModal + PackagePaymentModal.
+      // the customer owes back (transfer-fee + credit_consumed +
+      // manual_debit). manual_debit (إشعار مدين) is the same direction
+      // as credit_consumed — extra debt the customer owes us. Mirrors
+      // fetchPaymentSummary on ClientDetails and fetchCreditBalance on
+      // DebtPaymentModal + PackagePaymentModal.
       const weOwe = (data || [])
         .filter(t =>
           t.transaction_type === 'refund' ||
@@ -289,7 +289,8 @@ export function SinglePolicyPaymentModal({
       const customerOwes = (data || [])
         .filter(t =>
           t.transaction_type === 'transfer_adjustment_due' ||
-          t.transaction_type === 'credit_consumed'
+          t.transaction_type === 'credit_consumed' ||
+          t.transaction_type === 'manual_debit'
         )
         .reduce((sum, t) => sum + (t.amount || 0), 0);
 

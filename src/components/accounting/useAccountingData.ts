@@ -518,7 +518,7 @@ export function useAccountingData(
            broker_id, policy_id, cancelled_at, receipt_type,
            policies(document_number, policy_number)`,
         )
-        .in('receipt_type', ['payment', 'cancellation', 'disbursement', 'credit_note'])
+        .in('receipt_type', ['payment', 'cancellation', 'disbursement', 'credit_note', 'debit_note'])
         .eq('is_imported', false)
         .order('receipt_date', { ascending: false });
       if (agentId) crQuery = crQuery.eq('agent_id', agentId);
@@ -566,12 +566,15 @@ export function useAccountingData(
           .filter((r) => r.receipt_type === 'disbursement')
           .map(mapClientReceipt),
       );
-      // credit_note rows: split by broker_id so the broker pill
-      // and the client tile each see their own bucket. A row with
-      // both client_id and broker_id NULL ends up on the customer
-      // side (shouldn't happen in practice — every credit_note row
-      // sets exactly one).
-      const creditNoteRows = crRows.filter((r) => r.receipt_type === 'credit_note');
+      // credit_note + debit_note rows: split by broker_id so the
+      // broker pill and the client tile each see their own bucket.
+      // For broker math the two are semantically equivalent (both
+      // reduce broker.owesUs), so they share a bucket. Customer
+      // debit notes also feed the same bucket since the kashf treats
+      // them as just another reduction-then-flip on the running
+      // balance — downstream consumers can split by receipt_type if
+      // they need to render them differently.
+      const creditNoteRows = crRows.filter((r) => r.receipt_type === 'credit_note' || r.receipt_type === 'debit_note');
       setClientCreditNotesRaw(
         creditNoteRows
           .filter((r) => !r.broker_id)

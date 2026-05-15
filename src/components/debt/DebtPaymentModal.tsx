@@ -389,6 +389,9 @@ export function DebtPaymentModal({
       //   here so the available balance never shows a credit that's
       //   already been used). Mirrors fetchPaymentSummary on the
       //   client page so the two surfaces never disagree.
+      // manual_debit                                  = إشعار مدين,
+      //   customer owes the office a manually-recorded amount. Same
+      //   sign as transfer_adjustment_due / credit_consumed.
       const weOwe = (data || [])
         .filter(t =>
           t.transaction_type === 'refund' ||
@@ -400,7 +403,8 @@ export function DebtPaymentModal({
       const customerOwes = (data || [])
         .filter(t =>
           t.transaction_type === 'transfer_adjustment_due' ||
-          t.transaction_type === 'credit_consumed'
+          t.transaction_type === 'credit_consumed' ||
+          t.transaction_type === 'manual_debit'
         )
         .reduce((sum, t) => sum + (t.amount || 0), 0);
 
@@ -744,18 +748,27 @@ export function DebtPaymentModal({
           }
         }
       }
-      const { data: consumedRows } = await supabase
+      const { data: walletAdjustmentRows } = await supabase
         .from('customer_wallet_transactions')
-        .select('amount')
+        .select('amount, transaction_type')
         .eq('client_id', clientId)
-        .eq('transaction_type', 'credit_consumed')
+        .in('transaction_type', ['credit_consumed', 'manual_debit'])
         .is('settled_at', null);
-      const creditConsumedTotal = (consumedRows || [])
-        .reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
+      let creditConsumedTotal = 0;
+      let manualDebitTotal = 0;
+      for (const r of (walletAdjustmentRows ?? []) as any[]) {
+        const amt = Number(r.amount || 0);
+        if (r.transaction_type === 'credit_consumed') creditConsumedTotal += amt;
+        else if (r.transaction_type === 'manual_debit') manualDebitTotal += amt;
+      }
+      // manual_debit (إشعار مدين) ADDS to the customer's outstanding —
+      // same direction as the policy debt itself. transfer_office_pays
+      // and credit_consumed REDUCE it.
       const kashfTotal = Math.max(
         0,
         officeClaimSum
           + transferCustomerPaysSum
+          + manualDebitTotal
           - grossPaid
           - creditConsumedTotal
           - transferOfficePaysSum,

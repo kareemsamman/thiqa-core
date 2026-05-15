@@ -1005,28 +1005,38 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       // ('credit_consumed' wallet entry). The policy's gross price is
       // already in clientOwed, but the customer effectively only owes
       // (gross − consumed) — same netting the kashf does.
-      const { data: consumedRows } = await supabase
+      // 'manual_debit' (إشعار مدين) goes the OTHER way: the office
+      // recorded that the customer owes extra for some reason, so it
+      // ADDS to the remaining. Fetched in the same query and bucketed
+      // by transaction_type so the SQL round-trip stays at one.
+      const { data: walletAdjustmentRows } = await supabase
         .from('customer_wallet_transactions')
-        .select('amount')
+        .select('amount, transaction_type')
         .eq('client_id', client.id)
-        .eq('transaction_type', 'credit_consumed');
-      const totalCreditConsumed = (consumedRows || [])
-        .reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
+        .in('transaction_type', ['credit_consumed', 'manual_debit']);
+      let totalCreditConsumed = 0;
+      let totalManualDebit = 0;
+      for (const r of (walletAdjustmentRows ?? []) as any[]) {
+        const amt = Number(r.amount || 0);
+        if (r.transaction_type === 'credit_consumed') totalCreditConsumed += amt;
+        else if (r.transaction_type === 'manual_debit') totalManualDebit += amt;
+      }
 
-      // Outstanding = the kashf's exact formula. Pulling grossPaid
-      // (not clientPaid clamped per package) is the crucial change:
-      // payments mirrored onto a transfer DESTINATION policy (e.g.
-      // 226 in a 224→226 ELZAMI transfer) sit outside policiesData
-      // because we filter destinations out, so clientPaid's per-
-      // package clamp loses them. The kashf's totalYearPaid sweeps
-      // every policy_payments row of the customer (refused/إلزامي
-      // passthrough excluded) — grossPaid already does the same.
+      // Outstanding = the kashf's exact formula plus manual_debit on
+      // top. Pulling grossPaid (not clientPaid clamped per package) is
+      // the crucial change: payments mirrored onto a transfer
+      // DESTINATION policy (e.g. 226 in a 224→226 ELZAMI transfer)
+      // sit outside policiesData because we filter destinations out,
+      // so clientPaid's per-package clamp loses them. The kashf's
+      // totalYearPaid sweeps every policy_payments row of the
+      // customer (refused/إلزامي passthrough excluded) — grossPaid
+      // already does the same.
       const grossPaidEffective = grossPaid;
       setPaymentSummary({
         total_paid: grossPaidEffective,
         total_remaining: Math.max(
           0,
-          clientOwed - grossPaidEffective + transferCustomerPaysTotal - totalCreditConsumed,
+          clientOwed - grossPaidEffective + transferCustomerPaysTotal - totalCreditConsumed + totalManualDebit,
         ),
         total_profit: totalProfit,
       });
@@ -1058,6 +1068,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       // "refund" / "transfer_refund_owed" / "manual_refund" = We owe customer
       // "transfer_adjustment_due"                            = Customer owes us (transfer fee)
       // "credit_consumed"                                    = Credit was applied to a new policy
+      // "manual_debit"                                       = Customer owes us (إشعار مدين)
       const weOweCustomer = (data || [])
         .filter(t =>
           t.transaction_type === 'refund' ||
@@ -1069,7 +1080,8 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       const customerOwesUs = (data || [])
         .filter(t =>
           t.transaction_type === 'transfer_adjustment_due' ||
-          t.transaction_type === 'credit_consumed'
+          t.transaction_type === 'credit_consumed' ||
+          t.transaction_type === 'manual_debit'
         )
         .reduce((sum, t) => sum + (t.amount || 0), 0);
 
