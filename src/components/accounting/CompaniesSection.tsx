@@ -775,6 +775,25 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
               sort: true,
             }}
           />
+          {/* Print — prints whatever rowset the active tab is showing
+              (issuances / returns / settlements / receipts). Was
+              removed during the toolbar cleanup; brought back per
+              user request. */}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={handlePrint}
+            disabled={printing || data.loading}
+          >
+            {printing ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Printer className="h-3.5 w-3.5" />
+            )}
+            <span className="hidden sm:inline">طباعة</span>
+          </Button>
         </div>
       </div>
 
