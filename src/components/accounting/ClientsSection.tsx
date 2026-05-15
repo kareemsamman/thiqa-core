@@ -64,6 +64,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAgentContext } from '@/hooks/useAgentContext';
 import { cn } from '@/lib/utils';
 import { CustomerStatementModal } from '@/components/clients/CustomerStatementModal';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface ClientLite {
   id: string;
@@ -373,6 +374,42 @@ export function ClientsSection({ branchId }: ClientsSectionProps = {}) {
   );
   const totalOutflow = totalDisbursed + totalCreditNotes;
 
+  // ── Effective client (explicit pick OR search narrowed to one) ───
+  // The user wants free-text search to behave like an implicit client
+  // selection when it returns rows from exactly one customer — same
+  // كشف-حساب button enabled, same name shown in the picker. We
+  // collect the distinct client_ids across every visible row (across
+  // every sub-tab, not just the active one) and only consider it
+  // "narrowed" when the set has size 1. The explicit `selectedClient`
+  // still wins when present, so the user can override search with a
+  // deliberate pick.
+  const derivedClient = useMemo<ClientLite | null>(() => {
+    if (selectedClient) return null;
+    if (!search.trim()) return null;
+    const candidates = new Map<string, ClientLite>();
+    const addFromRow = (r: {
+      client_id: string | null;
+      client_name: string | null;
+      client_id_number?: string | null;
+      client_phone?: string | null;
+    }) => {
+      if (!r.client_id || candidates.has(r.client_id)) return;
+      candidates.set(r.client_id, {
+        id: r.client_id,
+        full_name: r.client_name ?? 'عميل',
+        id_number: r.client_id_number ?? null,
+        phone_number: r.client_phone ?? null,
+      });
+    };
+    for (const r of filteredPackages) addFromRow(r);
+    for (const r of payments) addFromRow(r);
+    for (const r of cancellations) addFromRow(r);
+    for (const r of disbursements) addFromRow(r);
+    for (const r of creditNotes) addFromRow(r);
+    return candidates.size === 1 ? Array.from(candidates.values())[0] : null;
+  }, [selectedClient, search, filteredPackages, payments, cancellations, disbursements, creditNotes]);
+  const effectiveClient = selectedClient ?? derivedClient;
+
   return (
     <div className="space-y-4">
       {/* Summary pills — five-card row mirrors the شركات tab layout
@@ -426,20 +463,37 @@ export function ClientsSection({ branchId }: ClientsSectionProps = {}) {
         </div>
         <div className="flex items-center gap-2">
           <ClientPicker
-            value={selectedClient}
+            value={effectiveClient}
             onChange={setSelectedClient}
+            showClear={!!selectedClient}
           />
-          {selectedClient ? (
-            <Button
-              variant="default"
-              size="sm"
-              className="gap-2"
-              onClick={() => setStatementOpen(true)}
-            >
-              <FileText className="h-4 w-4" />
-              كشف حساب
-            </Button>
-          ) : null}
+          <TooltipProvider delayDuration={150}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                {/* span wrapper lets the tooltip fire even while the
+                    button is disabled — disabled buttons don't emit
+                    mouse events directly. Removed when an effective
+                    client is available so it doesn't intercept focus. */}
+                <span tabIndex={effectiveClient ? -1 : 0}>
+                  <Button
+                    variant="default"
+                    size="sm"
+                    className="gap-2"
+                    disabled={!effectiveClient}
+                    onClick={() => effectiveClient && setStatementOpen(true)}
+                  >
+                    <FileText className="h-4 w-4" />
+                    كشف حساب
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              {!effectiveClient && (
+                <TooltipContent side="bottom">
+                  اختر عميل من القائمة أو ابحث عن عميل واحد لطباعة كشف حسابه
+                </TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
           <AccountingFilters
             value={filters}
             onChange={setFilters}
@@ -479,18 +533,23 @@ export function ClientsSection({ branchId }: ClientsSectionProps = {}) {
           <CalendarRange className="h-3.5 w-3.5" />
           {describeRange(filters.dateFrom, filters.dateTo)}
         </Badge>
-        {selectedClient ? (
+        {effectiveClient ? (
           <Badge variant="secondary" className="gap-1.5 font-medium">
             <UserIcon className="h-3.5 w-3.5" />
-            {selectedClient.full_name}
-            <button
-              type="button"
-              onClick={() => setSelectedClient(null)}
-              className="ml-1 -mr-0.5 rounded-full hover:bg-foreground/10"
-              aria-label="مسح فلتر العميل"
-            >
-              <X className="h-3 w-3" />
-            </button>
+            {effectiveClient.full_name}
+            {/* Clear button only for explicit picks — search-derived
+                clients are unbound by clearing the search box, not by
+                a chip X (which would just do nothing here). */}
+            {selectedClient ? (
+              <button
+                type="button"
+                onClick={() => setSelectedClient(null)}
+                className="ml-1 -mr-0.5 rounded-full hover:bg-foreground/10"
+                aria-label="مسح فلتر العميل"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            ) : null}
           </Badge>
         ) : null}
       </div>
@@ -562,19 +621,19 @@ export function ClientsSection({ branchId }: ClientsSectionProps = {}) {
         </TabsContent>
       </Tabs>
 
-      {selectedClient ? (
+      {effectiveClient ? (
         <CustomerStatementModal
           open={statementOpen}
           onOpenChange={setStatementOpen}
-          clientId={selectedClient.id}
-          clientName={selectedClient.full_name}
-          clientPhone={selectedClient.phone_number}
+          clientId={effectiveClient.id}
+          clientName={effectiveClient.full_name}
+          clientPhone={effectiveClient.phone_number}
           // The modal derives available years from start_date. We feed
           // it every policy we already loaded for this client — both
           // active and cancelled — so the year picker covers their
           // whole history, not just the rows visible after date filter.
           policies={allPackages
-            .filter((pkg) => pkg.client_id === selectedClient.id)
+            .filter((pkg) => pkg.client_id === effectiveClient.id)
             .flatMap((pkg) =>
               pkg.sub_policies.map((s) => ({ start_date: s.start_date })),
             )}
@@ -616,9 +675,15 @@ export function ClientsSection({ branchId }: ClientsSectionProps = {}) {
 function ClientPicker({
   value,
   onChange,
+  showClear = true,
 }: {
   value: ClientLite | null;
   onChange: (next: ClientLite | null) => void;
+  /** When false the inline "مسح اختيار العميل" footer button is
+   *  hidden — useful when `value` is derived from another source
+   *  (e.g. a search-narrowed result) where clearing the picker would
+   *  be a no-op confusing the user. */
+  showClear?: boolean;
 }) {
   const { agentId } = useAgentContext();
   const [open, setOpen] = useState(false);
@@ -723,7 +788,7 @@ function ClientPicker({
               ))
             )}
           </CommandList>
-          {value ? (
+          {value && showClear ? (
             <div className="border-t p-1.5">
               <Button
                 variant="ghost"
