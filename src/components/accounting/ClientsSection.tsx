@@ -19,7 +19,6 @@ import {
   LayoutGrid,
   RotateCcw,
   Search,
-  TrendingDown,
   TrendingUp,
   Wallet,
   type LucideIcon,
@@ -199,14 +198,6 @@ export function ClientsSection({ branchId }: ClientsSectionProps = {}) {
     () => debitNotes.reduce((s, r) => s + Math.abs(r.amount), 0),
     [debitNotes],
   );
-  // Outstanding = billed − received − refunded (disbursed + wallet
-  // credit issued) + extra debit notes the office charged. Clamped at
-  // zero — when negative, the office owes the customer; that direction
-  // is shown by the "الخارج للعملاء" pill instead.
-  const totalOutstanding = Math.max(
-    0,
-    totalBilled - totalReceived - totalDisbursed - totalCreditNotes + totalDebitNotes,
-  );
   const totalOutflow = totalDisbursed + totalCreditNotes;
 
   return (
@@ -244,11 +235,11 @@ export function ClientsSection({ branchId }: ClientsSectionProps = {}) {
           hint={`${debitNotes.length} إشعار — مستحق على العميل`}
         />
         <PillCard
-          icon={TrendingDown}
-          tone="rose"
-          label="المتبقي على العملاء"
-          value={formatMoney(totalOutstanding)}
-          hint="بعد القبض والمرتجع"
+          icon={Wallet}
+          tone="sky"
+          label="إشعار دائن"
+          value={formatMoney(totalCreditNotes)}
+          hint={`${creditNotes.length} إشعار — رصيد للعميل عندنا`}
         />
       </div>
 
@@ -361,6 +352,7 @@ const TONE_CLASSES: Record<string, { bg: string; text: string }> = {
   emerald: { bg: 'bg-emerald-500/10', text: 'text-emerald-700' },
   amber: { bg: 'bg-amber-500/10', text: 'text-amber-700' },
   indigo: { bg: 'bg-indigo-500/10', text: 'text-indigo-700' },
+  sky: { bg: 'bg-sky-500/10', text: 'text-sky-700' },
   rose: { bg: 'bg-rose-500/10', text: 'text-rose-700' },
 };
 
