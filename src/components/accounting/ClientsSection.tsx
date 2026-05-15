@@ -697,7 +697,7 @@ function ClientPicker({
                     setOpen(false);
                     setQuery('');
                   }}
-                  className="flex items-center gap-2"
+                  className="flex items-center gap-2 data-[selected=true]:bg-muted data-[selected=true]:text-foreground aria-selected:bg-muted aria-selected:text-foreground"
                 >
                   <Check
                     className={cn(
