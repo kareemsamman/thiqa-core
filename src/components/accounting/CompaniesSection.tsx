@@ -32,6 +32,7 @@ import {
   LayoutGrid,
   Search,
   TrendingUp,
+  Wallet,
   X,
   type LucideIcon,
 } from 'lucide-react';
@@ -59,14 +60,16 @@ import { CompanyIssuancesTable } from './CompanyIssuancesTable';
 import { SettlementsTable } from './SettlementsTable';
 import {
   COMPANY_ISSUANCE_COLUMNS,
+  COMPANY_SETTLEMENT_COLUMNS,
+  COMPANY_SETTLEMENT_DEFAULT_OFF,
   ISSUANCE_DEFAULT_OFF,
-  SETTLEMENT_COLUMNS,
-  SETTLEMENT_DEFAULT_OFF,
 } from './columnDefs';
+import type { ClientReceiptRow } from './useAccountingData';
 import { AccountingFilters, AccountingFiltersValue } from './AccountingFilters';
 import { ManageColumnsDropdown } from './ManageColumnsDropdown';
 import { useTableColumnVisibility } from '@/hooks/useTableColumnVisibility';
 import {
+  matchesClientReceiptSearch,
   matchesIssuanceSearch,
   matchesSettlementSearch,
   useAccountingData,
@@ -85,7 +88,14 @@ import {
   printAccountingReport,
 } from './printAccountingReport';
 
-type SubTab = 'all' | 'issuances' | 'returns' | 'disbursements' | 'receipts';
+type SubTab =
+  | 'all'
+  | 'issuances'
+  | 'returns'
+  | 'disbursements'
+  | 'receipts'
+  | 'debit_notes'
+  | 'credit_notes';
 
 const TABS: { key: SubTab; label: string; Icon: LucideIcon }[] = [
   { key: 'all', label: 'الكل', Icon: LayoutGrid },
@@ -93,12 +103,14 @@ const TABS: { key: SubTab; label: string; Icon: LucideIcon }[] = [
   { key: 'returns', label: 'الإصدارات الملغية', Icon: RotateCcw },
   { key: 'disbursements', label: 'سند الصرف', Icon: ArrowUpRight },
   { key: 'receipts', label: 'سند القبض', Icon: ArrowDownRight },
+  { key: 'debit_notes', label: 'إشعار مدين', Icon: TrendingUp },
+  { key: 'credit_notes', label: 'إشعار دائن', Icon: Wallet },
 ];
 
 const ISSUANCE_KEYS = COMPANY_ISSUANCE_COLUMNS.map((c) => c.key);
 const ISSUANCE_DEFAULT_VISIBLE = ISSUANCE_KEYS.filter((k) => !ISSUANCE_DEFAULT_OFF.has(k));
-const SETTLEMENT_KEYS = SETTLEMENT_COLUMNS.map((c) => c.key);
-const SETTLEMENT_DEFAULT_VISIBLE = SETTLEMENT_KEYS.filter((k) => !SETTLEMENT_DEFAULT_OFF.has(k));
+const SETTLEMENT_KEYS = COMPANY_SETTLEMENT_COLUMNS.map((c) => c.key);
+const SETTLEMENT_DEFAULT_VISIBLE = SETTLEMENT_KEYS.filter((k) => !COMPANY_SETTLEMENT_DEFAULT_OFF.has(k));
 
 interface CompaniesSectionProps {
   /** When set (typically from a deep link), the section finds the
@@ -252,13 +264,21 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
     ISSUANCE_KEYS,
   );
   const settlementCols = useTableColumnVisibility(
-    'accounting-companies-settlements-v3',
+    'accounting-companies-settlements-v4',
     SETTLEMENT_DEFAULT_VISIBLE,
     SETTLEMENT_KEYS,
   );
 
-  const isSettlementTab = tab === 'disbursements' || tab === 'receipts';
-  const activeColumns = isSettlementTab ? SETTLEMENT_COLUMNS : COMPANY_ISSUANCE_COLUMNS;
+  // Settlement-style tabs share one column set (سند صرف / سند قبض /
+  // إشعار مدين / إشعار دائن). The active column dropdown drives them
+  // all when one of those tabs is open — per the user feedback that
+  // column management wasn't reaching the voucher tables.
+  const isSettlementTab =
+    tab === 'disbursements' ||
+    tab === 'receipts' ||
+    tab === 'debit_notes' ||
+    tab === 'credit_notes';
+  const activeColumns = isSettlementTab ? COMPANY_SETTLEMENT_COLUMNS : COMPANY_ISSUANCE_COLUMNS;
   const activeState = isSettlementTab ? settlementCols : issuanceCols;
 
   const companyOptions = useMemo(
@@ -351,6 +371,50 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
         .slice()
         .sort(compareSettlementDates),
     [data.companyReceipts, search, selectedCompanyId, sortDirCo],
+  );
+
+  // Company-level credit/debit notes. The hook already split these
+  // out by company_id so the bucket here only contains rows that
+  // explicitly belong to a company. We split further by receipt_type:
+  // credit_note → إشعار دائن tab; debit_note (or legacy credit_note
+  // with negative amount) → إشعار مدين tab. Each list applies the
+  // same client-side filters as the settlement tables — date already
+  // pre-filtered in useAccountingData, then per-company picker +
+  // free-text search + sort here.
+  const compareClientReceiptDates = (a: ClientReceiptRow, b: ClientReceiptRow): number => {
+    const av = a.receipt_date ? new Date(a.receipt_date).getTime() : 0;
+    const bv = b.receipt_date ? new Date(b.receipt_date).getTime() : 0;
+    return sortDirCo === 'newest' ? bv - av : av - bv;
+  };
+  // company_id isn't carried back to the row shape today, so the
+  // selectedCompanyId picker can't narrow these. The user knows
+  // (data is fine with 0); if/when these need company filtering
+  // we'll add company_id to ClientReceiptRow.
+  const companyCreditNotes = useMemo(
+    () =>
+      data.companyCreditNotes
+        .filter(
+          (r) =>
+            r.receipt_type === 'credit_note' &&
+            r.amount > 0 &&
+            matchesClientReceiptSearch(r, search),
+        )
+        .slice()
+        .sort(compareClientReceiptDates),
+    [data.companyCreditNotes, search, sortDirCo],
+  );
+  const companyDebitNotes = useMemo(
+    () =>
+      data.companyCreditNotes
+        .filter(
+          (r) =>
+            (r.receipt_type === 'debit_note' ||
+              (r.receipt_type === 'credit_note' && r.amount < 0)) &&
+            matchesClientReceiptSearch(r, search),
+        )
+        .slice()
+        .sort(compareClientReceiptDates),
+    [data.companyCreditNotes, search, sortDirCo],
   );
 
   // from_broker policies don't appear in issuancesActive (they belong
@@ -449,8 +513,16 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
       ? returns.length
       : tab === 'disbursements'
       ? companySettlements.length
-      : companyReceipts.length;
-  const countLabel = isSettlementTab ? 'سند' : 'معاملة';
+      : tab === 'receipts'
+      ? companyReceipts.length
+      : tab === 'debit_notes'
+      ? companyDebitNotes.length
+      : companyCreditNotes.length;
+  const countLabel = tab === 'debit_notes' || tab === 'credit_notes'
+    ? 'إشعار'
+    : isSettlementTab
+    ? 'سند'
+    : 'معاملة';
 
   const [printing, setPrinting] = useState(false);
   const handlePrint = async () => {
@@ -626,28 +698,24 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
         </div>
       </TooltipProvider>
 
-      {/* Toolbar row — search + count + manage columns + filter +
-          company picker. The sub-tab strip moves below the active-
-          filter chip so the layout matches the customers tab order:
-          pills → search/filter row → active chips → tabs → content. */}
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto sm:mr-auto">
-          <div className="relative w-full sm:w-80 md:w-96">
-            <Search className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-            <Input
-              type="search"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="بحث بالاسم، رقم المعاملة، الهوية…"
-              className="h-8 w-full pr-8 text-sm"
-            />
-          </div>
-          {/* Per the user: remove every action button from the
-              accounting toolbar — print, "إضافة إصدار يدوي",
-              "إضافة سند صرف/قبض" — "كل الزرار شيلهم بعدين منشتغل
-              عليهم". The QuickIssuanceDialog + AddSettlementDialog
-              state/render stays mounted below so we can re-wire
-              triggers later without losing the dialog plumbing. */}
+      {/* Toolbar row — search pinned to the visual right (first DOM
+          child + RTL flex), controls clustered on the left via
+          justify-between. The user explicitly asked for this layout
+          ("the search should be to right"); the previous mr-auto
+          variant pushed the whole inner block leftward and buried
+          the search in the middle of the row. */}
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="relative w-full sm:w-80 md:w-96">
+          <Search className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+          <Input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="بحث بالاسم، رقم المعاملة، الهوية…"
+            className="h-8 w-full pr-8 text-sm"
+          />
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs text-muted-foreground">
             {data.loading ? '...' : `${activeRowCount} ${countLabel}`}
           </span>
@@ -708,7 +776,7 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
       </div>
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as SubTab)}>
-        <TabsList className="grid w-full grid-cols-3 lg:grid-cols-5">
+        <TabsList className="grid w-full grid-cols-4 lg:grid-cols-7">
           {TABS.map(({ key, label, Icon }) => {
             const count =
               key === 'all'
@@ -719,7 +787,11 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
                 ? returns.length
                 : key === 'disbursements'
                 ? companySettlements.length
-                : companyReceipts.length;
+                : key === 'receipts'
+                ? companyReceipts.length
+                : key === 'debit_notes'
+                ? companyDebitNotes.length
+                : companyCreditNotes.length;
             return (
               <TabsTrigger key={key} value={key} className="gap-1.5">
                 <Icon className="h-3.5 w-3.5" />
@@ -771,6 +843,7 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
             rows={companySettlements}
             loading={data.loading}
             kind="disbursement"
+            visible={settlementCols.visible}
             onVoucherClick={(r) => openSettlementVoucher(r, 'disbursement')}
           />
         </TabsContent>
@@ -779,7 +852,24 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
             rows={companyReceipts}
             loading={data.loading}
             kind="payment"
+            visible={settlementCols.visible}
             onVoucherClick={(r) => openSettlementVoucher(r, 'payment')}
+          />
+        </TabsContent>
+        <TabsContent value="debit_notes" className="mt-3 m-0">
+          <CompanyCreditNotesTable
+            rows={companyDebitNotes}
+            loading={data.loading}
+            kind="debit"
+            visible={settlementCols.visible}
+          />
+        </TabsContent>
+        <TabsContent value="credit_notes" className="mt-3 m-0">
+          <CompanyCreditNotesTable
+            rows={companyCreditNotes}
+            loading={data.loading}
+            kind="credit"
+            visible={settlementCols.visible}
           />
         </TabsContent>
       </Tabs>
@@ -1076,11 +1166,14 @@ function CompanySettlementsTable({
   rows,
   loading,
   kind,
+  visible,
   onVoucherClick,
 }: {
   rows: SettlementRow[];
   loading: boolean;
   kind: 'disbursement' | 'payment';
+  /** Controlled column visibility — list of column keys to render. */
+  visible: string[];
   onVoucherClick: (row: SettlementRow) => void;
 }) {
   if (loading) {
@@ -1103,17 +1196,30 @@ function CompanySettlementsTable({
   }
   const amountClass =
     kind === 'disbursement' ? 'text-amber-700' : 'text-emerald-700';
+  const show = (key: string) => visible.includes(key);
   return (
     <div className="rounded-md border bg-card overflow-x-auto">
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="whitespace-nowrap text-right">رقم السند</TableHead>
-            <TableHead className="whitespace-nowrap text-right">التاريخ</TableHead>
-            <TableHead className="whitespace-nowrap text-right">الشركة</TableHead>
-            <TableHead className="whitespace-nowrap text-right">طريقة الدفع</TableHead>
-            <TableHead className="whitespace-nowrap text-left">المبلغ</TableHead>
-            <TableHead className="whitespace-nowrap text-right">ملاحظات</TableHead>
+            {show('voucher_number') && (
+              <TableHead className="whitespace-nowrap text-right">رقم السند</TableHead>
+            )}
+            {show('date') && (
+              <TableHead className="whitespace-nowrap text-right">التاريخ</TableHead>
+            )}
+            {show('entity') && (
+              <TableHead className="whitespace-nowrap text-right">الشركة</TableHead>
+            )}
+            {show('payment_method') && (
+              <TableHead className="whitespace-nowrap text-right">طريقة الدفع</TableHead>
+            )}
+            {show('amount') && (
+              <TableHead className="whitespace-nowrap text-left">المبلغ</TableHead>
+            )}
+            {show('notes') && (
+              <TableHead className="whitespace-nowrap text-right">ملاحظات</TableHead>
+            )}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -1124,34 +1230,171 @@ function CompanySettlementsTable({
               : '—';
             return (
               <TableRow key={r.id} className="text-sm">
-                <TableCell className="font-mono ltr-nums whitespace-nowrap">
-                  <button
-                    type="button"
-                    onClick={() => onVoucherClick(r)}
-                    className="text-blue-600 underline-offset-2 hover:underline focus:outline-none focus-visible:underline"
+                {show('voucher_number') && (
+                  <TableCell className="font-mono ltr-nums whitespace-nowrap">
+                    <button
+                      type="button"
+                      onClick={() => onVoucherClick(r)}
+                      className="text-blue-600 underline-offset-2 hover:underline focus:outline-none focus-visible:underline"
+                    >
+                      {voucherLabel}
+                    </button>
+                  </TableCell>
+                )}
+                {show('date') && (
+                  <TableCell className="whitespace-nowrap ltr-nums">
+                    {formatSettlementDate(r.settlement_date)}
+                  </TableCell>
+                )}
+                {show('entity') && (
+                  <TableCell className="whitespace-nowrap">
+                    {r.entity_name ?? '—'}
+                  </TableCell>
+                )}
+                {show('payment_method') && (
+                  <TableCell>
+                    <Badge variant="outline" className="text-xs">
+                      {methodLabel}
+                    </Badge>
+                  </TableCell>
+                )}
+                {show('amount') && (
+                  <TableCell
+                    className={`text-left ltr-nums font-semibold tabular-nums whitespace-nowrap ${amountClass}`}
                   >
-                    {voucherLabel}
-                  </button>
-                </TableCell>
-                <TableCell className="whitespace-nowrap ltr-nums">
-                  {formatSettlementDate(r.settlement_date)}
-                </TableCell>
-                <TableCell className="whitespace-nowrap">
-                  {r.entity_name ?? '—'}
-                </TableCell>
-                <TableCell>
-                  <Badge variant="outline" className="text-xs">
-                    {methodLabel}
-                  </Badge>
-                </TableCell>
-                <TableCell
-                  className={`text-left ltr-nums font-semibold tabular-nums whitespace-nowrap ${amountClass}`}
-                >
-                  ₪{Math.round(r.total_amount).toLocaleString('en-US')}
-                </TableCell>
-                <TableCell className="max-w-[240px] truncate text-xs text-muted-foreground">
-                  {r.notes ?? '—'}
-                </TableCell>
+                    ₪{Math.round(r.total_amount).toLocaleString('en-US')}
+                  </TableCell>
+                )}
+                {show('notes') && (
+                  <TableCell className="max-w-[240px] truncate text-xs text-muted-foreground">
+                    {r.notes ?? '—'}
+                  </TableCell>
+                )}
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────
+// CompanyCreditNotesTable — إشعار دائن / إشعار مدين للشركات
+// ──────────────────────────────────────────────────────────────
+//
+// Same lean voucher-list shape as CompanySettlementsTable but consumes
+// ClientReceiptRow (the receipts-mirror shape). Sourced from receipts
+// rows where company_id is set — written by AddCompanyDebitNoteDialog
+// / AddCompanyCreditNoteDialog. The hook routes them into the dedicated
+// `companyCreditNotes` bucket so they don't leak into the customer or
+// broker tables.
+
+function CompanyCreditNotesTable({
+  rows,
+  loading,
+  kind,
+  visible,
+}: {
+  rows: ClientReceiptRow[];
+  loading: boolean;
+  kind: 'credit' | 'debit';
+  visible: string[];
+}) {
+  if (loading) {
+    return (
+      <div className="space-y-2">
+        {[1, 2, 3].map((i) => (
+          <Skeleton key={i} className="h-12 w-full" />
+        ))}
+      </div>
+    );
+  }
+  if (rows.length === 0) {
+    return (
+      <div className="rounded-md border border-dashed bg-muted/30 p-8 text-center text-sm text-muted-foreground">
+        {kind === 'debit'
+          ? 'لا توجد إشعارات مدين للشركات في هذا النطاق'
+          : 'لا توجد إشعارات دائن للشركات في هذا النطاق'}
+      </div>
+    );
+  }
+  // Color the amount column to match the رصيد direction the user
+  // expects: debit-note = company-owes-us (emerald-positive),
+  // credit-note = we-owe-the-company (rose-negative). The user
+  // doesn't read the type label every time — color carries the
+  // direction at a glance.
+  const amountClass = kind === 'debit' ? 'text-emerald-700' : 'text-rose-700';
+  const show = (key: string) => visible.includes(key);
+  return (
+    <div className="rounded-md border bg-card overflow-x-auto">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            {show('voucher_number') && (
+              <TableHead className="whitespace-nowrap text-right">رقم الإشعار</TableHead>
+            )}
+            {show('date') && (
+              <TableHead className="whitespace-nowrap text-right">التاريخ</TableHead>
+            )}
+            {show('entity') && (
+              <TableHead className="whitespace-nowrap text-right">الشركة</TableHead>
+            )}
+            {show('payment_method') && (
+              <TableHead className="whitespace-nowrap text-right">السبب</TableHead>
+            )}
+            {show('amount') && (
+              <TableHead className="whitespace-nowrap text-left">المبلغ</TableHead>
+            )}
+            {show('notes') && (
+              <TableHead className="whitespace-nowrap text-right">ملاحظات</TableHead>
+            )}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((r) => {
+            // The dialog stores "<reason>\nملاحظات: <free notes>" in
+            // a single notes column. Split for display so the user
+            // sees the reason on its own line and any extra notes
+            // separately. Most rows only have the reason.
+            const noteText = r.notes ?? '';
+            const noteParts = noteText.split('\nملاحظات: ');
+            const reason = noteParts[0] || '—';
+            const extra = noteParts[1] ?? '';
+            return (
+              <TableRow key={r.id} className="text-sm">
+                {show('voucher_number') && (
+                  <TableCell className="font-mono ltr-nums whitespace-nowrap">
+                    {r.voucher_number ?? '—'}
+                  </TableCell>
+                )}
+                {show('date') && (
+                  <TableCell className="whitespace-nowrap ltr-nums">
+                    {formatSettlementDate(r.receipt_date)}
+                  </TableCell>
+                )}
+                {show('entity') && (
+                  <TableCell className="whitespace-nowrap">
+                    {r.client_name ?? '—'}
+                  </TableCell>
+                )}
+                {show('payment_method') && (
+                  <TableCell className="max-w-[240px] truncate text-xs">
+                    {reason}
+                  </TableCell>
+                )}
+                {show('amount') && (
+                  <TableCell
+                    className={`text-left ltr-nums font-semibold tabular-nums whitespace-nowrap ${amountClass}`}
+                  >
+                    ₪{Math.round(Math.abs(r.amount)).toLocaleString('en-US')}
+                  </TableCell>
+                )}
+                {show('notes') && (
+                  <TableCell className="max-w-[240px] truncate text-xs text-muted-foreground">
+                    {extra || '—'}
+                  </TableCell>
+                )}
               </TableRow>
             );
           })}

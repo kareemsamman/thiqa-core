@@ -59,6 +59,23 @@ export const SETTLEMENT_COLUMNS: ColumnOption[] = [
 
 export const SETTLEMENT_DEFAULT_OFF = new Set(['notes']);
 
+// Columns used by the simpler company-section voucher tables — سند
+// الصرف / سند القبض (CompanySettlementsTable) and إشعار دائن / إشعار
+// مدين (CompanyCreditNotesTable). The heavier SETTLEMENT_COLUMNS set
+// above belongs to the broker-side SettlementsTable, which renders
+// cheque image, status, customer-cheque accordion — none of those
+// belong on the lean accounting-page view.
+export const COMPANY_SETTLEMENT_COLUMNS: ColumnOption[] = [
+  { key: 'voucher_number', label: 'رقم السند', required: true },
+  { key: 'date', label: 'التاريخ', required: true },
+  { key: 'entity', label: 'الشركة', required: true },
+  { key: 'payment_method', label: 'طريقة الدفع' },
+  { key: 'amount', label: 'المبلغ', required: true },
+  { key: 'notes', label: 'ملاحظات' },
+];
+
+export const COMPANY_SETTLEMENT_DEFAULT_OFF = new Set<string>(['notes']);
+
 // Customer-side accounting columns. Per user feedback the receipt
 // tables don't surface cheque/bank detail (that lives on /receipts);
 // they emphasize CUSTOMER context — id number, phone, car — so the

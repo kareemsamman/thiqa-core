@@ -1011,7 +1011,7 @@ function SideScrollArrow({
         disabled={disabled}
         aria-label={side === 'right' ? 'تمرير لليمين' : 'تمرير لليسار'}
         className={cn(
-          'sticky top-[45vh] mx-auto pointer-events-auto h-9 w-9 rounded-full bg-card/95 backdrop-blur border shadow-lg',
+          'sticky top-[70vh] mx-auto pointer-events-auto h-9 w-9 rounded-full bg-card/95 backdrop-blur border shadow-lg',
           'flex items-center justify-center text-foreground transition',
           'hover:bg-muted hover:scale-105 disabled:opacity-30 disabled:cursor-not-allowed disabled:shadow-none',
         )}

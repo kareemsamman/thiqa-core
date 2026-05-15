@@ -103,6 +103,13 @@ interface UseAccountingDataReturn {
    *  inside AddSettlementDialog. No cash movement; effectively a
    *  write-down of what the broker owes us. */
   brokerCreditNotes: ClientReceiptRow[];
+  /** إشعار دائن / مدين للشركات — credit/debit notes the office filed
+   *  against an insurance company (commission claw-back, refund pending,
+   *  administrative reconciliation). Written by AddCompanyDebitNoteDialog
+   *  / AddCompanyCreditNoteDialog with `company_id` set and `client_id`
+   *  + `broker_id` null. Surfaced on the companies accounting tab so
+   *  the same place that shows سند صرف / سند قبض also shows these. */
+  companyCreditNotes: ClientReceiptRow[];
   /** Filtered total expense amount — used by the net-profit pill. */
   expensesTotal: number;
   refresh: () => Promise<void>;
@@ -263,6 +270,7 @@ export function useAccountingData(
   const [clientDisbursementsRaw, setClientDisbursementsRaw] = useState<ClientReceiptRow[]>([]);
   const [clientCreditNotesRaw, setClientCreditNotesRaw] = useState<ClientReceiptRow[]>([]);
   const [brokerCreditNotesRaw, setBrokerCreditNotesRaw] = useState<ClientReceiptRow[]>([]);
+  const [companyCreditNotesRaw, setCompanyCreditNotesRaw] = useState<ClientReceiptRow[]>([]);
   const [expenses, setExpenses] = useState<RawExpense[]>([]);
 
   const fetchAll = useCallback(async () => {
@@ -558,7 +566,7 @@ export function useAccountingData(
         .select(
           `id, receipt_date, amount, payment_method, voucher_number,
            receipt_number, cheque_number, notes, client_id, client_name,
-           broker_id, policy_id, payment_id, car_number, cancelled_at,
+           broker_id, company_id, policy_id, payment_id, car_number, cancelled_at,
            receipt_type,
            clients(id_number, phone_number),
            policies(document_number, policy_number, client_id, cars(car_number), clients(id_number, phone_number))`,
@@ -606,6 +614,7 @@ export function useAccountingData(
       const crRows = (crData ?? []) as unknown as (RawClientReceipt & {
         receipt_type: string;
         broker_id?: string | null;
+        company_id?: string | null;
       })[];
 
       // Look up the SHARED policy_payments.receipt_number ("R162/2026")
@@ -690,18 +699,18 @@ export function useAccountingData(
           .map(mapClientReceipt)
           .map(enrichVoucherNumber),
       );
-      // credit_note + debit_note rows: split by broker_id so the
-      // broker pill and the client tile each see their own bucket.
-      // For broker math the two are semantically equivalent (both
-      // reduce broker.owesUs), so they share a bucket. Customer
-      // debit notes also feed the same bucket since the kashf treats
-      // them as just another reduction-then-flip on the running
-      // balance — downstream consumers can split by receipt_type if
-      // they need to render them differently.
+      // credit_note + debit_note rows: split THREE ways so each
+      // accounting tab sees only its own bucket:
+      //   • broker_id set        → broker credit/debit note
+      //   • company_id set       → company credit/debit note
+      //   • neither               → client credit/debit note
+      // AddCompanyDebitNoteDialog writes rows with company_id and
+      // null client_id/broker_id, so without this split they used to
+      // leak into the clientCreditNotes bucket.
       const creditNoteRows = crRows.filter((r) => r.receipt_type === 'credit_note' || r.receipt_type === 'debit_note');
       setClientCreditNotesRaw(
         creditNoteRows
-          .filter((r) => !r.broker_id)
+          .filter((r) => !r.broker_id && !r.company_id)
           .map(mapClientReceipt)
           .map(enrichVoucherNumber),
       );
@@ -709,6 +718,12 @@ export function useAccountingData(
         creditNoteRows
           .filter((r) => !!r.broker_id)
           .map((r) => ({ ...enrichVoucherNumber(mapClientReceipt(r)), broker_id: r.broker_id ?? null }) as ClientReceiptRow & { broker_id: string | null }),
+      );
+      setCompanyCreditNotesRaw(
+        creditNoteRows
+          .filter((r) => !r.broker_id && !!r.company_id)
+          .map(mapClientReceipt)
+          .map(enrichVoucherNumber),
       );
 
       // 7. Expenses — only the sum is needed by the pills, but the full
@@ -837,6 +852,10 @@ export function useAccountingData(
     () => applyClientReceiptFilters(brokerCreditNotesRaw, filters),
     [brokerCreditNotesRaw, filters],
   );
+  const filteredCompanyCreditNotes = useMemo(
+    () => applyClientReceiptFilters(companyCreditNotesRaw, filters),
+    [companyCreditNotesRaw, filters],
+  );
 
   const expensesTotal = useMemo(() => {
     let rows = expenses;
@@ -867,6 +886,7 @@ export function useAccountingData(
     clientDisbursements: filteredClientDisbursements,
     clientCreditNotes: filteredClientCreditNotes,
     brokerCreditNotes: filteredBrokerCreditNotes,
+    companyCreditNotes: filteredCompanyCreditNotes,
     expensesTotal,
     refresh: fetchAll,
     patchSubPolicy,
