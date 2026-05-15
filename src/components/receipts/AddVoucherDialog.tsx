@@ -165,10 +165,10 @@ const COUNTERPARTY_OPTIONS: Array<{
   enabled: boolean;
 }> = [
   {
-    value: 'client',
-    label: 'عميل',
-    description: 'تسديد ديون أو إصدار إشعار',
-    icon: User,
+    value: 'company',
+    label: 'شركة تأمين',
+    description: 'تسوية مع شركة',
+    icon: Building,
     enabled: true,
   },
   {
@@ -179,10 +179,10 @@ const COUNTERPARTY_OPTIONS: Array<{
     enabled: true,
   },
   {
-    value: 'company',
-    label: 'شركة تأمين',
-    description: 'تسوية مع شركة',
-    icon: Building,
+    value: 'client',
+    label: 'عميل',
+    description: 'تسديد ديون أو إصدار إشعار',
+    icon: User,
     enabled: true,
   },
   {
