@@ -705,64 +705,31 @@ serve(async (req: Request) => {
     const totalYearOwedToCustomer = Math.max(0, -yearBalance);
 
     // ── Overall remaining (across ALL years) ──────────────────
-    // Pulled to render the "ملاحظة: العميل عليه إجمالاً ₪X" line at
-    // the bottom of the statement — the customer always sees their
-    // outstanding balance globally, not just the snapshot for the
-    // year they picked.
-    const { data: allPolicies } = await userClient
-      .from('policies')
-      .select('id, insurance_price, office_commission, cancelled, transferred')
-      .eq('client_id', client_id)
-      .is('deleted_at', null);
-    const allActivePolicies = (allPolicies || []).filter(
-      (p: any) => !p.cancelled && !p.transferred,
-    );
-    const totalAllOwed = allActivePolicies.reduce(
-      (s: number, p: any) => s + Number(p.insurance_price || 0) + Number(p.office_commission || 0),
-      0,
-    );
-    const allActiveIds = allActivePolicies.map((p: any) => p.id);
-    let totalAllPaid = 0;
-    if (allActiveIds.length > 0) {
-      const { data: allPays } = await userClient
-        .from('policy_payments')
-        .select('amount, refused')
-        .in('policy_id', allActiveIds);
-      totalAllPaid = (allPays || [])
-        .filter((p: any) => !p.refused)
-        .reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
-    }
-
-    // Wallet balance (refunds owed vs adjustments due) — used to
-    // net the overall remaining number.
+    // Single source of truth: the kashf-aligned get_client_balance
+    // RPC. The same RPC powers the "إجمالي المتبقي" tile on the
+    // client page, so the footnote here and the tile there always
+    // agree by construction.
     //
-    // Only outstanding rows (settled_at IS NULL) count. The prior
-    // auto-offset against ALL disbursements assumed every سند صرف
-    // was the cash payout of a prior إشعار دائن, but the user
-    // clarified each voucher is independent: a سند صرف can be a
-    // standalone expense (e.g. paid the customer's tow fee out-of-
-    // pocket) and shouldn't silently zero out a live credit note.
-    // Settlement is now explicit via customer_wallet_transactions
-    // .settled_at (migration 20260514130000).
-    const { data: walletRows } = await userClient
-      .from('customer_wallet_transactions')
-      .select('amount, transaction_type, settled_at')
-      .eq('client_id', client_id)
-      .is('settled_at', null);
-    let weOweCustomer = 0;
-    let customerOwesUs = 0;
-    for (const w of (walletRows || []) as any[]) {
-      const t = w.transaction_type;
-      const amt = Number(w.amount || 0);
-      if (t === 'refund' || t === 'transfer_refund_owed' || t === 'manual_refund') {
-        weOweCustomer += amt;
-      } else if (t === 'transfer_adjustment_due') {
-        customerOwesUs += amt;
-      }
-    }
-    const overallRemaining = Math.max(0, totalAllOwed - totalAllPaid);
-    const overallNet = overallRemaining + customerOwesUs - weOweCustomer;
-    // Positive → customer owes us. Negative → we owe customer.
+    // Why: a prior standalone implementation read only policies +
+    // policy_payments + customer_wallet_transactions and missed the
+    // policy_transfers / receipts tables, so a customer with a
+    // transfer adjustment or a credit_note that didn't mirror to the
+    // wallet would see the year-summary subtract the credit but the
+    // overall footnote ignore it. The numbers drifted by exactly the
+    // missing voucher.
+    //
+    // overallNet is SIGNED — positive means customer owes the office,
+    // negative means the office owes the customer. The RPC clamps
+    // total_remaining to ≥0, so we reconstruct the signed value from
+    // its intermediates (which match the kashf formula 1:1).
+    const { data: balanceRows, error: balanceErr } = await userClient
+      .rpc('get_client_balance', { p_client_id: client_id });
+    if (balanceErr) throw balanceErr;
+    const balance = Array.isArray(balanceRows) ? balanceRows[0] : balanceRows;
+    const overallNet =
+      Number(balance?.total_insurance || 0)
+      - Number(balance?.total_paid || 0)
+      - Number(balance?.total_refunds || 0);
 
     // ── Render HTML ───────────────────────────────────────────
     const html = buildStatementHtml({
