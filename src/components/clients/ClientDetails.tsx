@@ -756,6 +756,11 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       const accCounts: Record<string, number> = {};
       const childCounts: Record<string, number> = {};
       const fileCounts: Record<string, number> = {};
+      // Per-car active-policy counts. Previously a separate
+      // fetchCarPolicyCounts() query on the policies table; now derived
+      // from the same RPC payload we already have. Saves one round-trip
+      // off the critical load group.
+      const carCounts: Record<string, number> = {};
       for (const r of rpcRows) {
         const id = r.policy.id;
         const paid = Number(r.paid_total ?? 0);
@@ -767,11 +772,16 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
         accCounts[id] = Number(r.accidents_count ?? 0);
         childCounts[id] = Number(r.children_count ?? 0);
         fileCounts[id] = Number(r.files_count ?? 0);
+        const carId = (r.policy as any).car?.id as string | undefined;
+        if (carId && !r.policy.cancelled) {
+          carCounts[carId] = (carCounts[carId] || 0) + 1;
+        }
       }
       setPolicyPaymentInfo(paymentInfo);
       setPolicyAccidentCounts(accCounts);
       setPolicyChildrenCounts(childCounts);
       setPolicyFileCounts(fileCounts);
+      setCarPolicyCounts(carCounts);
     } catch (error) {
       console.error('Error fetching policies:', error);
     } finally {
@@ -797,7 +807,18 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       // query to compute them — broker math splits payments per
       // group between client claim and broker claim, which lives
       // client-side. Net: 7 queries → 3.
-      const [{ data: balanceRows, error: balanceErr }, { data: policiesData, error: policiesErr }] = await Promise.all([
+      // Fire all three reads in parallel. The PostgREST !inner join
+      // on policy_payments lets us filter by the linked policy's
+      // client_id without needing the policy_id list back from the
+      // policies query first — so payments + policies + balance RPC
+      // all share one RTT instead of policy_payments having to await
+      // the policies select. Cuts fetchPaymentSummary's critical path
+      // from 2 RTTs to 1.
+      const [
+        { data: balanceRows, error: balanceErr },
+        { data: policiesData, error: policiesErr },
+        { data: paymentsDataRaw, error: paymentsErr },
+      ] = await Promise.all([
         supabase.rpc('get_client_balance', { p_client_id: client.id }),
         supabase
           .from('policies')
@@ -805,9 +826,15 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
           .eq('client_id', client.id)
           .is('transferred_from_policy_id', null)
           .is('deleted_at', null),
+        supabase
+          .from('policy_payments')
+          .select('policy_id, amount, refused, payment_type, policies!inner(client_id, deleted_at)')
+          .eq('policies.client_id', client.id)
+          .is('policies.deleted_at', null),
       ]);
       if (balanceErr) throw balanceErr;
       if (policiesErr) throw policiesErr;
+      if (paymentsErr) throw paymentsErr;
 
       const balance = Array.isArray(balanceRows) ? balanceRows[0] : balanceRows;
       const totalPaid = Number(balance?.total_paid ?? 0);
@@ -828,16 +855,14 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       // "صافي الأرباح" tile, not part of the customer-facing balance.
       const totalProfit = policiesData.reduce((sum, p) => sum + (p.profit || 0), 0);
 
-      // Broker debt math needs per-group payment totals so we can
-      // split a group's payment pool between the client's claim and
-      // the broker's claim. Pull payments only for the policies we
-      // already fetched — keeps the query tight and excludes
-      // ELZAMI passthrough / refused inline below.
-      const allPolicyIds = policiesData.map(p => p.id);
-      const { data: paymentsData } = await supabase
-        .from('policy_payments')
-        .select('policy_id, amount, refused, payment_type')
-        .in('policy_id', allPolicyIds);
+      // Narrow the payments to the same active (non-destination)
+      // policy set so the broker debt math only consults the rows
+      // that actually contribute to the active obligation. We already
+      // have the policy_id set from policiesData above.
+      const activePolicyIds = new Set(policiesData.map((p) => p.id));
+      const paymentsData = (paymentsDataRaw || []).filter((p: any) =>
+        activePolicyIds.has(p.policy_id),
+      );
 
       // ELZAMI passthrough = customer paid the insurance company
       // directly (visa_external) on a policy with no office
@@ -981,18 +1006,28 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   const fetchPayments = async () => {
     setLoadingPayments(true);
     try {
-      // Fire the two client-id-scoped fetches in parallel up front:
-      //   • policies — drives every downstream payment/cancellation
-      //     lookup
+      // Both reads only need client.id — fire them in parallel.
+      //   • policy_payments — joined on policies!inner so we filter
+      //     by the linked policy's client_id without needing a
+      //     separate policies SELECT first. Each row carries its
+      //     parent policy as a nested object (same fields the cards
+      //     and grouping memos consume below), so no second-pass
+      //     find() against a policies list is needed.
       //   • voucher receipts (credit_note + debit_note + disbursement)
-      //     — depends only on client.id, so no point waiting for the
-      //     policies fetch to come back before kicking it off.
-      const [policiesRes, voucherRowsRes] = await Promise.all([
+      //     — independent client-id-scoped lookup.
+      const [paymentsRes, voucherRowsRes] = await Promise.all([
         supabase
-          .from('policies')
-          .select('id, policy_type_parent, policy_type_child, insurance_price, office_commission, group_id, document_number')
-          .eq('client_id', client.id)
-          .is('deleted_at', null),
+          .from('policy_payments')
+          .select(
+            `id, amount, payment_date, payment_type, cheque_number, cheque_date, bank_code, branch_code,
+             cheque_image_url, card_last_four, refused, notes, policy_id, locked, batch_id,
+             payment_session_id, receipt_number, printed_at, created_at,
+             policies!inner(id, policy_type_parent, policy_type_child, insurance_price, office_commission,
+                            group_id, document_number, client_id, deleted_at)`
+          )
+          .eq('policies.client_id', client.id)
+          .is('policies.deleted_at', null)
+          .order('payment_date', { ascending: false }),
         supabase
           .from('receipts')
           .select('id, voucher_number, amount, receipt_date, created_at, notes, payment_method, receipt_type')
@@ -1001,23 +1036,8 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
           .is('cancelled_at', null)
           .order('created_at', { ascending: false }),
       ]);
-      const policiesData = policiesRes.data;
-
-      if (!policiesData || policiesData.length === 0) {
-        setPayments([]);
-        return;
-      }
-
-      const policyIds = policiesData.map(p => p.id);
-
-      // Get all payments for these policies (include batch_id for grouping)
-      const { data: paymentsData, error } = await supabase
-        .from('policy_payments')
-        .select('id, amount, payment_date, payment_type, cheque_number, cheque_date, bank_code, branch_code, cheque_image_url, card_last_four, refused, notes, policy_id, locked, batch_id, payment_session_id, receipt_number, printed_at, created_at')
-        .in('policy_id', policyIds)
-        .order('payment_date', { ascending: false });
-
-      if (error) throw error;
+      const paymentsData = paymentsRes.data;
+      if (paymentsRes.error) throw paymentsRes.error;
 
       // Two follow-up queries that both depend on the payment IDs but
       // hit disjoint tables — fire them in parallel rather than the
@@ -1054,11 +1074,14 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
         paymentsWithImages.add(row.payment_id);
       }
 
-      // Map payments with policy info
-      const paymentsWithPolicy = (paymentsData || []).map(payment => ({
+      // Map payments with policy info. Each payment already carries
+      // its parent policy as `payment.policies` (via the !inner join
+      // above), so we lift it onto the page's expected `policy` key
+      // — no second-pass lookup against a policies array needed.
+      const paymentsWithPolicy = (paymentsData || []).map((payment: any) => ({
         ...payment,
         has_images: paymentsWithImages.has(payment.id),
-        policy: policiesData.find(p => p.id === payment.policy_id) || null,
+        policy: payment.policies || null,
       }));
 
       setPayments(paymentsWithPolicy);
@@ -1249,7 +1272,6 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
         fetchBroker(),
         fetchPaymentSummary(),
         fetchWalletBalance(),
-        fetchCarPolicyCounts(),
         fetchReconciliationAlerts(),
       ]);
       setNotesValue(client.notes || '');
@@ -1284,30 +1306,11 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
     setCarDrawerOpen(false);
     setEditingCar(null);
     fetchCars();
-    fetchCarPolicyCounts();
+    // Skipped: refreshing carPolicyCounts. Saving/editing a car
+    // doesn't add or remove policies on that car, so the map is
+    // unchanged. carPolicyCounts is re-derived whenever fetchPolicies
+    // runs (deferred load + post-mutation refresh sites).
     onRefresh();
-  };
-
-  // Fetch policy count per car
-  const fetchCarPolicyCounts = async () => {
-    try {
-      const { data } = await supabase
-        .from('policies')
-        .select('car_id')
-        .eq('client_id', client.id)
-        .is('deleted_at', null)
-        .eq('cancelled', false);
-      
-      const counts: Record<string, number> = {};
-      (data || []).forEach(p => {
-        if (p.car_id) {
-          counts[p.car_id] = (counts[p.car_id] || 0) + 1;
-        }
-      });
-      setCarPolicyCounts(counts);
-    } catch (error) {
-      console.error('Error fetching car policy counts:', error);
-    }
   };
 
   // Delete car handler
@@ -1347,7 +1350,9 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       if (error) throw error;
       toast.success('تم حذف السيارة بنجاح');
       fetchCars();
-      fetchCarPolicyCounts();
+      // Skipped: carPolicyCounts refresh. The delete check above
+      // already gates on the count being 0, so the deleted car has no
+      // entry in the map to clean up.
     } catch (error: any) {
       console.error('Error deleting car:', error);
       toast.error('فشل حذف السيارة', { description: error?.message });
@@ -2129,38 +2134,49 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      // Single media_files fetch covers both the per-policy split
+      // (policy_crm → sys, policy / policy_insurance → cli) AND the
+      // client-level system files (client_system → sys). Before, this
+      // ran as two sequential queries — one for the policy IDs and one
+      // head-count for the client row. Combining into one
+      // `.in('entity_id', [...])` over the union of IDs keeps the wire
+      // size tiny (we only ask for entity_type + entity_id) and saves
+      // a round-trip on every page mount.
+      const policyIds = policyIdsKey ? policyIdsKey.split(',') : [];
+      const allIds = client?.id ? [client.id, ...policyIds] : policyIds;
+      if (allIds.length === 0) {
+        if (!cancelled) {
+          setSystemFilesCount(0);
+          setClientFilesCount(0);
+        }
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('media_files')
+        .select('entity_type, entity_id')
+        .in('entity_id', allIds)
+        .in('entity_type', ['policy_crm', 'policy', 'policy_insurance', 'client_system'])
+        .is('deleted_at', null);
+      if (cancelled) return;
+
       let sys = 0;
       let cli = 0;
-
-      if (policyIdsKey) {
-        const policyIds = policyIdsKey.split(',');
-        const { data, error } = await supabase
-          .from('media_files')
-          .select('entity_type')
-          .in('entity_id', policyIds)
-          .in('entity_type', ['policy_crm', 'policy', 'policy_insurance'])
-          .is('deleted_at', null);
-        if (cancelled) return;
-        if (!error) {
-          for (const row of data || []) {
-            if (row.entity_type === 'policy_crm') sys++;
-            else cli++;
+      if (!error) {
+        const policyIdSet = new Set(policyIds);
+        for (const row of data || []) {
+          if (row.entity_type === 'client_system' && row.entity_id === client?.id) {
+            sys++;
+          } else if (row.entity_type === 'policy_crm' && policyIdSet.has(row.entity_id)) {
+            sys++;
+          } else if (
+            (row.entity_type === 'policy' || row.entity_type === 'policy_insurance') &&
+            policyIdSet.has(row.entity_id)
+          ) {
+            cli++;
           }
         }
       }
-
-      if (client?.id) {
-        const { count, error } = await supabase
-          .from('media_files')
-          .select('id', { count: 'exact', head: true })
-          .eq('entity_id', client.id)
-          .eq('entity_type', 'client_system')
-          .is('deleted_at', null);
-        if (cancelled) return;
-        if (!error && typeof count === 'number') sys += count;
-      }
-
-      if (cancelled) return;
       setSystemFilesCount(sys);
       setClientFilesCount(cli);
     })();
