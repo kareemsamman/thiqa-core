@@ -1030,14 +1030,27 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   const fetchPayments = async () => {
     setLoadingPayments(true);
     try {
-      // Get all policies for this client first — include group_id so the
-      // payments tab can collapse every payment that belongs to the same
-      // package into one row.
-      const { data: policiesData } = await supabase
-        .from('policies')
-        .select('id, policy_type_parent, policy_type_child, insurance_price, office_commission, group_id, document_number')
-        .eq('client_id', client.id)
-        .is('deleted_at', null);
+      // Fire the two client-id-scoped fetches in parallel up front:
+      //   • policies — drives every downstream payment/cancellation
+      //     lookup
+      //   • voucher receipts (credit_note + debit_note + disbursement)
+      //     — depends only on client.id, so no point waiting for the
+      //     policies fetch to come back before kicking it off.
+      const [policiesRes, voucherRowsRes] = await Promise.all([
+        supabase
+          .from('policies')
+          .select('id, policy_type_parent, policy_type_child, insurance_price, office_commission, group_id, document_number')
+          .eq('client_id', client.id)
+          .is('deleted_at', null),
+        supabase
+          .from('receipts')
+          .select('id, voucher_number, amount, receipt_date, created_at, notes, payment_method, receipt_type')
+          .in('receipt_type', ['credit_note', 'debit_note', 'disbursement'])
+          .eq('client_id', client.id)
+          .is('cancelled_at', null)
+          .order('created_at', { ascending: false }),
+      ]);
+      const policiesData = policiesRes.data;
 
       if (!policiesData || policiesData.length === 0) {
         setPayments([]);
@@ -1055,20 +1068,39 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
 
       if (error) throw error;
 
-      // Probe `payment_images` for the same payment IDs so the outer row
-      // can decide whether to render the gallery trigger without relying
-      // on the legacy cheque_image_url alone (which misses every uploaded
-      // receipt attached via the debt-payment / edit flows).
+      // Two follow-up queries that both depend on the payment IDs but
+      // hit disjoint tables — fire them in parallel rather than the
+      // previous sequential chain. payment_images backs the gallery
+      // trigger on each row; cancellation vouchers feed the inline
+      // "ملغي بسند #X" badge on refused rows.
       const paymentIds = (paymentsData || []).map(p => p.id);
+      const refusedIdsForFetch = (paymentsData || []).filter((p) => p.refused).map((p) => p.id);
+
+      const [imageRowsRes, voucherRowsForRefusedRes] = await Promise.all([
+        paymentIds.length > 0
+          ? supabase
+              .from('payment_images')
+              .select('payment_id')
+              .in('payment_id', paymentIds)
+          : Promise.resolve({ data: [] as Array<{ payment_id: string }> }),
+        refusedIdsForFetch.length > 0
+          ? supabase
+              .from('receipts')
+              .select('id, payment_id, receipt_number, cancellation_reason, receipt_date, created_at')
+              .eq('receipt_type', 'cancellation')
+              .in('payment_id', refusedIdsForFetch)
+          : Promise.resolve({ data: [] as Array<{
+              id: string | null;
+              payment_id: string | null;
+              receipt_number: number | string | null;
+              cancellation_reason: string | null;
+              receipt_date: string | null;
+              created_at: string | null;
+            }> }),
+      ]);
       const paymentsWithImages = new Set<string>();
-      if (paymentIds.length > 0) {
-        const { data: imageRows } = await supabase
-          .from('payment_images')
-          .select('payment_id')
-          .in('payment_id', paymentIds);
-        for (const row of imageRows || []) {
-          paymentsWithImages.add(row.payment_id);
-        }
+      for (const row of (imageRowsRes as any).data || []) {
+        paymentsWithImages.add(row.payment_id);
       }
 
       // Map payments with policy info
@@ -1094,11 +1126,16 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       const nextInfo = new Map<string, { voucherNumber: number | string; reason: string | null; year: number }>();
       const nextVouchers: typeof cancellationVouchers = [];
       if (refusedIds.length > 0) {
-        const { data: voucherRows } = await supabase
-          .from('receipts')
-          .select('id, payment_id, receipt_number, cancellation_reason, receipt_date, created_at')
-          .eq('receipt_type', 'cancellation')
-          .in('payment_id', refusedIds);
+        // Voucher rows already fetched alongside payment_images via the
+        // Promise.all above — same dataset, no second round-trip needed.
+        const voucherRows = (voucherRowsForRefusedRes as any).data as Array<{
+          id: string | null;
+          payment_id: string | null;
+          receipt_number: number | string | null;
+          cancellation_reason: string | null;
+          receipt_date: string | null;
+          created_at: string | null;
+        }>;
 
         // Per-payment row data: keep ALL fields we'll need for both the
         // inline badge (voucherNumber + reason) and the standalone
@@ -1195,22 +1232,11 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       setCancellationVouchers(nextVouchers);
 
       // اشعار دائن + إشعار مدين + سند صرف rows for this client.
-      // All three live in `receipts` and share the same client_id +
-      // cancelled_at filter — bundle into ONE round-trip via `.in()`
-      // and fan out by receipt_type in JS. Was previously three
-      // sequential awaits. On failure we fall back to empty arrays
-      // for all three families since the bundled fetch is atomic;
-      // the per-type try/catch resilience the old code had was
-      // theoretical (these are simple SELECTs that don't partially
-      // fail per receipt_type).
+      // Already fetched in parallel with the policies query at the top
+      // of this function — same data, no second round-trip. The split
+      // by receipt_type happens client-side below.
       try {
-        const { data: voucherRows } = await supabase
-          .from('receipts')
-          .select('id, voucher_number, amount, receipt_date, created_at, notes, payment_method, receipt_type')
-          .in('receipt_type', ['credit_note', 'debit_note', 'disbursement'])
-          .eq('client_id', client.id)
-          .is('cancelled_at', null)
-          .order('created_at', { ascending: false });
+        const voucherRows = voucherRowsRes.data;
 
         const nextCreditNotes: typeof creditNotes = [];
         const nextDebitNotes: typeof debitNotes = [];
