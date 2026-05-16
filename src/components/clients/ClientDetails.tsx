@@ -715,7 +715,14 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
     }
   };
 
-  // Fetch policy metadata (payments, accidents, children) - called once after policies load
+  // Fetch policy metadata (payments, accidents, children, files) -
+  // called once after policies load. Backed by the
+  // `get_client_policy_metadata` RPC which folds the four parallel
+  // reads (policy_payments + accident_reports + policy_children +
+  // media_files) into one round-trip. Each metric stays an indexed
+  // correlated subquery server-side, so the total work is identical
+  // to firing them separately — but the client only pays one HTTP
+  // round + one CORS preflight instead of four.
   const fetchPolicyMetadata = async (policyIds: string[], policiesData: PolicyRecord[]) => {
     if (policyIds.length === 0) {
       setPolicyPaymentInfo({});
@@ -726,36 +733,34 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
     }
 
     try {
-      // Fetch all four in parallel (added: per-policy file counts so
-      // the new "ملفات (N)" button on the card has a number to show
-      // without forcing the drawer open).
-      const [paymentsRes, accidentsRes, childrenRes, filesRes] = await Promise.all([
-        supabase
-          .from('policy_payments')
-          .select('policy_id, amount, refused')
-          .in('policy_id', policyIds),
-        supabase
-          .from('accident_reports')
-          .select('policy_id')
-          .in('policy_id', policyIds),
-        supabase
-          .from('policy_children')
-          .select('policy_id')
-          .in('policy_id', policyIds),
-        supabase
-          .from('media_files')
-          .select('entity_id')
-          .in('entity_id', policyIds)
-          .in('entity_type', ['policy', 'policy_insurance', 'policy_file'])
-          .is('deleted_at', null),
-      ]);
+      const { data: rows, error } = await supabase.rpc('get_client_policy_metadata', {
+        p_policy_ids: policyIds,
+      });
+      if (error) throw error;
 
-      // Process payment info
+      const paidByPolicy = new Map<string, number>();
+      const accidentsByPolicy = new Map<string, number>();
+      const childrenByPolicy = new Map<string, number>();
+      const filesByPolicy = new Map<string, number>();
+      for (const r of (rows ?? []) as Array<{
+        policy_id: string;
+        paid_total: number | null;
+        accidents_count: number | null;
+        children_count: number | null;
+        files_count: number | null;
+      }>) {
+        paidByPolicy.set(r.policy_id, Number(r.paid_total ?? 0));
+        accidentsByPolicy.set(r.policy_id, Number(r.accidents_count ?? 0));
+        childrenByPolicy.set(r.policy_id, Number(r.children_count ?? 0));
+        filesByPolicy.set(r.policy_id, Number(r.files_count ?? 0));
+      }
+
+      // Map each policy to its paid/remaining off the RPC's paid_total.
+      // `remaining` stays in TS because it depends on (insurance_price +
+      // office_commission) which are already in scope here.
       const paymentInfo: Record<string, { paid: number; remaining: number }> = {};
-      policiesData.forEach(p => {
-        const policyPayments = (paymentsRes.data || [])
-          .filter(pay => pay.policy_id === p.id && !pay.refused);
-        const paid = policyPayments.reduce((sum, pay) => sum + pay.amount, 0);
+      policiesData.forEach((p) => {
+        const paid = paidByPolicy.get(p.id) ?? 0;
         paymentInfo[p.id] = {
           paid,
           remaining: (p.insurance_price + ((p as any).office_commission || 0)) - paid,
@@ -763,26 +768,16 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       });
       setPolicyPaymentInfo(paymentInfo);
 
-      // Process accident counts
       const accCounts: Record<string, number> = {};
-      (accidentsRes.data || []).forEach(row => {
-        accCounts[row.policy_id] = (accCounts[row.policy_id] || 0) + 1;
-      });
-      setPolicyAccidentCounts(accCounts);
-
-      // Process children counts
       const childCounts: Record<string, number> = {};
-      (childrenRes.data || []).forEach(row => {
-        childCounts[row.policy_id] = (childCounts[row.policy_id] || 0) + 1;
-      });
-      setPolicyChildrenCounts(childCounts);
-
-      // Process per-policy file counts (one entry in media_files per
-      // attachment; entity_id is the policy id).
       const fileCounts: Record<string, number> = {};
-      (filesRes.data || []).forEach((row: { entity_id: string }) => {
-        fileCounts[row.entity_id] = (fileCounts[row.entity_id] || 0) + 1;
-      });
+      for (const id of policyIds) {
+        accCounts[id] = accidentsByPolicy.get(id) ?? 0;
+        childCounts[id] = childrenByPolicy.get(id) ?? 0;
+        fileCounts[id] = filesByPolicy.get(id) ?? 0;
+      }
+      setPolicyAccidentCounts(accCounts);
+      setPolicyChildrenCounts(childCounts);
       setPolicyFileCounts(fileCounts);
     } catch (error) {
       console.error('Error fetching policy metadata:', error);
