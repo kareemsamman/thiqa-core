@@ -1289,18 +1289,30 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   useEffect(() => {
     const loadInitialData = async () => {
       setInitialLoading(true);
+      // Critical group — drives the page chrome (header tile, summary
+      // pills, wallet badge, broker info). These are LIGHT queries
+      // that finish quickly; we wait on them so the user sees a
+      // populated page on first paint instead of a full-page skeleton.
       await Promise.all([
         fetchCars(),
-        fetchPolicies(),
         fetchBroker(),
         fetchPaymentSummary(),
-        fetchPayments(),
         fetchWalletBalance(),
         fetchCarPolicyCounts(),
         fetchReconciliationAlerts(),
       ]);
       setNotesValue(client.notes || '');
       setInitialLoading(false);
+
+      // Deferred — fill in the policies + payments tabs in the
+      // background. They both have their own loading state
+      // (loadingPolicies / loadingPayments) that drives per-section
+      // skeletons, so the rest of the page is interactive while these
+      // heavier reads finish. Previously they were awaited in the
+      // critical Promise.all above, so the entire page sat behind a
+      // skeleton until the slowest read returned.
+      void fetchPolicies();
+      void fetchPayments();
     };
     loadInitialData();
   }, [client.id]);
