@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAgentContext } from './useAgentContext';
 
@@ -48,80 +49,68 @@ interface UseCompaniesOutstandingResult {
   refresh: () => void;
 }
 
-const emptyRow = (): CompanyOutstanding => ({
-  totalPayable: 0,
-  totalPaidOut: 0,
-  totalPaidIn: 0,
-  totalCreditNotes: 0,
-  policiesCount: 0,
-  outstanding: 0,
-});
+const EMPTY_MAP: Map<string, CompanyOutstanding> = new Map();
 
+/**
+ * Outstanding-per-company data, deduped via React Query.
+ *
+ * Used by Receipts page, CompaniesSection on /accounting, and the
+ * AddCompanyDebitNoteDialog — every consumer of this hook reads
+ * off the same in-memory cache keyed by agentId, so three mounted
+ * call sites collapse to a single in-flight RPC instead of firing
+ * `get_company_outstanding_summary` once each.
+ */
 export function useCompaniesOutstanding(): UseCompaniesOutstandingResult {
   const { agentId } = useAgentContext();
-  const [outstandingByCompany, setOutstandingByCompany] = useState<
-    Map<string, CompanyOutstanding>
-  >(new Map());
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
+  const queryClient = useQueryClient();
 
-  useEffect(() => {
-    if (!agentId) {
-      setOutstandingByCompany(new Map());
-      setLoading(false);
-      return;
-    }
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-
-    (async () => {
-      try {
-        const { data, error: rpcErr } = await supabase.rpc(
-          'get_company_outstanding_summary',
-          { p_agent_id: agentId } as never,
-        );
-        if (cancelled) return;
-        if (rpcErr) throw rpcErr;
-
-        const map = new Map<string, CompanyOutstanding>();
-        for (const row of (data ?? []) as Array<{
-          company_id: string;
-          total_payable: number | string;
-          total_paid_out: number | string;
-          total_paid_in: number | string;
-          total_credit_notes: number | string;
-          policies_count: number | string;
-          outstanding: number | string;
-        }>) {
-          map.set(row.company_id, {
-            totalPayable: Number(row.total_payable),
-            totalPaidOut: Number(row.total_paid_out),
-            totalPaidIn: Number(row.total_paid_in),
-            totalCreditNotes: Number(row.total_credit_notes),
-            policiesCount: Number(row.policies_count),
-            outstanding: Number(row.outstanding),
-          });
-        }
-        setOutstandingByCompany(map);
-        setLoading(false);
-      } catch (e) {
-        if (cancelled) return;
-        setError(e instanceof Error ? e : new Error(String(e)));
-        setLoading(false);
+  const query = useQuery<Map<string, CompanyOutstanding>>({
+    queryKey: ['companies-outstanding', agentId ?? null],
+    enabled: !!agentId,
+    // Outstanding shifts whenever a voucher or settlement lands.
+    // 60s is conservative — call refresh() explicitly after writes
+    // (the dialogs that mutate this data already do).
+    staleTime: 60 * 1000,
+    queryFn: async (): Promise<Map<string, CompanyOutstanding>> => {
+      const { data, error } = await supabase.rpc(
+        'get_company_outstanding_summary',
+        { p_agent_id: agentId } as never,
+      );
+      if (error) throw error;
+      const map = new Map<string, CompanyOutstanding>();
+      for (const row of (data ?? []) as Array<{
+        company_id: string;
+        total_payable: number | string;
+        total_paid_out: number | string;
+        total_paid_in: number | string;
+        total_credit_notes: number | string;
+        policies_count: number | string;
+        outstanding: number | string;
+      }>) {
+        map.set(row.company_id, {
+          totalPayable: Number(row.total_payable),
+          totalPaidOut: Number(row.total_paid_out),
+          totalPaidIn: Number(row.total_paid_in),
+          totalCreditNotes: Number(row.total_credit_notes),
+          policiesCount: Number(row.policies_count),
+          outstanding: Number(row.outstanding),
+        });
       }
-    })();
+      return map;
+    },
+  });
 
-    return () => {
-      cancelled = true;
-    };
-  }, [agentId, refreshKey]);
+  const refresh = useCallback(
+    () => {
+      queryClient.invalidateQueries({ queryKey: ['companies-outstanding', agentId ?? null] });
+    },
+    [queryClient, agentId],
+  );
 
   return {
-    outstandingByCompany,
-    loading,
-    error,
-    refresh: () => setRefreshKey((k) => k + 1),
+    outstandingByCompany: query.data ?? EMPTY_MAP,
+    loading: query.isLoading,
+    error: (query.error as Error | null) ?? null,
+    refresh,
   };
 }
