@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Header } from '@/components/layout/Header';
 import { Button } from '@/components/ui/button';
@@ -38,8 +39,7 @@ export default function Companies() {
   // Access is gated by <PermissionRoute permission="page.companies"> at
   // the route level — admins bypass automatically, workers need the
   // permission granted from the editor. No in-page guard needed.
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -51,45 +51,60 @@ export default function Companies() {
   const [accidentFeePricingOpen, setAccidentFeePricingOpen] = useState(false);
   const [accidentFeePricingCompany, setAccidentFeePricingCompany] = useState<Company | null>(null);
 
-  const fetchCompanies = async () => {
-    setLoading(true);
-    try {
-      let query = supabase
+  // Debounce the search box so typing doesn't fire a network call
+  // per keystroke. Before, every character triggered a fresh fetch
+  // (the useEffect was keyed on `searchQuery` directly), so typing
+  // "ليفل" issued four sequential fetches that the UI then had to
+  // reconcile — visible as a stutter on slower connections.
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchQuery.trim()), 250);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
+
+  // Fetch everything once on mount, then filter / search client-side.
+  // The insurance_companies table is small (tens of rows per agent),
+  // so pulling the full active set is cheaper than a per-keystroke
+  // network round-trip — and gives instant filter response.
+  const { data: allCompanies = [], isLoading: loading } = useQuery({
+    queryKey: ['companies-list'],
+    queryFn: async (): Promise<Company[]> => {
+      const { data, error } = await supabase
         .from('insurance_companies')
         .select('*')
+        .is('broker_id', null) // broker-linked companies live on /broker-wallet
         .order('name', { ascending: true });
-
-      if (searchQuery) {
-        query = query.or(`name.ilike.%${searchQuery}%,name_ar.ilike.%${searchQuery}%`);
-      }
-
-      // Filter by category_parent array contains
-      if (typeFilter && typeFilter !== 'all') {
-        query = query.contains('category_parent', [typeFilter]);
-      }
-
-      // Exclude broker-linked companies - they are managed through broker wallet
-      query = query.is('broker_id', null);
-
-      const { data, error } = await query;
-
       if (error) throw error;
-      setCompanies(data || []);
-    } catch (error) {
-      console.error('Error fetching companies:', error);
-      toast({
-        title: 'خطأ',
-        description: 'فشل في جلب شركات التأمين',
-        variant: 'destructive',
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
+      return (data ?? []) as Company[];
+    },
+    staleTime: 5 * 60 * 1000, // 5 min — list changes rarely
+  });
 
-  useEffect(() => {
-    fetchCompanies();
-  }, [searchQuery, typeFilter]);
+  // Apply search + type filter in memory. Recomputes whenever the
+  // user types but never re-hits the network.
+  const companies = useMemo(() => {
+    let rows = allCompanies;
+    if (debouncedSearch) {
+      const needle = debouncedSearch.toLowerCase();
+      rows = rows.filter(
+        (c) =>
+          (c.name?.toLowerCase().includes(needle)) ||
+          (c.name_ar?.toLowerCase().includes(needle)),
+      );
+    }
+    if (typeFilter && typeFilter !== 'all') {
+      rows = rows.filter((c) =>
+        (c.category_parent ?? []).includes(typeFilter as any),
+      );
+    }
+    return rows;
+  }, [allCompanies, debouncedSearch, typeFilter]);
+
+  const fetchCompanies = () => {
+    // Save/edit handlers call this to refresh — invalidate the
+    // shared queryKey so the next consumer (or this page) refetches.
+    queryClient.invalidateQueries({ queryKey: ['companies-list'] });
+  };
 
   const handleAddCompany = () => {
     setSelectedCompany(null);
