@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select,
   SelectContent,
@@ -21,8 +22,7 @@ import {
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Trash2, Loader2, Check } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { Trash2, Loader2 } from 'lucide-react';
 import type { Tables, Enums } from '@/integrations/supabase/types';
 
 type Company = Tables<'insurance_companies'>;
@@ -51,7 +51,6 @@ export function CompanyDrawer({ open, onClose, company, onSuccess }: CompanyDraw
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [brokers, setBrokers] = useState<Broker[]>([]);
   const [formData, setFormData] = useState({
-    name: '',
     name_ar: '',
     category_parents: [] as PolicyTypeParent[],
     active: true,
@@ -74,8 +73,7 @@ export function CompanyDrawer({ open, onClose, company, onSuccess }: CompanyDraw
   useEffect(() => {
     if (company) {
       setFormData({
-        name: company.name,
-        name_ar: company.name_ar || '',
+        name_ar: company.name_ar || company.name || '',
         category_parents: (company.category_parent || []) as PolicyTypeParent[],
         active: company.active ?? true,
         elzami_commission: company.elzami_commission ?? 0,
@@ -83,7 +81,6 @@ export function CompanyDrawer({ open, onClose, company, onSuccess }: CompanyDraw
       });
     } else {
       setFormData({
-        name: '',
         name_ar: '',
         category_parents: [],
         active: true,
@@ -104,11 +101,12 @@ export function CompanyDrawer({ open, onClose, company, onSuccess }: CompanyDraw
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!formData.name.trim()) {
+
+    const trimmedName = formData.name_ar.trim();
+    if (!trimmedName) {
       toast({
         title: 'خطأ',
-        description: 'الرجاء إدخال اسم الشركة بالإنجليزية',
+        description: 'الرجاء إدخال اسم الشركة',
         variant: 'destructive',
       });
       return;
@@ -131,8 +129,8 @@ export function CompanyDrawer({ open, onClose, company, onSuccess }: CompanyDraw
         const { error } = await supabase
           .from('insurance_companies')
           .update({
-            name: formData.name.trim(),
-            name_ar: formData.name_ar.trim() || null,
+            name: trimmedName,
+            name_ar: trimmedName,
             category_parent: formData.category_parents,
             active: formData.active,
             elzami_commission: formData.category_parents.includes('ELZAMI') ? formData.elzami_commission : 0,
@@ -165,8 +163,8 @@ export function CompanyDrawer({ open, onClose, company, onSuccess }: CompanyDraw
     // arrives when the round-trip actually completes; the list refetch
     // fires only on success.
     const payload = {
-      name: formData.name.trim(),
-      name_ar: formData.name_ar.trim() || null,
+      name: trimmedName,
+      name_ar: trimmedName,
       category_parent: formData.category_parents,
       active: formData.active,
       elzami_commission: formData.category_parents.includes('ELZAMI') ? formData.elzami_commission : 0,
@@ -184,7 +182,7 @@ export function CompanyDrawer({ open, onClose, company, onSuccess }: CompanyDraw
       console.error('Error saving company:', error);
       toast({
         title: 'خطأ',
-        description: error.message || `فشل في إضافة الشركة "${payload.name_ar || payload.name}"`,
+        description: error.message || `فشل في إضافة الشركة "${payload.name_ar}"`,
         variant: 'destructive',
       });
       return;
@@ -279,18 +277,7 @@ export function CompanyDrawer({ open, onClose, company, onSuccess }: CompanyDraw
 
           <form onSubmit={handleSubmit} className="p-4 space-y-4 overflow-y-auto">
             <div className="space-y-2">
-              <Label htmlFor="name" className="text-right block">الاسم بالإنجليزية *</Label>
-              <Input
-                id="name"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="Company Name"
-                className="ltr-input"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="name_ar" className="text-right block">الاسم بالعربية</Label>
+              <Label htmlFor="name_ar" className="text-right block">اسم الشركة *</Label>
               <Input
                 id="name_ar"
                 value={formData.name_ar}
@@ -305,33 +292,20 @@ export function CompanyDrawer({ open, onClose, company, onSuccess }: CompanyDraw
               <div className="grid grid-cols-2 gap-2">
                 {POLICY_TYPES.map(type => {
                   const selected = formData.category_parents.includes(type.value);
+                  const id = `type-${type.value}`;
                   return (
-                    <button
+                    <Label
                       key={type.value}
-                      type="button"
-                      role="checkbox"
-                      aria-checked={selected}
-                      onClick={() => handleTypeToggle(type.value, !selected)}
-                      className={cn(
-                        "group flex items-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium transition-all text-right",
-                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                        selected
-                          ? "border-primary bg-primary/5 text-foreground shadow-sm"
-                          : "border-border bg-background text-muted-foreground hover:border-primary/40 hover:bg-muted/50 hover:text-foreground",
-                      )}
+                      htmlFor={id}
+                      className="flex cursor-pointer items-center gap-2 rounded-lg border bg-background px-3 py-2.5 text-sm font-medium transition-colors hover:bg-muted/50"
                     >
-                      <span
-                        className={cn(
-                          "flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border transition-all",
-                          selected
-                            ? "border-primary bg-primary text-primary-foreground"
-                            : "border-input bg-background group-hover:border-primary/50",
-                        )}
-                      >
-                        {selected && <Check className="h-3 w-3" strokeWidth={3} />}
-                      </span>
+                      <Checkbox
+                        id={id}
+                        checked={selected}
+                        onCheckedChange={(checked) => handleTypeToggle(type.value, checked === true)}
+                      />
                       <span className="flex-1 text-right">{type.label}</span>
-                    </button>
+                    </Label>
                   );
                 })}
               </div>

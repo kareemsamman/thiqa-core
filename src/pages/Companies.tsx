@@ -72,7 +72,6 @@ export default function Companies() {
       const { data, error } = await supabase
         .from('insurance_companies')
         .select('*')
-        .is('broker_id', null) // broker-linked companies live on /broker-wallet
         .order('name', { ascending: true });
       if (error) throw error;
       return (data ?? []) as Company[];
@@ -216,10 +215,7 @@ export default function Companies() {
                   <div className="flex items-start gap-2 flex-1 min-w-0">
                     <div className="h-8 w-1 rounded-full bg-primary/60 shrink-0 mt-0.5" aria-hidden="true" />
                     <div className="min-w-0">
-                      <h3 className="font-semibold text-base leading-tight truncate">{company.name_ar || '-'}</h3>
-                      {company.name && (
-                        <p className="text-xs text-muted-foreground truncate mt-0.5">{company.name}</p>
-                      )}
+                      <h3 className="font-semibold text-base leading-tight truncate">{company.name_ar || company.name || '-'}</h3>
                     </div>
                   </div>
                   <Badge variant={company.active ? 'default' : 'secondary'} className="shrink-0">
@@ -302,8 +298,7 @@ export default function Companies() {
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/20 hover:bg-muted/20 border-border/60">
-                <TableHead className="text-right font-semibold">الاسم بالعربية</TableHead>
-                <TableHead className="text-right font-semibold">الاسم بالإنجليزية</TableHead>
+                <TableHead className="text-right font-semibold">اسم الشركة</TableHead>
                 <TableHead className="text-right font-semibold">نوع التأمين</TableHead>
                 <TableHead className="text-right font-semibold">العمولة</TableHead>
                 <TableHead className="text-right font-semibold">الحالة</TableHead>
@@ -315,7 +310,6 @@ export default function Companies() {
                 Array.from({ length: 6 }).map((_, i) => (
                   <TableRow key={i} className="border-border/40">
                     <TableCell><Skeleton className="h-4 w-32" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-32" /></TableCell>
                     <TableCell><Skeleton className="h-6 w-20" /></TableCell>
                     <TableCell><Skeleton className="h-4 w-16" /></TableCell>
                     <TableCell><Skeleton className="h-6 w-16" /></TableCell>
@@ -324,7 +318,7 @@ export default function Companies() {
                 ))
               ) : companies.length === 0 ? (
               <TableRow>
-                  <TableCell colSpan={6} className="text-center py-10 text-muted-foreground">
+                  <TableCell colSpan={5} className="text-center py-10 text-muted-foreground">
                     لا توجد شركات تأمين
                   </TableCell>
                 </TableRow>
@@ -338,10 +332,9 @@ export default function Companies() {
                     <TableCell className="font-semibold">
                       <div className="flex items-center gap-2">
                         <div className="h-8 w-1 rounded-full bg-primary/60" />
-                        {company.name_ar || '-'}
+                        {company.name_ar || company.name || '-'}
                       </div>
                     </TableCell>
-                    <TableCell className="text-muted-foreground">{company.name}</TableCell>
                     <TableCell>
                       {company.category_parent && company.category_parent.length > 0 ? (
                         <div className="flex flex-wrap gap-1">
