@@ -217,27 +217,47 @@ const fetchFinancialData = async () => {
     monthExpenses,
   };
 
-  // Fetch company balances in parallel
-  const balancePromises = (companiesRes.data || []).map(async (company) => {
-    const { data: balanceData } = await supabase.rpc('get_company_balance', { p_company_id: company.id, p_from_date: '2026-01-01' });
-    if (balanceData && balanceData.length > 0) {
-      const b = balanceData[0];
-      if (Number(b.total_payable) > 0 || Number(b.outstanding) > 0) {
-        return {
-          companyId: company.id,
-          companyName: company.name,
-          companyNameAr: company.name_ar || company.name,
-          totalPayable: Number(b.total_payable) || 0,
-          totalPaid: Number(b.total_paid) || 0,
-          outstanding: Number(b.outstanding) || 0,
-        };
-      }
+  // Fetch every company balance in ONE round-trip via the bulk RPC.
+  // Previously this fired get_company_balance once per company in a
+  // Promise.all loop — for an agency with 20 active companies that
+  // alone meant 20 round-trips after the main parallel batch.
+  const activeCompanies = (companiesRes.data || []);
+  const companyIds = activeCompanies.map((c) => c.id);
+  const balanceByCompany = new Map<string, { total_payable: number; total_paid: number; outstanding: number }>();
+  if (companyIds.length > 0) {
+    const { data: bulkBalances } = await supabase.rpc('get_company_balances_bulk', {
+      p_company_ids: companyIds,
+      p_from_date: '2026-01-01',
+    } as never);
+    for (const row of ((bulkBalances ?? []) as Array<{
+      company_id: string;
+      total_payable: number | string;
+      total_paid: number | string;
+      outstanding: number | string;
+    }>)) {
+      balanceByCompany.set(row.company_id, {
+        total_payable: Number(row.total_payable) || 0,
+        total_paid: Number(row.total_paid) || 0,
+        outstanding: Number(row.outstanding) || 0,
+      });
     }
-    return null;
-  });
-
-  const balanceResults = await Promise.all(balancePromises);
-  const companyBalances: CompanyBalance[] = balanceResults.filter(Boolean).sort((a, b) => b!.outstanding - a!.outstanding) as CompanyBalance[];
+  }
+  const companyBalances: CompanyBalance[] = activeCompanies
+    .map((company) => {
+      const b = balanceByCompany.get(company.id);
+      if (!b) return null;
+      if (b.total_payable <= 0 && b.outstanding <= 0) return null;
+      return {
+        companyId: company.id,
+        companyName: company.name,
+        companyNameAr: company.name_ar || company.name,
+        totalPayable: b.total_payable,
+        totalPaid: b.total_paid,
+        outstanding: b.outstanding,
+      } as CompanyBalance;
+    })
+    .filter((b): b is CompanyBalance => b !== null)
+    .sort((a, b) => b.outstanding - a.outstanding);
 
   const recentEntries: LedgerEntry[] = (ledgerRes.data || []).map(e => ({
     id: e.id,
