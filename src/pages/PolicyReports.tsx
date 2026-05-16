@@ -172,8 +172,14 @@ interface RenewalClient {
   car_numbers: string[] | null;
   worst_renewal_status: string;
   renewal_notes: string | null;
+  auto_reminder_skipped: boolean | null;
+  auto_reminder_skip_reason: string | null;
   total_count: number;
 }
+
+const renewalSkipReasonLabels: Record<string, string> = {
+  sms_quota_exhausted: 'تم تخطّي التذكير التلقائي — انتهى الحد الشهري للرسائل النصية. قم بترقية الباقة أو شراء رصيد إضافي.',
+};
 
 // Client's individual policy details
 interface RenewalPolicy {
@@ -1528,9 +1534,19 @@ export default function PolicyReports() {
                             </TableCell>
                             <TableCell className="font-bold">₪{client.total_insurance_price.toLocaleString()}</TableCell>
                             <TableCell>
-                              <Badge className={cn('border', renewalStatusColors[client.worst_renewal_status])}>
-                                {renewalStatusLabels[client.worst_renewal_status]}
-                              </Badge>
+                              <div className="flex items-center gap-1.5">
+                                <Badge className={cn('border', renewalStatusColors[client.worst_renewal_status])}>
+                                  {renewalStatusLabels[client.worst_renewal_status]}
+                                </Badge>
+                                {client.auto_reminder_skipped && (
+                                  <span
+                                    title={renewalSkipReasonLabels[client.auto_reminder_skip_reason ?? ''] ?? 'تم تخطّي التذكير التلقائي'}
+                                    className="inline-flex items-center text-amber-600"
+                                  >
+                                    <AlertCircle className="h-4 w-4" />
+                                  </span>
+                                )}
+                              </div>
                             </TableCell>
                             <TableCell className="max-w-[150px] truncate text-xs text-muted-foreground">
                               {client.renewal_notes || '-'}

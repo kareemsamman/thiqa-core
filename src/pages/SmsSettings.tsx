@@ -34,7 +34,7 @@ interface SmsSettings {
   reminder_1month_template?: string | null;
   reminder_1week_template?: string | null;
   payment_request_template?: string | null;
-  enable_auto_reminders?: boolean;
+  enable_auto_renewal_reminders?: boolean;
   birthday_sms_enabled?: boolean;
   birthday_sms_template?: string | null;
   license_expiry_sms_enabled?: boolean;
@@ -82,7 +82,7 @@ export default function SmsSettings() {
     reminder_1month_template: null,
     reminder_1week_template: null,
     payment_request_template: null,
-    enable_auto_reminders: false,
+    enable_auto_renewal_reminders: false,
     birthday_sms_enabled: false,
     birthday_sms_template: null,
     license_expiry_sms_enabled: false,
@@ -146,7 +146,7 @@ export default function SmsSettings() {
           reminder_1month_template: data.reminder_1month_template ?? null,
           reminder_1week_template: data.reminder_1week_template ?? null,
           payment_request_template: data.payment_request_template ?? null,
-          enable_auto_reminders: data.enable_auto_reminders ?? false,
+          enable_auto_renewal_reminders: data.enable_auto_renewal_reminders ?? false,
           birthday_sms_enabled: data.birthday_sms_enabled ?? false,
           birthday_sms_template: data.birthday_sms_template ?? null,
           license_expiry_sms_enabled: data.license_expiry_sms_enabled ?? false,
@@ -202,7 +202,7 @@ export default function SmsSettings() {
             reminder_1month_template: settings.reminder_1month_template ?? null,
             reminder_1week_template: settings.reminder_1week_template ?? null,
             payment_request_template: settings.payment_request_template ?? null,
-            enable_auto_reminders: settings.enable_auto_reminders ?? false,
+            enable_auto_renewal_reminders: settings.enable_auto_renewal_reminders ?? false,
             birthday_sms_enabled: settings.birthday_sms_enabled ?? false,
             birthday_sms_template: settings.birthday_sms_template ?? null,
             license_expiry_sms_enabled: settings.license_expiry_sms_enabled ?? false,
@@ -231,7 +231,7 @@ export default function SmsSettings() {
             reminder_1month_template: settings.reminder_1month_template ?? null,
             reminder_1week_template: settings.reminder_1week_template ?? null,
             payment_request_template: settings.payment_request_template ?? null,
-            enable_auto_reminders: settings.enable_auto_reminders ?? false,
+            enable_auto_renewal_reminders: settings.enable_auto_renewal_reminders ?? false,
             birthday_sms_enabled: settings.birthday_sms_enabled ?? false,
             birthday_sms_template: settings.birthday_sms_template ?? null,
             license_expiry_sms_enabled: settings.license_expiry_sms_enabled ?? false,
@@ -504,9 +504,9 @@ export default function SmsSettings() {
                       </p>
                     </div>
                     <Switch
-                      checked={settings.enable_auto_reminders || false}
+                      checked={settings.enable_auto_renewal_reminders || false}
                       onCheckedChange={(checked) =>
-                        setSettings((prev) => ({ ...prev, enable_auto_reminders: checked }))
+                        setSettings((prev) => ({ ...prev, enable_auto_renewal_reminders: checked }))
                       }
                     />
                   </div>
