@@ -15,6 +15,12 @@ const corsHeaders = {
 interface SendSignatureSmsRequest {
   client_id: string;
   policy_id?: string; // Optional, kept for backward compatibility but not used for content
+  /** When true, build the signature page + customer_signatures row and
+   *  return the WhatsApp deep-link payload (phone + message_text) WITHOUT
+   *  sending an SMS. The caller opens https://wa.me/<phone>?text=... so
+   *  no SMS quota is consumed. Mirrors the whatsapp_mode pattern used by
+   *  send-payment-receipt-sms / send-package-invoice-sms. */
+  whatsapp_mode?: boolean;
 }
 
 function generateToken(length = 32): string {
@@ -85,13 +91,17 @@ serve(async (req) => {
     const agentId = await resolveAgentId(supabase, user.id);
     const branding = await getAgentBranding(supabase, agentId);
 
-    // Enforce SMS quota
-    const smsCheck = await checkUsageLimit(supabase, agentId, "sms");
-    if (!smsCheck.allowed) {
-      return limitReachedResponse("sms", smsCheck, corsHeaders);
-    }
+    const { client_id, policy_id, whatsapp_mode }: SendSignatureSmsRequest = await req.json();
 
-    const { client_id, policy_id }: SendSignatureSmsRequest = await req.json();
+    // SMS quota only applies when we're actually sending an SMS.
+    // WhatsApp mode hands the link off to the agent's own WhatsApp app
+    // and never touches the SMS provider, so the SMS gate is skipped.
+    if (!whatsapp_mode) {
+      const smsCheck = await checkUsageLimit(supabase, agentId, "sms");
+      if (!smsCheck.allowed) {
+        return limitReachedResponse("sms", smsCheck, corsHeaders);
+      }
+    }
 
     if (!client_id) {
       return new Response(
@@ -147,10 +157,15 @@ serve(async (req) => {
       );
     }
 
-    // Get SMS credentials (with Thiqa platform fallback)
-    const smsSettings = await resolveSmsSettings(supabase, agentId);
+    // Get SMS credentials (with Thiqa platform fallback). In WhatsApp
+    // mode we don't need them — the message goes through the agent's
+    // own WhatsApp client — so skip the lookup and don't fail when
+    // the agent hasn't configured an SMS provider.
+    const smsSettings = whatsapp_mode
+      ? null
+      : await resolveSmsSettings(supabase, agentId);
 
-    if (!smsSettings) {
+    if (!whatsapp_mode && !smsSettings) {
       return new Response(
         JSON.stringify({ error: "SMS service is not enabled" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -269,7 +284,8 @@ serve(async (req) => {
       );
     }
 
-    // Build SMS message - use the CDN URL (ends in .html)
+    // Build the message body once — same template for SMS and WhatsApp
+    // so the customer reads the same copy in either channel.
     let smsMessage = agentSmsRow?.signature_sms_template ||
       "مرحباً {{client_name}}، يرجى التوقيع على الرابط التالي: {{signature_url}}";
 
@@ -279,11 +295,33 @@ serve(async (req) => {
 
     smsMessage = appendSmsFooter(smsMessage, branding);
 
-    const cleanPhone = normalizePhoneFor(smsSettings.provider, client.phone_number);
+    if (whatsapp_mode) {
+      // WhatsApp deep-link: caller opens https://wa.me/<phone>?text=...
+      // and the agent's own WhatsApp client sends the message. We strip
+      // a leading "+" because wa.me wants the bare digits.
+      const whatsappPhone = (client.phone_number || "").replace(/^\+/, "").replace(/\D/g, "");
+      const duration = Date.now() - startTime;
+      console.log(`[send-signature-sms] WhatsApp mode completed in ${duration}ms`);
+      return new Response(
+        JSON.stringify({
+          success: true,
+          mode: "whatsapp",
+          whatsapp_phone: whatsappPhone,
+          message_text: smsMessage,
+          signature_page_url: signaturePageUrl,
+          expires_at: tokenExpiresAt,
+          duration_ms: duration,
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
-    console.log(`[send-signature-sms] Sending SMS via ${smsSettings.provider} to ${cleanPhone}`);
+    // SMS path (unchanged from the original behavior).
+    const cleanPhone = normalizePhoneFor(smsSettings!.provider, client.phone_number);
 
-    const sendResult = await sendSms(smsSettings, client.phone_number, smsMessage);
+    console.log(`[send-signature-sms] Sending SMS via ${smsSettings!.provider} to ${cleanPhone}`);
+
+    const sendResult = await sendSms(smsSettings!, client.phone_number, smsMessage);
     console.log(`[send-signature-sms] ${sendResult.provider} raw response:`, sendResult.rawResponse);
 
     if (!sendResult.success) {
@@ -315,8 +353,8 @@ serve(async (req) => {
     console.log(`[send-signature-sms] Completed in ${duration}ms`);
 
     return new Response(
-      JSON.stringify({ 
-        success: true, 
+      JSON.stringify({
+        success: true,
         message: "Signature request sent via SMS",
         sent_to: cleanPhone,
         signature_page_url: signaturePageUrl,

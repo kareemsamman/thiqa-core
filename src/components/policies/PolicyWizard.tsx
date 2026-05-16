@@ -78,7 +78,16 @@ export function PolicyWizard({
   const { toast } = useToast();
   const { handleLimitError } = useUpgradePrompt();
   const navigate = useNavigate();
-  const { agentId } = useAgentContext();
+  const { agentId, agent } = useAgentContext();
+  // Per-agent setting (/subscription → الحساب). When set to
+  // 'on_completion' the in-wizard "client hasn't signed" dialog is
+  // suppressed; instead PolicySuccessDialog renders an extra
+  // "توقيع العميل" row after save. Default for legacy agents
+  // (column absent or NULL) is the current 'on_client_select' behavior.
+  const signingTiming: 'on_client_select' | 'on_completion' =
+    (agent as any)?.signing_check_timing === 'on_completion'
+      ? 'on_completion'
+      : 'on_client_select';
 
   // Use the centralized wizard state hook. In the multi-instance model
   // this wizard stays mounted while it is minimized, so we always pass
@@ -361,6 +370,10 @@ export function PolicyWizard({
     // auto-row is excluded — see source='user' filter at save time).
     // Drives whether the "سند القبض" action shows in the success dialog.
     receiptPaymentIds: string[];
+    // Snapshot of whether the client had a signature at save time.
+    // When false AND signing_check_timing='on_completion' the success
+    // dialog shows a third row for SMS / WhatsApp signing requests.
+    clientHasSignature: boolean;
   } | null>(null);
 
   // Track category fetch so Step 1 can render a skeleton instead of
@@ -600,8 +613,11 @@ export function PolicyWizard({
   const handleNext = async () => {
     if (!validateStep(currentStep)) return;
 
-    // Step 1: require signing check before advancing
-    if (currentStep === 1) {
+    // Step 1: require signing check before advancing — UNLESS the
+    // agent picked "بعد إتمام المعاملة" in /subscription → الحساب,
+    // in which case the prompt is deferred to PolicySuccessDialog
+    // and we just validate + advance here.
+    if (currentStep === 1 && signingTiming === 'on_client_select') {
       if (createNewClient) {
         // Block if this id_number already belongs to another client in the same agent
         const idDigits = digitsOnly(newClient.id_number);
@@ -634,6 +650,22 @@ export function PolicyWizard({
           setSigningCheckOpen(true);
           return;
         }
+      }
+    } else if (currentStep === 1 && signingTiming === 'on_completion' && createNewClient) {
+      // Even in deferred mode we still have to fail-fast on a
+      // duplicate id_number — the wizard otherwise lets the user
+      // walk all four steps before the save call rejects.
+      const idDigits = digitsOnly(newClient.id_number);
+      const { data: existing } = await supabase
+        .from('clients')
+        .select('id')
+        .eq('id_number', idDigits)
+        .is('deleted_at', null)
+        .limit(1)
+        .maybeSingle();
+      if (existing) {
+        setErrors({ id_number: "رقم الهوية مستخدم مسبقاً لدى عميل آخر" });
+        return;
       }
     }
 
@@ -1855,6 +1887,7 @@ export function PolicyWizard({
         clientPhone: clientPhone || null,
         isPackage: packageMode && packageAddons.some(addon => addon.enabled),
         receiptPaymentIds,
+        clientHasSignature: !!selectedClient?.signature_url,
       });
       setShowSuccessDialog(true);
       
@@ -2439,6 +2472,9 @@ export function PolicyWizard({
           clientPhone={successPolicyData.clientPhone}
           isPackage={successPolicyData.isPackage}
           receiptPaymentIds={successPolicyData.receiptPaymentIds}
+          showSigningRow={
+            signingTiming === 'on_completion' && !successPolicyData.clientHasSignature
+          }
           onClose={() => {
             const clientIdToNavigate = successPolicyData.clientId;
             setShowSuccessDialog(false);

@@ -20,6 +20,13 @@ interface AgentInfo {
   pending_plan: string | null;
   cancelled_at: string | null;
   default_employee_permissions: Record<string, boolean> | null;
+  /** When to surface the customer-signature prompt in the policy wizard.
+   *  Set in /subscription → الحساب. See migration
+   *  20260516200000_agents_signing_check_timing for the allowed values.
+   *  Optional because the generated supabase types.ts won't include the
+   *  column until it's regenerated post-deploy; callers should treat
+   *  `undefined` as the default 'on_client_select'. */
+  signing_check_timing?: 'on_client_select' | 'on_completion' | null;
 }
 
 // Plan limits + metadata for the agent's current plan. Loaded from

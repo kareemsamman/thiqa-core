@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useSmsLock } from "@/hooks/useSmsLock";
 import { supabase } from "@/integrations/supabase/client";
-import { toastFunctionError } from "@/lib/functionError";
+import { toastFunctionError, extractFunctionErrorMessage } from "@/lib/functionError";
 import { toast } from "sonner";
 import {
   Printer,
@@ -26,11 +26,12 @@ import {
   FileText,
   Receipt,
   Info,
+  FileSignature,
 } from "lucide-react";
 import { WhatsappLogo } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 
-type RowKey = "transaction" | "receipt";
+type RowKey = "transaction" | "receipt" | "signing";
 type ChannelKey = "print" | "sms" | "whatsapp";
 type ChannelState = "idle" | "loading" | "sent";
 
@@ -52,6 +53,11 @@ interface PolicySuccessDialogProps {
    *  ("اذا معاملة بس فمعاملة"). The default — false — keeps the
    *  end-of-wizard behavior unchanged. */
   hideReceiptSection?: boolean;
+  /** Render a third "طلب توقيع العميل" row with SMS + WhatsApp actions.
+   *  Set by PolicyWizard only when the agent has
+   *  signing_check_timing='on_completion' AND the client doesn't already
+   *  have a signature on file. */
+  showSigningRow?: boolean;
 }
 
 const ROW_LABELS: Record<RowKey, { title: string; desc: string; tooltip: string }> = {
@@ -67,17 +73,25 @@ const ROW_LABELS: Record<RowKey, { title: string; desc: string; tooltip: string 
     tooltip:
       "سند القبض إثبات استلام المبلغ من العميل بنفس شكل السندات في صفحة الإيصالات.",
   },
+  signing: {
+    title: "طلب توقيع العميل",
+    desc: "يرسل رابط نموذج التفويض للعميل عبر SMS أو واتساب",
+    tooltip:
+      "العميل لم يوقّع على نموذج التفويض بعد. اختر SMS أو واتساب لإرسال رابط التوقيع، وستظهر علامة خضراء هنا تلقائياً فور توقيع العميل.",
+  },
 };
 
 export function PolicySuccessDialog({
   open,
   onOpenChange,
   policyId,
+  clientId,
   clientPhone,
   isPackage,
   receiptPaymentIds,
   onClose,
   hideReceiptSection = false,
+  showSigningRow = false,
 }: PolicySuccessDialogProps) {
   // Only one action panel is ever open at a time — clicking the other
   // row collapses this one and opens that one with the same animation.
@@ -88,6 +102,13 @@ export function PolicySuccessDialog({
   // icon in the same panel without losing context.
   const [cellState, setCellState] = useState<Record<string, ChannelState>>({});
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // Flips true once realtime picks up an UPDATE on the client row with
+  // signature_url set. Used by the signing row to swap its icon to a
+  // green check and show "تم التوقيع" under the buttons.
+  const [clientSigned, setClientSigned] = useState(false);
+  // True between firing SMS/WhatsApp and the realtime signal. Drives
+  // the "في انتظار توقيع العميل..." hint under the row.
+  const [signingWaiting, setSigningWaiting] = useState(false);
 
   const {
     locked: smsLocked,
@@ -355,11 +376,139 @@ export function PolicySuccessDialog({
     }
   };
 
+  // ─── Signing actions ───────────────────────────────────────────
+  // Mirrors SigningCheckDialog's send flow but lives here because
+  // /subscription → الحساب lets agents defer the prompt from the
+  // wizard to this post-save dialog. Two channels: SMS (same edge
+  // function as before) and WhatsApp (whatsapp_mode → wa.me deep-link).
+  const handleSigningSms = async () => {
+    if (!clientPhone) {
+      toast.error("لا يوجد رقم هاتف للعميل");
+      return;
+    }
+    if (smsLoading) return;
+    if (smsLocked) {
+      openSmsUpgrade();
+      return;
+    }
+
+    setCell("signing", "sms", "loading");
+    setErrorMessage(null);
+    try {
+      const { data, error } = await supabase.functions.invoke(
+        "send-signature-sms",
+        { body: { client_id: clientId } },
+      );
+      if (error) {
+        const msg = await extractFunctionErrorMessage(error);
+        throw new Error(msg || "فشل في إرسال طلب التوقيع");
+      }
+      if (data?.success === false) {
+        // Edge function returns success:false when the client already
+        // has a signature on file — surface as info, not error.
+        toast.info(data.message || "العميل لديه توقيع مسبق");
+        setClientSigned(true);
+        setCell("signing", "sms", "idle");
+        return;
+      }
+      setCell("signing", "sms", "sent");
+      setSigningWaiting(true);
+      toast.success(
+        clientPhone
+          ? `تم إرسال رابط التوقيع إلى ${clientPhone}`
+          : "تم إرسال رابط التوقيع",
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "فشل في إرسال طلب التوقيع";
+      setErrorMessage(msg);
+      toast.error(msg);
+      setCell("signing", "sms", "idle");
+    }
+  };
+
+  const handleSigningWhatsapp = async () => {
+    if (!clientPhone) {
+      toast.error("لا يوجد رقم هاتف للعميل");
+      return;
+    }
+    setCell("signing", "whatsapp", "loading");
+    setErrorMessage(null);
+    try {
+      const { data, error } = await supabase.functions.invoke(
+        "send-signature-sms",
+        { body: { client_id: clientId, whatsapp_mode: true } },
+      );
+      if (error) {
+        const msg = await extractFunctionErrorMessage(error);
+        throw new Error(msg || "فشل في تجهيز رسالة واتساب");
+      }
+      if (data?.success === false) {
+        toast.info(data.message || "العميل لديه توقيع مسبق");
+        setClientSigned(true);
+        setCell("signing", "whatsapp", "idle");
+        return;
+      }
+      const phone = data?.whatsapp_phone;
+      const text = data?.message_text;
+      if (!phone || !text) {
+        toast.error("لم يتم تجهيز رسالة واتساب");
+        setCell("signing", "whatsapp", "idle");
+        return;
+      }
+      window.open(
+        `https://wa.me/${phone}?text=${encodeURIComponent(text)}`,
+        "_blank",
+      );
+      setCell("signing", "whatsapp", "sent");
+      setSigningWaiting(true);
+      toast.success("تم فتح واتساب");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "فشل في تجهيز رسالة واتساب";
+      setErrorMessage(msg);
+      toast.error(msg);
+      setCell("signing", "whatsapp", "idle");
+    }
+  };
+
+  // Realtime: detect the moment the client signs from the link we just
+  // sent. Same pattern as SigningCheckDialog. Only subscribe when the
+  // signing row is on screen — otherwise this dialog opens a channel
+  // for every saved policy, signed or not.
+  useEffect(() => {
+    if (!open || !showSigningRow || !clientId || clientSigned) return;
+
+    const channel = supabase
+      .channel(`policy-success-signing-${clientId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "clients",
+          filter: `id=eq.${clientId}`,
+        },
+        (payload) => {
+          const updated = payload.new as { signature_url?: string | null };
+          if (updated.signature_url) {
+            setClientSigned(true);
+            setSigningWaiting(false);
+          }
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [open, showSigningRow, clientId, clientSigned]);
+
   // ─── Close ─────────────────────────────────────────────────────
   const handleClose = () => {
     setErrorMessage(null);
     setCellState({});
     setActiveRow(null);
+    setClientSigned(false);
+    setSigningWaiting(false);
     onOpenChange(false);
     onClose();
   };
@@ -450,6 +599,51 @@ export function PolicySuccessDialog({
                 disabledHint="متاح فقط عند وجود دفعة غير الإلزامي"
               />
             )}
+
+            {/* Signing row — only when the agent set
+                signing_check_timing='on_completion' AND the client
+                doesn't already have a signature on file. The wizard
+                computes that and passes showSigningRow. Once the
+                realtime channel observes signature_url set, the row
+                badge flips to green and the buttons disable. */}
+            {showSigningRow && (
+              <RowBlock
+                row="signing"
+                icon={
+                  clientSigned ? (
+                    <CheckCircle2 className="h-6 w-6 text-emerald-600" />
+                  ) : (
+                    <FileSignature className="h-6 w-6 text-amber-600" />
+                  )
+                }
+                iconBg={clientSigned ? "bg-emerald-500/10" : "bg-amber-500/10"}
+                active={activeRow === "signing"}
+                onToggle={() => toggleRow("signing")}
+                channelStates={{
+                  // Print is hidden for this row, but the type forces
+                  // a value — "idle" is harmless since the button
+                  // never renders.
+                  print: "idle",
+                  sms: getCell("signing", "sms"),
+                  whatsapp: getCell("signing", "whatsapp"),
+                }}
+                onPrint={() => {}}
+                onSms={handleSigningSms}
+                onWhatsapp={handleSigningWhatsapp}
+                hasPhone={!!clientPhone}
+                smsLocked={smsLocked}
+                hidePrint
+                disabled={clientSigned}
+                disabledHint={clientSigned ? "تم التوقيع بنجاح" : undefined}
+                belowPanel={
+                  signingWaiting && !clientSigned ? (
+                    <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 text-center">
+                      في انتظار توقيع العميل... ستظهر علامة خضراء فور إتمام التوقيع.
+                    </p>
+                  ) : null
+                }
+              />
+            )}
           </TooltipProvider>
 
           {/* Close */}
@@ -484,10 +678,19 @@ interface RowBlockProps {
   smsLocked: boolean;
   /** Locks the row entirely — main button can't expand its panel and a
    *  small hint takes the place of the panel below. Used for سند القبض
-   *  when the user added no payment beyond the auto-mandatory row. */
+   *  when the user added no payment beyond the auto-mandatory row, and
+   *  for the signing row after the client signs. */
   disabled?: boolean;
   /** Text shown under the disabled main button explaining the gate. */
   disabledHint?: string;
+  /** Skip rendering the Print channel button. Used by the signing row,
+   *  which only ships SMS + WhatsApp (no print equivalent for a
+   *  signature request). */
+  hidePrint?: boolean;
+  /** Extra slot rendered below the action panel (between panel and
+   *  main row button). Used by the signing row to show "في انتظار
+   *  توقيع العميل..." after SMS/WhatsApp fires. */
+  belowPanel?: React.ReactNode;
 }
 
 function RowBlock({
@@ -504,6 +707,8 @@ function RowBlock({
   smsLocked,
   disabled,
   disabledHint,
+  hidePrint,
+  belowPanel,
 }: RowBlockProps) {
   const labels = ROW_LABELS[row];
   const expanded = active && !disabled;
@@ -520,13 +725,15 @@ function RowBlock({
         )}
       >
         <div className="flex items-center justify-center gap-2 p-2 bg-muted/40 border border-border/60 rounded-xl">
-          <ChannelButton
-            label="طباعة"
-            state={channelStates.print}
-            onClick={onPrint}
-            icon={<Printer className="h-5 w-5" />}
-            colorIdle="text-emerald-600"
-          />
+          {!hidePrint && (
+            <ChannelButton
+              label="طباعة"
+              state={channelStates.print}
+              onClick={onPrint}
+              icon={<Printer className="h-5 w-5" />}
+              colorIdle="text-emerald-600"
+            />
+          )}
           <ChannelButton
             label={hasPhone ? "إرسال SMS" : "لا يوجد رقم هاتف"}
             state={channelStates.sms}
@@ -589,6 +796,11 @@ function RowBlock({
           <div className="text-sm text-muted-foreground">{labels.desc}</div>
         </div>
       </button>
+
+      {/* Below-panel slot — rendered unconditionally below the main
+          button so e.g. the signing row's "waiting" hint stays visible
+          after the user collapses the action panel. */}
+      {belowPanel}
 
       {/* Hint shown only when the row is gated. Sits directly under the
           button so the user can read why the action is unavailable. */}

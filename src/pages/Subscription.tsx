@@ -16,7 +16,7 @@ import {
   Crown, CreditCard, Calendar, Clock, AlertTriangle, Check, X, MessageCircle,
   Sparkles, ShieldCheck, Pause, Info, ArrowUp, ArrowDown,
   Rocket, Shield, Trash2, XCircle, Loader2, Settings, BarChart3, Receipt, UserCog, Plus, ChevronDown,
-  ShoppingCart, KeyRound,
+  ShoppingCart, KeyRound, FileSignature,
 } from "lucide-react";
 import { AddQuotaDialog, type OverageUsageType } from "@/components/subscription/AddQuotaDialog";
 import { AgentPlanOverview, UsageRow } from "@/components/subscription/AgentPlanOverview";
@@ -209,7 +209,7 @@ function UsageStatsSection({ agentId }: { agentId: string | null }) {
 
 export default function Subscription() {
   const { isAdmin } = useAuth();
-  const { agent, agentId } = useAgentContext();
+  const { agent, agentId, refetchAgentContext } = useAgentContext();
   const [plans, setPlans] = useState<PlanData[]>([]);
   const [payments, setPayments] = useState<PaymentRecord[]>([]);
   const [unbilledOverages, setUnbilledOverages] = useState<UnbilledOverage[]>([]);
@@ -244,6 +244,14 @@ export default function Subscription() {
   const [isAgentOwner, setIsAgentOwner] = useState(false);
   const [smsOtpEnabled, setSmsOtpEnabled] = useState(false);
   const [smsOtpSaving, setSmsOtpSaving] = useState(false);
+  // signing_check_timing — controls WHEN the "client hasn't signed"
+  // prompt appears. Off (default) = in the wizard right after client
+  // select; On = deferred to the post-save success dialog. See the
+  // migration 20260516200000 and the consumers PolicyWizard +
+  // PolicySuccessDialog.
+  const [signingTimingSaving, setSigningTimingSaving] = useState(false);
+  const signingOnCompletion =
+    (agent as any)?.signing_check_timing === "on_completion";
 
   useEffect(() => {
     let cancelled = false;
@@ -275,6 +283,29 @@ export default function Subscription() {
     })();
     return () => { cancelled = true; };
   }, [agentId]);
+
+  const handleToggleSigningTiming = async (next: boolean) => {
+    if (!agentId) return;
+    setSigningTimingSaving(true);
+    const value = next ? "on_completion" : "on_client_select";
+    try {
+      const { error } = await supabase
+        .from("agents")
+        .update({ signing_check_timing: value } as any)
+        .eq("id", agentId);
+      if (error) throw error;
+      await refetchAgentContext();
+      toast.success(
+        next
+          ? "سيظهر طلب التوقيع بعد إتمام المعاملة"
+          : "سيظهر طلب التوقيع أثناء إضافة المعاملة"
+      );
+    } catch (err: any) {
+      toast.error(err?.message || "فشل تحديث الإعدادات");
+    } finally {
+      setSigningTimingSaving(false);
+    }
+  };
 
   const handleToggleSmsOtp = async (next: boolean) => {
     setSmsOtpSaving(true);
@@ -1308,6 +1339,37 @@ export default function Subscription() {
                 </CardContent>
               </Card>
             )}
+
+            {/* Signing check timing — controls when the "client hasn't
+                signed" prompt fires during the wizard. Default OFF
+                keeps existing behavior (prompt after client select).
+                ON moves the prompt to the post-save success dialog as
+                an extra row alongside print/send transaction & receipt. */}
+            <Card className="shadow-sm">
+              <CardContent className="py-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                    <FileSignature className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold">توقيت طلب توقيع العميل</h3>
+                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                      عند الإيقاف، يظهر طلب التوقيع داخل نافذة إضافة المعاملة مباشرة بعد اختيار العميل.
+                      عند التفعيل، يُؤجَّل الطلب ليظهر بعد إتمام المعاملة ضمن نافذة الطباعة والإرسال،
+                      مع خيارَي SMS وواتساب.
+                    </p>
+                  </div>
+                </div>
+                <div className="shrink-0 flex items-center gap-2">
+                  {signingTimingSaving && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+                  <Switch
+                    checked={signingOnCompletion}
+                    onCheckedChange={handleToggleSigningTiming}
+                    disabled={signingTimingSaving || !agentId}
+                  />
+                </div>
+              </CardContent>
+            </Card>
 
             {/* Support card */}
             <Card className="shadow-sm">
