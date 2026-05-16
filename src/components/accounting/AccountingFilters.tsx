@@ -46,6 +46,7 @@ interface Props {
     types?: boolean;
     paymentMethods?: boolean;
     hideElzami?: boolean;
+    includeElzamiInDue?: boolean;
     counterparty?: boolean;
     sort?: boolean;
   };
@@ -55,6 +56,12 @@ interface Props {
   // flag in their filter state.
   hideElzami?: boolean;
   onHideElzamiChange?: (next: boolean) => void;
+  // Optional standalone toggle wired only on /accounting CompaniesSection.
+  // Default OFF excludes standalone-ELZAMI rows from the المستحق للشركات
+  // pills (matches /receipts which already hides ELZAMI passthroughs).
+  // ON re-includes them in the calculation.
+  includeElzamiInDue?: boolean;
+  onIncludeElzamiInDueChange?: (next: boolean) => void;
 }
 
 const ALL_SHOWN: Required<NonNullable<Props['show']>> = {
@@ -63,6 +70,7 @@ const ALL_SHOWN: Required<NonNullable<Props['show']>> = {
   types: true,
   paymentMethods: true,
   hideElzami: false,
+  includeElzamiInDue: false,
   counterparty: false,
   sort: false,
 };
@@ -107,6 +115,8 @@ export function AccountingFilters({
   show,
   hideElzami,
   onHideElzamiChange,
+  includeElzamiInDue,
+  onIncludeElzamiInDueChange,
 }: Props) {
   const visible = { ...ALL_SHOWN, ...(show ?? {}) };
   const [dateMode, setDateMode] = useState<DateMode>(() =>
@@ -124,6 +134,7 @@ export function AccountingFilters({
     value.types.length +
     value.paymentMethods.length +
     (visible.hideElzami && hideElzami ? 1 : 0) +
+    (visible.includeElzamiInDue && includeElzamiInDue ? 1 : 0) +
     (visible.counterparty && counterparty !== 'all' ? 1 : 0);
 
   const reset = () => {
@@ -136,6 +147,7 @@ export function AccountingFilters({
       counterparty: 'all',
     });
     if (visible.hideElzami) onHideElzamiChange?.(false);
+    if (visible.includeElzamiInDue) onIncludeElzamiInDueChange?.(false);
   };
 
   const setMonth = (m: string) => {
@@ -341,6 +353,24 @@ export function AccountingFilters({
                 </span>
                 <p className="text-[10px] text-muted-foreground leading-snug">
                   يخفي الدفعات التي يساوي مبلغها سعر الإلزامي (لا يتم تحصيلها من قبل الوكالة)
+                </p>
+              </div>
+            </label>
+          )}
+
+          {visible.includeElzamiInDue && (
+            <label className="flex items-start gap-2 cursor-pointer select-none pt-1">
+              <Checkbox
+                checked={!!includeElzamiInDue}
+                onCheckedChange={(v) => onIncludeElzamiInDueChange?.(v === true)}
+                className="mt-0.5"
+              />
+              <div className="space-y-0.5">
+                <span className="text-xs font-medium leading-none">
+                  تضمين الإلزامي في المستحق للشركات
+                </span>
+                <p className="text-[10px] text-muted-foreground leading-snug">
+                  افتراضياً يُستثنى الإلزامي من المستحق (الزبون يدفع للشركة مباشرة). فعّل للحساب.
                 </p>
               </div>
             </label>

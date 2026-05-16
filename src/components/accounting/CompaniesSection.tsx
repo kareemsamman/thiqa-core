@@ -158,6 +158,12 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
   // customer picker on ClientsSection. When set, every list collapses
   // to that company's rows.
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
+  // Default OFF: standalone-ELZAMI rows are excluded from the
+  // المستحق للشركات pills (matches /receipts which already hides
+  // ELZAMI passthroughs). Mixed packages already exclude ELZAMI inside
+  // useAccountingData, so this toggle only affects pure-ELZAMI rows.
+  // Toggle ON to include them in the calculation.
+  const [includeElzamiInDue, setIncludeElzamiInDue] = useState(false);
   // Voucher action picker (print / SMS / WhatsApp) when the user
   // clicks a settlement's voucher number — same dialog the customer
   // accounting page uses. Company settlements live in their own table
@@ -479,8 +485,20 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
       0,
     );
     const elzamiPassthrough = grossInsuranceSum - insuranceSum;
-    // Total owed to companies — sum across active policies.
-    const totalDue = overlayed.reduce((s, r) => s + Number(r.payed_for_company || 0), 0);
+    // Total owed to companies — sum across active policies. Standalone-
+    // ELZAMI rows (every sub is ELZAMI) are excluded by default because
+    // the customer pays the insurer directly for إلزامي — so the office
+    // doesn't actually owe the company anything. Toggle includeElzamiInDue
+    // re-adds them via the filter popover.
+    const elzamiOnlyDue = overlayed
+      .filter(
+        (r) =>
+          r.sub_policies.length > 0 &&
+          r.sub_policies.every((s) => s.policy_type_parent === 'ELZAMI'),
+      )
+      .reduce((s, r) => s + Number(r.payed_for_company || 0), 0);
+    const totalDueAll = overlayed.reduce((s, r) => s + Number(r.payed_for_company || 0), 0);
+    const totalDue = includeElzamiInDue ? totalDueAll : totalDueAll - elzamiOnlyDue;
     const profitOnly = overlayed.reduce((s, r) => s + Number(r.profit || 0), 0);
     const commissionOnly = overlayed.reduce((s, r) => s + Number(r.office_commission || 0), 0);
     const profitSum = profitOnly + commissionOnly;
@@ -550,6 +568,7 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
       profitSum,
       disbursedSum,
       totalDue,
+      elzamiOnlyDue,
       returnsDueDelta,
       returnsProfitDelta,
       profitOnly,
@@ -569,6 +588,7 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
     editLocal,
     data.expensesTotal,
     brokerProfit,
+    includeElzamiInDue,
   ]);
 
   const fmt = (n: number) => `₪${n.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
@@ -675,6 +695,9 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
                 title="المستحق للشركات (إجمالي)"
                 lines={[
                   { label: 'إجمالي مستحق من البوالص النشطة', value: fmt(totals.totalDue) },
+                  ...(!includeElzamiInDue && totals.elzamiOnlyDue > 0
+                    ? [{ label: 'إلزامي مستثنى (الزبون يدفع الشركة مباشرة)', value: `− ${fmt(totals.elzamiOnlyDue)}` }]
+                    : []),
                   ...(totals.companyCreditNotesTotal > 0
                     ? [{ label: 'إشعار دائن للشركة', value: `− ${fmt(totals.companyCreditNotesTotal)}` }]
                     : []),
@@ -684,7 +707,9 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
                   { label: 'الإجمالي قبل المدفوعات', value: fmt(totals.dueGrossSum), strong: true },
                   {
                     label: 'ملاحظة',
-                    value: 'الإصدارات الملغية لا تُحسب — راجع سند قبض/إشعار مدين للاسترداد',
+                    value: includeElzamiInDue
+                      ? 'الإلزامي مُضمّن — أطفئ الفلتر لاستثنائه. الإصدارات الملغية لا تُحسب.'
+                      : 'الإصدارات الملغية لا تُحسب — راجع سند قبض/إشعار مدين للاسترداد',
                     muted: true,
                   },
                 ]}
@@ -702,6 +727,9 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
                 title="المستحق للشركات (صافي)"
                 lines={[
                   { label: 'إجمالي مستحق من البوالص النشطة', value: fmt(totals.totalDue) },
+                  ...(!includeElzamiInDue && totals.elzamiOnlyDue > 0
+                    ? [{ label: 'إلزامي مستثنى (الزبون يدفع الشركة مباشرة)', value: `− ${fmt(totals.elzamiOnlyDue)}` }]
+                    : []),
                   { label: 'مدفوع للشركات', value: `− ${fmt(totals.disbursedSum)}` },
                   ...(totals.companyCreditNotesTotal > 0
                     ? [{ label: 'إشعار دائن للشركة', value: `− ${fmt(totals.companyCreditNotesTotal)}` }]
@@ -813,6 +841,8 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
             companyOptions={companyOptions}
             typeOptions={typeOptions}
             paymentMethodOptions={paymentOptions}
+            includeElzamiInDue={includeElzamiInDue}
+            onIncludeElzamiInDueChange={setIncludeElzamiInDue}
             show={{
               dateRange: true,
               // Company multi-select moves to the dedicated picker
@@ -821,6 +851,7 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
               types: !isSettlementTab,
               paymentMethods: true,
               sort: true,
+              includeElzamiInDue: true,
             }}
           />
         </div>
