@@ -1311,7 +1311,6 @@ function PolicyPackageCard({
   const isTransferred = pkg.status === 'transferred';
   const isCancelled = pkg.status === 'cancelled';
   const isPkg = isPackageProp || (pkg.addons.length > 0 && pkg.mainPolicy !== null);
-  const hasUnpaid = !paymentStatus.isPaid;
   // Broker-involved packages: the money is tracked against the broker,
   // not the customer. Suppress the customer-debt surface (red "remaining"
   // totals and the "دفع" button) and show a neutral notice instead. The
@@ -1395,9 +1394,7 @@ function PolicyPackageCard({
         // Ended: Neutral
         pkg.status === 'ended' && "bg-muted/20 border-border",
         // Transferred/Cancelled: Muted
-        (isTransferred || isCancelled) && "bg-muted/10 border-dashed border-muted-foreground/30 opacity-70",
-        // Unpaid indicator
-        hasUnpaid && isActive && "border-r-4 border-r-destructive"
+        (isTransferred || isCancelled) && "bg-muted/10 border-dashed border-muted-foreground/30 opacity-70"
       )}
     >
       <div className="p-4">
