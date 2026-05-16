@@ -123,9 +123,11 @@ export function CompanyDrawer({ open, onClose, company, onSuccess }: CompanyDraw
       return;
     }
 
-    setLoading(true);
-    try {
-      if (company) {
+    if (company) {
+      // Edit — keep the blocking flow so the user sees the update applied
+      // before the drawer closes.
+      setLoading(true);
+      try {
         const { error } = await supabase
           .from('insurance_companies')
           .update({
@@ -144,39 +146,55 @@ export function CompanyDrawer({ open, onClose, company, onSuccess }: CompanyDraw
           title: 'تم التحديث',
           description: 'تم تحديث بيانات الشركة بنجاح',
         });
-      } else {
-        const { error } = await supabase
-          .from('insurance_companies')
-          .insert({
-            name: formData.name.trim(),
-            name_ar: formData.name_ar.trim() || null,
-            category_parent: formData.category_parents,
-            active: formData.active,
-            elzami_commission: formData.category_parents.includes('ELZAMI') ? formData.elzami_commission : 0,
-            broker_id: formData.broker_id || null,
-            agent_id: agentId,
-          });
-
-        if (error) throw error;
-
+        onSuccess();
+      } catch (error: any) {
+        console.error('Error saving company:', error);
         toast({
-          title: 'تمت الإضافة',
-          description: 'تمت إضافة الشركة بنجاح',
+          title: 'خطأ',
+          description: error.message || 'فشل في حفظ بيانات الشركة',
+          variant: 'destructive',
         });
+      } finally {
+        setLoading(false);
       }
+      return;
+    }
 
-      
-      onSuccess();
-    } catch (error: any) {
+    // Add — close the drawer immediately and run the insert in the
+    // background so the click feels instant. The success/error toast
+    // arrives when the round-trip actually completes; the list refetch
+    // fires only on success.
+    const payload = {
+      name: formData.name.trim(),
+      name_ar: formData.name_ar.trim() || null,
+      category_parent: formData.category_parents,
+      active: formData.active,
+      elzami_commission: formData.category_parents.includes('ELZAMI') ? formData.elzami_commission : 0,
+      broker_id: formData.broker_id || null,
+      agent_id: agentId,
+    };
+
+    onClose();
+
+    const { error } = await supabase
+      .from('insurance_companies')
+      .insert(payload);
+
+    if (error) {
       console.error('Error saving company:', error);
       toast({
         title: 'خطأ',
-        description: error.message || 'فشل في حفظ بيانات الشركة',
+        description: error.message || `فشل في إضافة الشركة "${payload.name_ar || payload.name}"`,
         variant: 'destructive',
       });
-    } finally {
-      setLoading(false);
+      return;
     }
+
+    toast({
+      title: 'تمت الإضافة',
+      description: 'تمت إضافة الشركة بنجاح',
+    });
+    onSuccess();
   };
 
   const handleDelete = async () => {
