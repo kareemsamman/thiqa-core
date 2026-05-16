@@ -756,50 +756,72 @@ export default function Cheques() {
       if (error) throw error;
 
       const paymentIds = (data || []).map((c: any) => c.id);
-      
-      let imagesMap: Record<string, PaymentImage[]> = {};
-      if (paymentIds.length > 0) {
-        const { data: images } = await supabase
-          .from('payment_images')
-          .select('id, payment_id, image_url, image_type')
-          .in('payment_id', paymentIds);
-        
-        imagesMap = (images || []).reduce((acc, img) => {
+
+      // Union the broker IDs we need to look up — both the client's
+      // broker (shown next to each cheque's customer) AND the
+      // transferred-to broker (cheques the office handed off to a
+      // broker). Before, these were two separate queries hitting the
+      // same brokers table; merging into one .in() saves a round-trip.
+      const clientBrokerIds = (data || [])
+        .map((c: any) => c.policies?.clients?.broker_id)
+        .filter(Boolean);
+      const transferredToBrokerIds = (data || [])
+        .filter((c: any) => c.transferred_to_type === 'broker')
+        .map((c: any) => c.transferred_to_id)
+        .filter(Boolean);
+      const allBrokerIds = Array.from(new Set([...clientBrokerIds, ...transferredToBrokerIds]));
+      const transferredToCompanyIds = Array.from(new Set(
+        (data || [])
+          .filter((c: any) => c.transferred_to_type === 'company')
+          .map((c: any) => c.transferred_to_id)
+          .filter(Boolean),
+      ));
+
+      // Three independent lookups, all gated only by the main fetch's
+      // result set — fire them in parallel instead of sequentially.
+      // Empty-input guards stay outside so we don't burn a round-trip
+      // on rows that have no images / no brokers / no transfers.
+      const [imagesRes, brokersRes, companiesRes] = await Promise.all([
+        paymentIds.length > 0
+          ? supabase
+              .from('payment_images')
+              .select('id, payment_id, image_url, image_type')
+              .in('payment_id', paymentIds)
+          : Promise.resolve({ data: [] as Array<{ id: string; payment_id: string; image_url: string; image_type: string }> }),
+        allBrokerIds.length > 0
+          ? supabase.from('brokers').select('id, name').in('id', allBrokerIds)
+          : Promise.resolve({ data: [] as Array<{ id: string; name: string }> }),
+        transferredToCompanyIds.length > 0
+          ? supabase.from('insurance_companies').select('id, name, name_ar').in('id', transferredToCompanyIds)
+          : Promise.resolve({ data: [] as Array<{ id: string; name: string; name_ar: string | null }> }),
+      ]);
+
+      const imagesMap: Record<string, PaymentImage[]> = ((imagesRes as any).data || []).reduce(
+        (acc: Record<string, PaymentImage[]>, img: { id: string; payment_id: string; image_url: string; image_type: string }) => {
           if (!acc[img.payment_id]) acc[img.payment_id] = [];
           acc[img.payment_id].push({ id: img.id, image_url: img.image_url, image_type: img.image_type });
           return acc;
-        }, {} as Record<string, PaymentImage[]>);
-      }
+        },
+        {},
+      );
 
-      const brokerIds = [...new Set(
-        (data || []).map((c: any) => c.policies?.clients?.broker_id).filter(Boolean)
-      )];
-
-      let brokerMap: Record<string, string> = {};
-      if (brokerIds.length > 0) {
-        const { data: brokers } = await supabase.from('brokers').select('id, name').in('id', brokerIds);
-        brokerMap = (brokers || []).reduce((acc, b) => { acc[b.id] = b.name; return acc; }, {} as Record<string, string>);
-      }
-
-      // Fetch broker and company names for transferred cheques
-      const transferredToBrokerIds = [...new Set(
-        (data || []).filter((c: any) => c.transferred_to_type === 'broker').map((c: any) => c.transferred_to_id).filter(Boolean)
-      )];
-      const transferredToCompanyIds = [...new Set(
-        (data || []).filter((c: any) => c.transferred_to_type === 'company').map((c: any) => c.transferred_to_id).filter(Boolean)
-      )];
-
-      let transferBrokerMap: Record<string, string> = {};
-      let transferCompanyMap: Record<string, string> = {};
-      
-      if (transferredToBrokerIds.length > 0) {
-        const { data: brokers } = await supabase.from('brokers').select('id, name').in('id', transferredToBrokerIds);
-        transferBrokerMap = (brokers || []).reduce((acc, b) => { acc[b.id] = b.name; return acc; }, {} as Record<string, string>);
-      }
-      if (transferredToCompanyIds.length > 0) {
-        const { data: companies } = await supabase.from('insurance_companies').select('id, name, name_ar').in('id', transferredToCompanyIds);
-        transferCompanyMap = (companies || []).reduce((acc, c) => { acc[c.id] = c.name_ar || c.name; return acc; }, {} as Record<string, string>);
-      }
+      // Single brokers map shared by both surfaces — the customer's
+      // broker badge AND the transferred-to label both look up here.
+      const brokerMap: Record<string, string> = ((brokersRes as any).data || []).reduce(
+        (acc: Record<string, string>, b: { id: string; name: string }) => {
+          acc[b.id] = b.name;
+          return acc;
+        },
+        {},
+      );
+      const transferBrokerMap = brokerMap;
+      const transferCompanyMap: Record<string, string> = ((companiesRes as any).data || []).reduce(
+        (acc: Record<string, string>, c: { id: string; name: string; name_ar: string | null }) => {
+          acc[c.id] = c.name_ar || c.name;
+          return acc;
+        },
+        {},
+      );
 
       const formattedCheques: ChequeRecord[] = (data || []).map((c: any) => {
         let transferredToName = null;
