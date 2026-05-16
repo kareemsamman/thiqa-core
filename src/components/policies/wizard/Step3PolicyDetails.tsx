@@ -308,6 +308,20 @@ export function Step3PolicyDetails({
     const items = dt.items ? Array.from(dt.items) : [];
     if (items.length === 0) return Array.from(dt.files ?? []);
 
+    // Capture entries + Files synchronously BEFORE awaiting anything.
+    // Once the drop handler yields (first await), the browser neuters
+    // every DataTransferItem and subsequent webkitGetAsEntry() /
+    // getAsFile() calls return null — so without this, only items[0]
+    // ever made it through and dropping 3 files added 1.
+    const captured: Array<{ entry: any | null; file: File | null }> = [];
+    for (const item of items) {
+      if (item.kind !== 'file') continue;
+      // @ts-ignore — webkitGetAsEntry is widely supported
+      const entry = item.webkitGetAsEntry?.() ?? null;
+      const file = entry ? null : item.getAsFile();
+      captured.push({ entry, file });
+    }
+
     const traverse = async (entry: any): Promise<void> => {
       if (entry.isFile) {
         const f: File = await new Promise((resolve, reject) =>
@@ -328,16 +342,9 @@ export function Step3PolicyDetails({
       }
     };
 
-    for (const item of items) {
-      if (item.kind !== 'file') continue;
-      // @ts-ignore — webkitGetAsEntry is widely supported
-      const entry = item.webkitGetAsEntry?.();
-      if (entry) {
-        await traverse(entry);
-      } else {
-        const f = item.getAsFile();
-        if (f) out.push(f);
-      }
+    for (const { entry, file } of captured) {
+      if (entry) await traverse(entry);
+      else if (file) out.push(file);
     }
     return out;
   };
