@@ -96,76 +96,116 @@ export default function Brokers() {
       const { data: brokersData, error, count } = await query;
 
       if (error) throw error;
-      
-      // Fetch stats for each broker
-      const brokersWithStats: BrokerWithStats[] = await Promise.all(
-        (brokersData || []).map(async (broker) => {
-          // Get client count
-          const { count: clientCount } = await supabase
-            .from('clients')
-            .select('*', { count: 'exact', head: true })
-            .eq('broker_id', broker.id)
-            .is('deleted_at', null);
 
-          // Get policies for this broker with date filter
+      const brokerIds = (brokersData || []).map((b) => b.id);
+
+      // Batched stats fetch. Previously this loop fired 3 sequential
+      // queries PER broker (client count + policies + payments) so a
+      // 25-broker page hit ~76 round-trips. We instead pull every
+      // dependent dataset for the visible brokers in one shot:
+      //   • clients     — id + broker_id, counted client-side
+      //   • policies    — every policy whose broker_id is on this page
+      //                   (already date-filtered)
+      //   • payments    — all policy_payments for those policies
+      // Then group by broker_id in memory. Three queries total instead
+      // of 3 × N.
+      const [clientsRes, policiesRes] = await Promise.all([
+        brokerIds.length > 0
+          ? supabase
+              .from('clients')
+              .select('id, broker_id')
+              .in('broker_id', brokerIds)
+              .is('deleted_at', null)
+          : Promise.resolve({ data: [] as Array<{ id: string; broker_id: string | null }> }),
+        (async () => {
+          if (brokerIds.length === 0) {
+            return { data: [] as Array<{ id: string; group_id: string | null; insurance_price: number; broker_direction: string | null; broker_buy_price: number | null; broker_id: string | null }> };
+          }
           let policyQuery = supabase
             .from('policies')
-            .select('id, group_id, insurance_price, broker_direction, broker_buy_price')
-            .eq('broker_id', broker.id)
+            .select('id, group_id, insurance_price, broker_direction, broker_buy_price, broker_id')
+            .in('broker_id', brokerIds)
             .is('deleted_at', null);
+          if (startDate) policyQuery = policyQuery.gte('start_date', startDate);
+          if (endDate) policyQuery = policyQuery.lte('start_date', endDate);
+          return policyQuery;
+        })(),
+      ]);
 
-          if (startDate) {
-            policyQuery = policyQuery.gte('start_date', startDate);
-          }
-          if (endDate) {
-            policyQuery = policyQuery.lte('start_date', endDate);
-          }
+      const clientCountByBroker = new Map<string, number>();
+      for (const c of ((clientsRes as any).data || []) as Array<{ broker_id: string | null }>) {
+        if (!c.broker_id) continue;
+        clientCountByBroker.set(c.broker_id, (clientCountByBroker.get(c.broker_id) || 0) + 1);
+      }
 
-          const { data: policies } = await policyQuery;
+      type PolicyRow = {
+        id: string;
+        group_id: string | null;
+        insurance_price: number;
+        broker_direction: string | null;
+        broker_buy_price: number | null;
+        broker_id: string | null;
+      };
+      const policiesByBroker = new Map<string, PolicyRow[]>();
+      const allPolicyIds: string[] = [];
+      for (const p of ((policiesRes as any).data || []) as PolicyRow[]) {
+        if (!p.broker_id) continue;
+        if (!policiesByBroker.has(p.broker_id)) policiesByBroker.set(p.broker_id, []);
+        policiesByBroker.get(p.broker_id)!.push(p);
+        allPolicyIds.push(p.id);
+      }
 
-          const policyIds = policies?.map(p => p.id) || [];
-          
-          // Get payments for these policies
-          let totalCollected = 0;
-          if (policyIds.length > 0) {
-            const { data: payments } = await supabase
-              .from('policy_payments')
-              .select('amount, refused')
-              .in('policy_id', policyIds);
-            
-            totalCollected = payments?.filter(p => !p.refused).reduce((sum, p) => sum + Number(p.amount), 0) || 0;
-          }
+      // One payments fetch for the full union of policy IDs across all
+      // visible brokers — sums get attributed back per-broker via the
+      // policy → broker map.
+      const paidByPolicy = new Map<string, number>();
+      if (allPolicyIds.length > 0) {
+        const { data: payments } = await supabase
+          .from('policy_payments')
+          .select('policy_id, amount, refused')
+          .in('policy_id', allPolicyIds);
+        for (const p of (payments || []) as Array<{ policy_id: string; amount: number | null; refused: boolean | null }>) {
+          if (p.refused) continue;
+          paidByPolicy.set(p.policy_id, (paidByPolicy.get(p.policy_id) || 0) + Number(p.amount || 0));
+        }
+      }
 
-          // Calculate broker balance based on direction
-          // to_broker = I made for broker (he owes me the insurance_price)
-          // from_broker = broker made for me (I owe him the broker_buy_price)
-          const toBrokerPolicies = policies?.filter(p => p.broker_direction === 'to_broker') || [];
-          const fromBrokerPolicies = policies?.filter(p => p.broker_direction === 'from_broker') || [];
-          
-          // For to_broker: use insurance_price (what broker owes me)
-          const toBrokerTotal = toBrokerPolicies.reduce((sum, p) => sum + Number(p.insurance_price), 0);
-          // For from_broker: use broker_buy_price (what I owe broker)
-          const fromBrokerTotal = fromBrokerPolicies.reduce((sum, p) => sum + (Number(p.broker_buy_price) || Number(p.insurance_price)), 0);
-          
-          // Net balance: what broker owes me (positive) or what I owe broker (negative)
-          const netBalance = toBrokerTotal - fromBrokerTotal;
+      const brokersWithStats: BrokerWithStats[] = (brokersData || []).map((broker) => {
+        const policies = policiesByBroker.get(broker.id) || [];
+        const totalCollected = policies.reduce(
+          (sum, p) => sum + (paidByPolicy.get(p.id) || 0),
+          0,
+        );
 
-          // Collapse package policies (sharing a group_id) into a
-          // single معاملة so the count here matches the broker page —
-          // a 2-policy package is one transaction, not two.
-          const transactionKeys = new Set(
-            (policies || []).map(p => p.group_id || `single-${p.id}`),
-          );
+        // Calculate broker balance based on direction
+        // to_broker = I made for broker (he owes me the insurance_price)
+        // from_broker = broker made for me (I owe him the broker_buy_price)
+        const toBrokerPolicies = policies.filter((p) => p.broker_direction === 'to_broker');
+        const fromBrokerPolicies = policies.filter((p) => p.broker_direction === 'from_broker');
 
-          return {
-            ...broker,
-            client_count: clientCount || 0,
-            policy_count: transactionKeys.size,
-            total_collected: totalCollected,
-            total_remaining: netBalance, // This is now "لي عليه" (what broker owes me)
-          };
-        })
-      );
+        const toBrokerTotal = toBrokerPolicies.reduce((sum, p) => sum + Number(p.insurance_price), 0);
+        const fromBrokerTotal = fromBrokerPolicies.reduce(
+          (sum, p) => sum + (Number(p.broker_buy_price) || Number(p.insurance_price)),
+          0,
+        );
+
+        const netBalance = toBrokerTotal - fromBrokerTotal;
+
+        // Collapse package policies (sharing a group_id) into a
+        // single معاملة so the count here matches the broker page —
+        // a 2-policy package is one transaction, not two.
+        const transactionKeys = new Set(
+          policies.map((p) => p.group_id || `single-${p.id}`),
+        );
+
+        return {
+          ...broker,
+          client_count: clientCountByBroker.get(broker.id) || 0,
+          policy_count: transactionKeys.size,
+          total_collected: totalCollected,
+          total_remaining: netBalance, // "لي عليه" (what broker owes me)
+        };
+      });
 
       setBrokers(brokersWithStats);
       setTotalCount(count || 0);
