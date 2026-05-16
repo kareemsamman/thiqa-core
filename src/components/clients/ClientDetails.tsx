@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Helmet } from 'react-helmet-async';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Header } from '@/components/layout/Header';
@@ -345,6 +346,21 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   const { getBranchName } = useBranches();
   const { isAdmin, isSuperAdmin, profile, user } = useAuth();
   const { can } = usePermissions();
+  // QueryClient drives the cross-mount cache used by the fetchX
+  // wrappers below — leaving and returning to the same client within
+  // ~30s replays cached state instead of re-running the queries. The
+  // wrapper pattern (see fetchPaymentSummary header) is preferred
+  // over a full useQuery rewrite because the existing setters are
+  // referenced by ~30 sites in this file, and the wrapper keeps the
+  // setState contract intact while just gating network round-trips.
+  //
+  // Cache check is gated to the INITIAL load only — post-mutation
+  // refreshes (after saving a payment, editing a policy, etc.) always
+  // bypass cache so the user sees fresh data immediately. The ref
+  // resets on every client.id change (loadInitialData sets it false
+  // at start, true after Promise.all completes).
+  const queryClient = useQueryClient();
+  const initialLoadDoneRef = useRef(false);
   // Total-profit card is gated by view_financial. Delete-policy button
   // below stays on isAdmin (action-level, outside this refactor's
   // page-level permission model).
@@ -682,14 +698,27 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       setBroker(null);
       return;
     }
+    // Cache replay on re-mount. Broker rarely changes for a given
+    // client; the 30s TTL is conservative but keeps the chrome
+    // instant on re-visit. Keyed by broker_id so switching clients
+    // who share a broker also short-circuits.
+    const cacheKey = ['client-broker', client.broker_id];
+    const cacheState = queryClient.getQueryState(cacheKey);
+    const cached = queryClient.getQueryData<Broker>(cacheKey);
+    if (!initialLoadDoneRef.current && cached && cacheState?.dataUpdatedAt && Date.now() - cacheState.dataUpdatedAt < 30 * 1000) {
+      setBroker(cached);
+      return;
+    }
     try {
       const { data } = await supabase
         .from('brokers')
         .select('id, name, phone')
         .eq('id', client.broker_id)
         .single();
-      if (data) setBroker(data);
-      else setBroker(null);
+      if (data) {
+        queryClient.setQueryData(cacheKey, data);
+        setBroker(data);
+      } else setBroker(null);
     } catch (error) {
       console.error('Error fetching broker:', error);
       setBroker(null);
@@ -697,6 +726,15 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   };
 
   const fetchCars = async () => {
+    // Cache replay on re-mount (see fetchPaymentSummary header).
+    const cacheKey = ['client-cars', client.id];
+    const cacheState = queryClient.getQueryState(cacheKey);
+    const cached = queryClient.getQueryData<CarRecord[]>(cacheKey);
+    if (!initialLoadDoneRef.current && cached && cacheState?.dataUpdatedAt && Date.now() - cacheState.dataUpdatedAt < 30 * 1000) {
+      setCars(cached);
+      setLoadingCars(false);
+      return;
+    }
     setLoadingCars(true);
     try {
       const { data, error } = await supabase
@@ -707,7 +745,9 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setCars(data || []);
+      const rows = (data || []) as CarRecord[];
+      queryClient.setQueryData(cacheKey, rows);
+      setCars(rows);
     } catch (error) {
       console.error('Error fetching cars:', error);
     } finally {
@@ -716,6 +756,30 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   };
 
   const fetchPolicies = async () => {
+    // Cache replay on re-mount. fetchPolicies is the heaviest
+    // deferred read (one RPC + all the joins) — caching it makes
+    // returning to a recently-viewed client's policies tab instant.
+    type CachedPolicies = {
+      policies: PolicyRecord[];
+      paymentInfo: Record<string, { paid: number; remaining: number }>;
+      accCounts: Record<string, number>;
+      childCounts: Record<string, number>;
+      fileCounts: Record<string, number>;
+      carCounts: Record<string, number>;
+    };
+    const cacheKey = ['client-policies', client.id];
+    const cacheState = queryClient.getQueryState(cacheKey);
+    const cached = queryClient.getQueryData<CachedPolicies>(cacheKey);
+    if (!initialLoadDoneRef.current && cached && cacheState?.dataUpdatedAt && Date.now() - cacheState.dataUpdatedAt < 30 * 1000) {
+      setPolicies(cached.policies);
+      setPolicyPaymentInfo(cached.paymentInfo);
+      setPolicyAccidentCounts(cached.accCounts);
+      setPolicyChildrenCounts(cached.childCounts);
+      setPolicyFileCounts(cached.fileCounts);
+      setCarPolicyCounts(cached.carCounts);
+      setLoadingPolicies(false);
+      return;
+    }
     setLoadingPolicies(true);
     try {
       // One RPC, one round-trip — replaces the previous chain of
@@ -782,6 +846,14 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       setPolicyChildrenCounts(childCounts);
       setPolicyFileCounts(fileCounts);
       setCarPolicyCounts(carCounts);
+      queryClient.setQueryData(cacheKey, {
+        policies: policiesData,
+        paymentInfo,
+        accCounts,
+        childCounts,
+        fileCounts,
+        carCounts,
+      });
     } catch (error) {
       console.error('Error fetching policies:', error);
     } finally {
@@ -790,6 +862,21 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   };
 
   const fetchPaymentSummary = async () => {
+    // Cross-mount cache. Visiting another client and coming back
+    // within ~30s replays the cached numbers without re-running the
+    // three reads below — chrome appears instantly on revisit.
+    const cacheKey = ['client-payment-summary', client.id];
+    const cacheState = queryClient.getQueryState(cacheKey);
+    const cached = queryClient.getQueryData<{
+      summary: { total_paid: number; total_remaining: number; total_profit: number };
+      brokerDebts: BrokerDebtInfo[];
+    }>(cacheKey);
+    if (!initialLoadDoneRef.current && cached && cacheState?.dataUpdatedAt && Date.now() - cacheState.dataUpdatedAt < 30 * 1000) {
+      setPaymentSummary(cached.summary);
+      setBrokerDebts(cached.brokerDebts);
+      return;
+    }
+
     try {
       // Single source of truth for the main numbers — the
       // get_client_balance RPC encapsulates the entire kashf
@@ -924,12 +1011,15 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
         }
       });
 
-      setPaymentSummary({
+      const summary = {
         total_paid: totalPaid,
         total_remaining: totalRemaining,
         total_profit: totalProfit,
-      });
-      setBrokerDebts(Array.from(brokerTotals.values()));
+      };
+      const brokerDebts = Array.from(brokerTotals.values());
+      queryClient.setQueryData(cacheKey, { summary, brokerDebts });
+      setPaymentSummary(summary);
+      setBrokerDebts(brokerDebts);
     } catch (error) {
       console.error('Error fetching payment summary:', error);
     }
@@ -956,6 +1046,14 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   };
 
   const fetchWalletBalance = async () => {
+    // Cache replay on re-mount (see fetchPaymentSummary header).
+    const cacheKey = ['client-wallet-balance', client.id];
+    const cacheState = queryClient.getQueryState(cacheKey);
+    const cached = queryClient.getQueryData<{ total_refunds: number; transaction_count: number }>(cacheKey);
+    if (!initialLoadDoneRef.current && cached && cacheState?.dataUpdatedAt && Date.now() - cacheState.dataUpdatedAt < 30 * 1000) {
+      setWalletBalance(cached);
+      return;
+    }
     try {
       // Only outstanding rows count toward "نحن مدينون للعميل". A
       // row with settled_at != NULL has been explicitly resolved
@@ -994,10 +1092,12 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
         )
         .reduce((sum, t) => sum + (t.amount || 0), 0);
 
-      setWalletBalance({
+      const next = {
         total_refunds: Math.max(0, weOweCustomer - customerOwesUs),
         transaction_count: data?.length || 0,
-      });
+      };
+      queryClient.setQueryData(cacheKey, next);
+      setWalletBalance(next);
     } catch (error) {
       console.error('Error fetching wallet balance:', error);
     }
@@ -1261,6 +1361,11 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   }, [client.id]);
 
   useEffect(() => {
+    // Reset the "initial load complete" gate so this mount's fetches
+    // consult the QueryClient cache (see fetchX wrappers). After the
+    // critical group finishes we flip the gate so any subsequent
+    // call (post-mutation refresh) bypasses cache and pulls fresh.
+    initialLoadDoneRef.current = false;
     const loadInitialData = async () => {
       setInitialLoading(true);
       // Critical group — drives the page chrome (header tile, summary
@@ -1286,6 +1391,10 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       // skeleton until the slowest read returned.
       void fetchPolicies();
       void fetchPayments();
+      // Flip the gate AFTER the deferred ones kick off so their first
+      // call still consulted the cache. Any subsequent refresh
+      // (mutations) bypasses the cache check.
+      initialLoadDoneRef.current = true;
     };
     loadInitialData();
   }, [client.id]);
