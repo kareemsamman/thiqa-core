@@ -297,7 +297,12 @@ export default function Subscription() {
         { p_timing: value }
       );
       if (error) throw error;
-      await refetchAgentContext();
+      // No explicit refetchAgentContext() — it flips setLoading(true)
+      // which remounts large parts of the UI (the page "refreshes").
+      // The AgentProvider already has a realtime channel on `agents`
+      // UPDATE that picks up this change and calls loadAgentContext
+      // without touching `loading`, so the toggle reconciles smoothly
+      // within ~1s.
       toast.success(
         next
           ? "سيظهر طلب التوقيع بعد إتمام المعاملة"
