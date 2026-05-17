@@ -173,6 +173,7 @@ interface CarRecord {
   license_type: string | null;
   license_expiry: string | null;
   last_license: string | null;
+  created_at: string | null;
 }
 
 interface PolicyRecord {
@@ -596,15 +597,13 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   const [deleteCarDialogOpen, setDeleteCarDialogOpen] = useState(false);
   const [deletingCar, setDeletingCar] = useState(false);
   const [carPolicyCounts, setCarPolicyCounts] = useState<Record<string, number>>({});
-  // Per-car: was a license-expiry SMS already sent for the current
-  // license_expiry value? Filled once cars are loaded. The cron's
-  // idempotency key is (sms_type='license_expiry', car_id,
-  // sent_for_date=car.license_expiry) — so a row whose sent_for_date
-  // matches the car's current license_expiry means "تم الإرسال
-  // لتاريخ الانتهاء الحالي". When the rخصة is renewed, license_expiry
-  // changes and this becomes false → the next cron run will fire.
+  // Per-car: set of years in which a license-expiry SMS was successfully
+  // sent (year derived from automated_sms_log.sent_for_date, which the
+  // cron writes equal to car.license_expiry). The cell renders a strip
+  // of pills per recent year so the agent can see year-by-year whether
+  // the cron fired. Mirrors the birthday-pills pattern on /clients.
   const [licenseSmsByCar, setLicenseSmsByCar] = useState<
-    Record<string, string>
+    Record<string, Set<number>>
   >({});
   
   // Policy metadata - fetched once, used for instant filtering
@@ -749,7 +748,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
     try {
       const { data, error } = await supabase
         .from('cars')
-        .select('id, car_number, client_id, manufacturer_name, model, model_number, year, color, car_type, car_value, license_type, license_expiry, last_license')
+        .select('id, car_number, client_id, manufacturer_name, model, model_number, year, color, car_type, car_value, license_type, license_expiry, last_license, created_at')
         .eq('client_id', client.id)
         .is('deleted_at', null)
         .order('created_at', { ascending: false });
@@ -759,11 +758,12 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       queryClient.setQueryData(cacheKey, rows);
       setCars(rows);
 
-      // Follow-up: did the cron already send a license-expiry SMS for
-      // each car's CURRENT license_expiry? Scoped to the cars we just
-      // loaded. Building a map keyed by car_id → the sent_for_date
-      // recorded in automated_sms_log; the cell flags it as "تم" only
-      // when that matches the car's current license_expiry.
+      // Follow-up: which YEARS has the cron sent a license-expiry SMS
+      // for each car? Cron writes sent_for_date = car.license_expiry,
+      // so the year portion of that date tells us "the license that
+      // expired in year Y got its reminder". Gathering all successful
+      // sends, then grouping by year → set per car. Renders a 3-year
+      // pill strip in the cell, identical pattern to birthday-SMS.
       const carIds = rows.map(r => r.id);
       if (carIds.length > 0) {
         const { data: smsRows } = await supabase
@@ -771,12 +771,14 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
           .select('car_id, sent_for_date, status')
           .in('car_id', carIds)
           .eq('sms_type', 'license_expiry')
-          .eq('status', 'sent')
-          .order('sent_for_date', { ascending: false });
-        const map: Record<string, string> = {};
+          .eq('status', 'sent');
+        const map: Record<string, Set<number>> = {};
         for (const r of (smsRows ?? []) as { car_id: string; sent_for_date: string }[]) {
-          // Latest-first; first row per car wins.
-          if (r.car_id && !map[r.car_id]) map[r.car_id] = r.sent_for_date;
+          if (!r.car_id || !r.sent_for_date) continue;
+          const year = parseInt(r.sent_for_date.slice(0, 4), 10);
+          if (!Number.isFinite(year)) continue;
+          if (!map[r.car_id]) map[r.car_id] = new Set();
+          map[r.car_id].add(year);
         }
         setLicenseSmsByCar(map);
       } else {
@@ -4082,13 +4084,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                           </TableCell>
                           <TableCell>
                             {car.license_expiry ? (() => {
-                              // Three-state cell: the expiry date itself
-                              // (with urgency color when ≤30 days away), and
-                              // a small pill noting whether the cron has
-                              // already fired a reminder for THIS expiry
-                              // value. When the license is renewed, the
-                              // expiry changes and the pill resets — next
-                              // cron run will fire fresh.
+                              // Date + urgency styling — unchanged.
                               const expiryDate = new Date(car.license_expiry);
                               const today = new Date();
                               today.setHours(0, 0, 0, 0);
@@ -4097,8 +4093,21 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                               );
                               const expired = daysLeft < 0;
                               const soon = !expired && daysLeft <= 30;
-                              const sentForDate = licenseSmsByCar[car.id];
-                              const reminderSent = sentForDate === car.license_expiry;
+
+                              // 3-year history strip — years BEFORE the car
+                              // was added are skipped (no missed-send for a
+                              // car that didn't exist). Next year isn't on
+                              // the strip but is implicit: the cron will
+                              // fire then because next year's license_expiry
+                              // won't be in automated_sms_log either.
+                              const currentYear = new Date().getFullYear();
+                              const sent = licenseSmsByCar[car.id] ?? new Set<number>();
+                              const createdYear = car.created_at
+                                ? new Date(car.created_at).getFullYear()
+                                : currentYear - 2;
+                              const years = [currentYear - 2, currentYear - 1, currentYear]
+                                .filter(y => y >= createdYear);
+
                               return (
                                 <div className="flex flex-col gap-1">
                                   <span
@@ -4112,22 +4121,33 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                                     {expired && <span className="text-[10px] mr-1">(منتهية)</span>}
                                     {soon && <span className="text-[10px] mr-1">({daysLeft} يوم)</span>}
                                   </span>
-                                  {reminderSent ? (
-                                    <Badge
-                                      variant="outline"
-                                      className="text-[10px] px-1.5 py-0 h-4 w-fit gap-0.5 bg-emerald-50 text-emerald-700 border-emerald-300"
-                                      title="تم إرسال تنبيه انتهاء الرخصة للعميل"
-                                    >
-                                      ✓ تم التنبيه
-                                    </Badge>
-                                  ) : (
-                                    <Badge
-                                      variant="outline"
-                                      className="text-[10px] px-1.5 py-0 h-4 w-fit gap-0.5 bg-muted/30 text-muted-foreground border-border"
-                                      title="لم يُرسَل تنبيه انتهاء الرخصة لهذا التاريخ بعد"
-                                    >
-                                      ○ بدون تنبيه
-                                    </Badge>
+                                  {years.length > 0 && (
+                                    <div className="flex items-center gap-0.5">
+                                      {years.map(y => {
+                                        const wasSent = sent.has(y);
+                                        return (
+                                          <Badge
+                                            key={y}
+                                            variant="outline"
+                                            className={cn(
+                                              "text-[10px] px-1.5 py-0 h-4 gap-0.5 font-medium border",
+                                              wasSent
+                                                ? "bg-emerald-50 text-emerald-700 border-emerald-300"
+                                                : "bg-muted/30 text-muted-foreground border-border",
+                                            )}
+                                            title={
+                                              wasSent
+                                                ? `تم إرسال تنبيه انتهاء رخصة سنة ${y}`
+                                                : y === currentYear
+                                                  ? `لم يُرسَل تنبيه لسنة ${y} بعد`
+                                                  : `لم يُرسَل تنبيه سنة ${y}`
+                                            }
+                                          >
+                                            {wasSent ? '✓' : '○'} {y}
+                                          </Badge>
+                                        );
+                                      })}
+                                    </div>
                                   )}
                                 </div>
                               );
