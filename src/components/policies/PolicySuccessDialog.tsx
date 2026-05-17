@@ -603,20 +603,39 @@ export function PolicySuccessDialog({
             {/* Signing row — only when the agent set
                 signing_check_timing='on_completion' AND the client
                 doesn't already have a signature on file. The wizard
-                computes that and passes showSigningRow. Once the
-                realtime channel observes signature_url set, the row
-                badge flips to green and the buttons disable. */}
+                computes that and passes showSigningRow. Realtime
+                detects signature_url set on the client and flips the
+                row into a green success state with title/desc swap. */}
             {showSigningRow && (
               <RowBlock
                 row="signing"
                 icon={
                   clientSigned ? (
-                    <CheckCircle2 className="h-6 w-6 text-emerald-600" />
+                    <CheckCircle2 className="h-7 w-7 text-emerald-600" />
+                  ) : signingWaiting ? (
+                    <Loader2 className="h-6 w-6 text-amber-600 animate-spin" />
                   ) : (
                     <FileSignature className="h-6 w-6 text-amber-600" />
                   )
                 }
-                iconBg={clientSigned ? "bg-emerald-500/10" : "bg-amber-500/10"}
+                iconBg={
+                  clientSigned ? "bg-emerald-500/15" : "bg-amber-500/10"
+                }
+                successState={clientSigned}
+                titleOverride={
+                  clientSigned
+                    ? "تم توقيع العميل بنجاح"
+                    : signingWaiting
+                    ? "في انتظار توقيع العميل…"
+                    : undefined
+                }
+                descOverride={
+                  clientSigned
+                    ? "تم استلام التوقيع وحفظه على ملف العميل"
+                    : signingWaiting
+                    ? "ستظهر علامة خضراء هنا فور توقيع العميل من الرابط"
+                    : undefined
+                }
                 active={activeRow === "signing"}
                 onToggle={() => toggleRow("signing")}
                 channelStates={{
@@ -633,15 +652,6 @@ export function PolicySuccessDialog({
                 hasPhone={!!clientPhone}
                 smsLocked={smsLocked}
                 hidePrint
-                disabled={clientSigned}
-                disabledHint={clientSigned ? "تم التوقيع بنجاح" : undefined}
-                belowPanel={
-                  signingWaiting && !clientSigned ? (
-                    <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 text-center">
-                      في انتظار توقيع العميل... ستظهر علامة خضراء فور إتمام التوقيع.
-                    </p>
-                  ) : null
-                }
               />
             )}
           </TooltipProvider>
@@ -691,6 +701,17 @@ interface RowBlockProps {
    *  main row button). Used by the signing row to show "في انتظار
    *  توقيع العميل..." after SMS/WhatsApp fires. */
   belowPanel?: React.ReactNode;
+  /** When set, render the row in a celebratory success style instead
+   *  of the muted "disabled" look. The panel collapses, click is a
+   *  no-op, but the border/bg/title use the success palette so the
+   *  agent sees a clear "تم التوقيع" state. Used by the signing row
+   *  after realtime detects the customer signed. */
+  successState?: boolean;
+  /** Optional title override — when present replaces ROW_LABELS[row].title.
+   *  Used by the signing row in successState. */
+  titleOverride?: string;
+  /** Optional description override — pairs with titleOverride. */
+  descOverride?: string;
 }
 
 function RowBlock({
@@ -709,15 +730,24 @@ function RowBlock({
   disabledHint,
   hidePrint,
   belowPanel,
+  successState,
+  titleOverride,
+  descOverride,
 }: RowBlockProps) {
   const labels = ROW_LABELS[row];
-  const expanded = active && !disabled;
+  const title = titleOverride ?? labels.title;
+  const desc = descOverride ?? labels.desc;
+  // successState locks the panel closed (no point expanding action
+  // buttons once the goal is achieved) but doesn't apply the muted
+  // disabled styling — that's reserved for "can't use this" gates.
+  const expanded = active && !disabled && !successState;
+  const locked = disabled || successState;
 
   return (
     <div className="space-y-2">
       {/* Action panel — collapses both height and opacity so the
           row above slides up cleanly when the panel closes. Hidden
-          entirely when the row is disabled. */}
+          entirely when the row is disabled or in success state. */}
       <div
         className={cn(
           "overflow-hidden transition-all duration-200 ease-out",
@@ -757,11 +787,13 @@ function RowBlock({
       {/* Main row button */}
       <button
         type="button"
-        onClick={disabled ? undefined : onToggle}
-        disabled={disabled}
+        onClick={locked ? undefined : onToggle}
+        disabled={locked}
         className={cn(
           "w-full p-4 rounded-xl border-2 transition-all duration-200 text-right flex items-center gap-4",
-          disabled
+          successState
+            ? "border-emerald-400 bg-emerald-50 cursor-default"
+            : disabled
             ? "border-border/50 bg-muted/30 cursor-not-allowed opacity-60"
             : active
             ? "border-primary/60 bg-primary/5"
@@ -778,7 +810,14 @@ function RowBlock({
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
-            <span className="font-semibold text-base">{labels.title}</span>
+            <span
+              className={cn(
+                "font-semibold text-base",
+                successState && "text-emerald-700",
+              )}
+            >
+              {title}
+            </span>
             <Tooltip>
               <TooltipTrigger asChild>
                 <span
@@ -793,8 +832,21 @@ function RowBlock({
               </TooltipContent>
             </Tooltip>
           </div>
-          <div className="text-sm text-muted-foreground">{labels.desc}</div>
+          <div
+            className={cn(
+              "text-sm",
+              successState ? "text-emerald-700/80" : "text-muted-foreground",
+            )}
+          >
+            {desc}
+          </div>
         </div>
+        {/* Success checkmark on the far side balances the row visually
+            and gives the agent a second-confirmation cue beyond the
+            color shift. */}
+        {successState && (
+          <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
+        )}
       </button>
 
       {/* Below-panel slot — rendered unconditionally below the main
