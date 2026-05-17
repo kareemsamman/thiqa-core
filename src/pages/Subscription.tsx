@@ -289,10 +289,13 @@ export default function Subscription() {
     setSigningTimingSaving(true);
     const value = next ? "on_completion" : "on_client_select";
     try {
-      const { error } = await supabase
-        .from("agents")
-        .update({ signing_check_timing: value } as any)
-        .eq("id", agentId);
+      // Direct UPDATE on public.agents is RLS-blocked for normal agent
+      // users — use the owner-gated RPC instead. See migration
+      // 20260517100000_set_signing_check_timing_rpc.
+      const { error } = await (supabase as any).rpc(
+        "set_signing_check_timing",
+        { p_timing: value }
+      );
       if (error) throw error;
       await refetchAgentContext();
       toast.success(
