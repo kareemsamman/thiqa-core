@@ -56,6 +56,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAgentContext } from '@/hooks/useAgentContext';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
+import { OTHER_CATEGORY_OPTIONS } from '@/components/accounting/otherCategoryLabel';
 import { format } from 'date-fns';
 import { BankPicker } from '@/components/shared/BankPicker';
 import type { VoucherKind } from './AddVoucherDialog';
@@ -123,16 +124,9 @@ const KIND_CONFIG: Record<
   },
 };
 
-const CATEGORY_OPTIONS: { value: string; label: string }[] = [
-  { value: 'utility', label: 'كهرباء / ماء / إنترنت / هاتف' },
-  { value: 'salary', label: 'راتب / أجر' },
-  { value: 'legal', label: 'محامي / رسوم قضائية' },
-  { value: 'maintenance', label: 'صيانة / كراج / تنظيف' },
-  { value: 'office_supplies', label: 'قرطاسية / طباعة' },
-  { value: 'marketing', label: 'إعلانات / تسويق' },
-  { value: 'tax_fees', label: 'ضرائب / رسوم رسمية' },
-  { value: 'other', label: 'أخرى' },
-];
+// Source of truth lives in src/components/accounting/otherCategoryLabel.ts
+// so the dialog and the /accounting → آخر listing stay in sync.
+const CATEGORY_OPTIONS = OTHER_CATEGORY_OPTIONS;
 
 // Payment-line types supported for "آخر" vouchers. Customer-cheque
 // + visa intentionally omitted — they need an entity link.

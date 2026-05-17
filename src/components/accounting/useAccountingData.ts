@@ -64,6 +64,13 @@ export interface ClientReceiptRow {
    *  receipt_type='debit_note' with positive amount; legacy entries
    *  are receipt_type='credit_note' with negative amount. */
   receipt_type: string;
+  /** "آخر" voucher fields. Set when the row was issued to an external
+   *  party (utility / lawyer / garage / salary / etc.) that doesn't
+   *  have a client/broker/company FK. Used by OtherSection on
+   *  /accounting → آخر to label the rows + group by category. NULL on
+   *  every other row. See migration 20260515220000. */
+  recipient_name: string | null;
+  recipient_category: string | null;
 }
 
 interface UseAccountingDataReturn {
@@ -111,6 +118,11 @@ interface UseAccountingDataReturn {
    *  + `broker_id` null. Surfaced on the companies accounting tab so
    *  the same place that shows سند صرف / سند قبض also shows these. */
   companyCreditNotes: ClientReceiptRow[];
+  /** "آخر" vouchers — receipts where client_id / broker_id / company_id
+   *  are all null AND recipient_name is set. Mixed receipt_type
+   *  (payment / disbursement / credit_note / debit_note) — OtherSection
+   *  splits client-side by type for its 4 sub-tabs. */
+  otherReceipts: ClientReceiptRow[];
   /** Filtered total expense amount — used by the net-profit pill. */
   expensesTotal: number;
   refresh: () => Promise<void>;
@@ -204,6 +216,8 @@ interface RawClientReceipt {
   payment_id: string | null;
   car_number: string | null;
   cancelled_at: string | null;
+  recipient_name: string | null;
+  recipient_category: string | null;
   clients: { id_number: string | null; phone_number: string | null } | null;
   policies:
     | {
@@ -256,6 +270,7 @@ interface AccountingDataPayload {
   clientCreditNotesRaw: ClientReceiptRow[];
   brokerCreditNotesRaw: ClientReceiptRow[];
   companyCreditNotesRaw: ClientReceiptRow[];
+  otherReceiptsRaw: ClientReceiptRow[];
   expenses: RawExpense[];
 }
 
@@ -271,6 +286,7 @@ const EMPTY_PAYLOAD: AccountingDataPayload = {
   clientCreditNotesRaw: [],
   brokerCreditNotesRaw: [],
   companyCreditNotesRaw: [],
+  otherReceiptsRaw: [],
   expenses: [],
 };
 
@@ -814,7 +830,7 @@ export function useAccountingData(
           `id, receipt_date, amount, payment_method, voucher_number,
            receipt_number, cheque_number, notes, client_id, client_name,
            broker_id, company_id, policy_id, payment_id, car_number, cancelled_at,
-           receipt_type,
+           receipt_type, recipient_name, recipient_category,
            clients(id_number, phone_number),
            policies(document_number, policy_number, client_id, cars(car_number), clients(id_number, phone_number))`,
         )
@@ -857,6 +873,8 @@ export function useAccountingData(
         policy_number: r.policies?.policy_number ?? null,
         cancelled_at: r.cancelled_at,
         receipt_type: (r.receipt_type as string) ?? '',
+        recipient_name: r.recipient_name ?? null,
+        recipient_category: r.recipient_category ?? null,
       });
       const crRows = (crData ?? []) as unknown as (RawClientReceipt & {
         receipt_type: string;
@@ -921,36 +939,44 @@ export function useAccountingData(
         return { ...row, voucher_number: `${prefix}${row.receipt_number}/${year}` };
       };
 
+      // "آخر" vouchers (external party — no client/broker/company FK
+      // and a free-text recipient_name set) MUST NOT leak into any
+      // of the typed buckets below or they'll double-count under the
+      // wrong section. We test this once at the top so every split
+      // below can reuse the predicate via `isOtherRow`.
+      const isOtherRow = (r: typeof crRows[number]) =>
+        !r.client_id && !r.broker_id && !r.company_id && !!r.recipient_name;
+
       // payment + cancellation: client-side. Both ignore broker_id —
       // broker payments don't flow through the customer receipts
       // table. We keep cancelled (refused) rows in the raw list so
       // the سند الغاء sub-tab can render them; totals filter them.
       const clientPaymentsRaw = crRows
-        .filter((r) => r.receipt_type === 'payment' && !r.broker_id)
+        .filter((r) => r.receipt_type === 'payment' && !r.broker_id && !isOtherRow(r))
         .map(mapClientReceipt)
         .map(enrichVoucherNumber);
       const clientCancellationsRaw = crRows
-        .filter((r) => r.receipt_type === 'cancellation' && !r.broker_id)
+        .filter((r) => r.receipt_type === 'cancellation' && !r.broker_id && !isOtherRow(r))
         .map(mapClientReceipt)
         .map(enrichVoucherNumber);
       // disbursement rows: client-only (the broker disbursement
       // path uses the broker_settlements table directly, not the
       // receipts mirror).
       const clientDisbursementsRaw = crRows
-        .filter((r) => r.receipt_type === 'disbursement')
+        .filter((r) => r.receipt_type === 'disbursement' && !isOtherRow(r))
         .map(mapClientReceipt)
         .map(enrichVoucherNumber);
       // credit_note + debit_note rows: split THREE ways so each
       // accounting tab sees only its own bucket:
       //   • broker_id set        → broker credit/debit note
       //   • company_id set       → company credit/debit note
-      //   • neither               → client credit/debit note
+      //   • neither (and not other) → client credit/debit note
       // AddCompanyDebitNoteDialog writes rows with company_id and
       // null client_id/broker_id, so without this split they used to
       // leak into the clientCreditNotes bucket.
       const creditNoteRows = crRows.filter((r) => r.receipt_type === 'credit_note' || r.receipt_type === 'debit_note');
       const clientCreditNotesRaw = creditNoteRows
-        .filter((r) => !r.broker_id && !r.company_id)
+        .filter((r) => !r.broker_id && !r.company_id && !isOtherRow(r))
         .map(mapClientReceipt)
         .map(enrichVoucherNumber);
       const brokerCreditNotesRaw = creditNoteRows
@@ -958,6 +984,13 @@ export function useAccountingData(
         .map((r) => ({ ...enrichVoucherNumber(mapClientReceipt(r)), broker_id: r.broker_id ?? null }) as ClientReceiptRow & { broker_id: string | null });
       const companyCreditNotesRaw = creditNoteRows
         .filter((r) => !r.broker_id && !!r.company_id)
+        .map(mapClientReceipt)
+        .map(enrichVoucherNumber);
+      // "آخر" bucket — all four voucher kinds for external parties
+      // (utility, lawyer, garage, salary). OtherSection splits by
+      // receipt_type client-side for its 4 sub-tabs.
+      const otherReceiptsRaw = crRows
+        .filter(isOtherRow)
         .map(mapClientReceipt)
         .map(enrichVoucherNumber);
 
@@ -981,6 +1014,7 @@ export function useAccountingData(
         clientCreditNotesRaw,
         brokerCreditNotesRaw,
         companyCreditNotesRaw,
+        otherReceiptsRaw,
         expenses,
       };
     },
@@ -1010,6 +1044,7 @@ export function useAccountingData(
     clientCreditNotesRaw,
     brokerCreditNotesRaw,
     companyCreditNotesRaw,
+    otherReceiptsRaw,
     expenses,
   } = payload;
 
@@ -1123,6 +1158,10 @@ export function useAccountingData(
     () => applyClientReceiptFilters(companyCreditNotesRaw, filters),
     [companyCreditNotesRaw, filters],
   );
+  const filteredOtherReceipts = useMemo(
+    () => applyClientReceiptFilters(otherReceiptsRaw, filters),
+    [otherReceiptsRaw, filters],
+  );
 
   const expensesTotal = useMemo(() => {
     let rows = expenses;
@@ -1159,6 +1198,7 @@ export function useAccountingData(
     clientCreditNotes: filteredClientCreditNotes,
     brokerCreditNotes: filteredBrokerCreditNotes,
     companyCreditNotes: filteredCompanyCreditNotes,
+    otherReceipts: filteredOtherReceipts,
     expensesTotal,
     refresh,
     patchSubPolicy,

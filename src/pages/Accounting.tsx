@@ -3,15 +3,15 @@ import { useSearchParams } from 'react-router-dom';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Header } from '@/components/layout/Header';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Building2, Users, Receipt, UserRound } from 'lucide-react';
+import { Building2, Users, UserRound, Wallet } from 'lucide-react';
 import { CompaniesSection } from '@/components/accounting/CompaniesSection';
 import { BrokersSection } from '@/components/accounting/BrokersSection';
-import { ExpensesSection } from '@/components/accounting/ExpensesSection';
+import { OtherSection } from '@/components/accounting/OtherSection';
 import { ClientsSection } from '@/components/accounting/ClientsSection';
 import { RecalcProfitsButton } from '@/components/dashboard/RecalcProfitsButton';
 import { AgentBranchFilter } from '@/components/shared/AgentBranchFilter';
 
-type MainTab = 'companies' | 'brokers' | 'clients' | 'expenses';
+type MainTab = 'companies' | 'brokers' | 'clients' | 'other';
 
 // Access is gated by <PermissionRoute permission="page.accounting"
 // feature="accounting"> at the route level — admins bypass; workers
@@ -24,8 +24,12 @@ export default function Accounting() {
       ? 'brokers'
       : searchParams.get('tab') === 'clients'
       ? 'clients'
-      : searchParams.get('tab') === 'expenses'
-      ? 'expenses'
+      : searchParams.get('tab') === 'other' || searchParams.get('tab') === 'expenses'
+      ? // Accept the legacy `tab=expenses` deep-link (e.g. from
+        // Cheques.tsx's cheque-transferred-to-expense link) and quietly
+        // route it to the new آخر tab so old bookmarks don't 404 onto
+        // the default Companies tab.
+        'other'
       : 'companies';
   const [tab, setTab] = useState<MainTab>(initialTab);
   // Page-level branch filter — applies to all three sub-tabs. Global
@@ -63,7 +67,7 @@ export default function Accounting() {
     <MainLayout>
       <Header
         title="المحاسبة"
-        subtitle="عرض موحّد لشركات التأمين والوسطاء والمصاريف"
+        subtitle="عرض موحّد لشركات التأمين والوسطاء والعملاء والجهات الأخرى"
       />
 
       <div className="p-3 md:p-4 space-y-3">
@@ -82,9 +86,9 @@ export default function Accounting() {
                 <UserRound className="h-4 w-4" />
                 العملاء
               </TabsTrigger>
-              <TabsTrigger value="expenses" className="gap-2">
-                <Receipt className="h-4 w-4" />
-                مصاريف
+              <TabsTrigger value="other" className="gap-2">
+                <Wallet className="h-4 w-4" />
+                آخر
               </TabsTrigger>
             </TabsList>
             <div className="flex items-center gap-2">
@@ -106,10 +110,8 @@ export default function Accounting() {
           <TabsContent value="clients" className="mt-3">
             {mountedTabs.has('clients') && <ClientsSection branchId={branchId} />}
           </TabsContent>
-          <TabsContent value="expenses" className="mt-3">
-            {mountedTabs.has('expenses') && (
-              <ExpensesSection focusSettlementId={settlementParam} branchId={branchId} />
-            )}
+          <TabsContent value="other" className="mt-3">
+            {mountedTabs.has('other') && <OtherSection branchId={branchId} />}
           </TabsContent>
         </Tabs>
       </div>

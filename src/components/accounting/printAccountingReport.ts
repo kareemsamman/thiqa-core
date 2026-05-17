@@ -49,9 +49,16 @@ const STATUS_LABEL: Record<string, string> = {
 
 export interface ReportContext {
   /** Which entity surface — drives the title prefix. */
-  section: 'companies' | 'brokers';
+  section: 'companies' | 'brokers' | 'other';
   /** Active sub-tab. */
-  tab: 'all' | 'issuances' | 'returns' | 'disbursements' | 'receipts';
+  tab:
+    | 'all'
+    | 'issuances'
+    | 'returns'
+    | 'disbursements'
+    | 'receipts'
+    | 'debit_notes'
+    | 'credit_notes';
   /** Optional human-readable filter summary (e.g. "01/04/2026 → 30/04/2026"). */
   filterSummary?: string;
 }
@@ -95,6 +102,29 @@ export function buildBrokerStats(totals: BrokerTotals): ReportPayload['stats'] {
     { label: 'المتبقي على الوسطاء', value: fmtMoney(totals.remainingFromBrokersSum), tone: 'destructive' },
     { label: 'مقبوض من الوسطاء', value: fmtMoney(totals.receivedSum), tone: 'emerald' },
     { label: 'الربح', value: fmtMoney(totals.profitSum), tone: 'success' },
+  ];
+}
+
+interface OtherTotals {
+  disbursedSum: number;
+  receivedSum: number;
+  debitSum: number;
+  creditSum: number;
+  netSum: number;
+}
+
+/** KPI pills mirroring the on-screen "آخر" section summary bar. */
+export function buildOtherStats(totals: OtherTotals): ReportPayload['stats'] {
+  return [
+    { label: 'المدفوع للجهات الخارجية', value: fmtMoney(totals.disbursedSum), tone: 'destructive' },
+    { label: 'المستلم من الجهات الخارجية', value: fmtMoney(totals.receivedSum), tone: 'emerald' },
+    { label: 'مستحق لنا على الجهات', value: fmtMoney(totals.debitSum), tone: 'primary' },
+    { label: 'مستحق علينا للجهات', value: fmtMoney(totals.creditSum), tone: 'amber' },
+    {
+      label: 'صافي التدفق النقدي',
+      value: fmtMoney(totals.netSum),
+      tone: totals.netSum >= 0 ? 'success' : 'destructive',
+    },
   ];
 }
 
@@ -205,11 +235,18 @@ const TAB_LABEL: Record<ReportContext['tab'], string> = {
   returns: 'المرتجعات',
   disbursements: 'سندات الصرف',
   receipts: 'سندات القبض',
+  debit_notes: 'إشعارات مدين',
+  credit_notes: 'إشعارات دائن',
+};
+
+const SECTION_LABEL: Record<ReportContext['section'], string> = {
+  companies: 'شركات التأمين',
+  brokers: 'الوسطاء',
+  other: 'الجهات الأخرى',
 };
 
 function buildTitle(ctx: ReportContext): string {
-  const sectionLabel = ctx.section === 'companies' ? 'شركات التأمين' : 'الوسطاء';
-  return `${TAB_LABEL[ctx.tab]} — ${sectionLabel}`;
+  return `${TAB_LABEL[ctx.tab]} — ${SECTION_LABEL[ctx.section]}`;
 }
 
 interface BuildArgs {
