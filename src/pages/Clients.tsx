@@ -22,6 +22,7 @@ import {
   Users,
   Building2,
   Plus,
+  Cake,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { normalizeArabic } from "@/lib/arabicNormalize";
@@ -75,6 +76,13 @@ export default function Clients() {
   const { agentId, loading: agentContextLoading } = useAgentContext();
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
+  // Per-client last birthday-SMS send. Filled by a follow-up query
+  // after fetchClients so the تاريخ الميلاد cell can show whether the
+  // current-year greeting went out + the year of the most recent send.
+  // Source: automated_sms_log where sms_type='birthday'.
+  const [birthdaySmsByClient, setBirthdaySmsByClient] = useState<
+    Record<string, { lastSentDate: string; lastSentYear: number }>
+  >({});
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
@@ -208,6 +216,34 @@ export default function Clients() {
       }));
       setClients(clientsWithAccidentCount);
       setTotalCount(count || 0);
+
+      // Birthday-SMS lookup, scoped to this page's clients. One row per
+      // (client, calendar year) at most — we take the latest sent_for_date
+      // per client so the table can show "تم 2026" (current year) or
+      // "آخر إرسال 2025" (past send, this year hasn't fired yet).
+      const clientIdsOnPage = clientsWithAccidentCount
+        .map((c) => c.id)
+        .filter(Boolean);
+      if (clientIdsOnPage.length > 0) {
+        const { data: bdayRows } = await supabase
+          .from('automated_sms_log')
+          .select('client_id, sent_for_date, status')
+          .in('client_id', clientIdsOnPage)
+          .eq('sms_type', 'birthday')
+          .eq('status', 'sent')
+          .order('sent_for_date', { ascending: false });
+        const map: Record<string, { lastSentDate: string; lastSentYear: number }> = {};
+        for (const r of (bdayRows ?? []) as { client_id: string; sent_for_date: string }[]) {
+          // Rows arrive newest-first; first one we see for a client wins.
+          if (!map[r.client_id]) {
+            const year = parseInt(r.sent_for_date.slice(0, 4), 10);
+            map[r.client_id] = { lastSentDate: r.sent_for_date, lastSentYear: year };
+          }
+        }
+        setBirthdaySmsByClient(map);
+      } else {
+        setBirthdaySmsByClient({});
+      }
     } catch (error) {
       console.error('Error fetching clients:', error);
       toast({ title: "خطأ", description: "فشل في تحميل العملاء", variant: "destructive" });
@@ -457,7 +493,57 @@ export default function Clients() {
                         )}
                       </TableCell>
                       <TableCell className="text-muted-foreground text-sm">
-                        {client.birth_date ? formatDate(client.birth_date) : "-"}
+                        {client.birth_date ? (
+                          <div className="flex flex-col gap-1">
+                            <span>{formatDate(client.birth_date)}</span>
+                            {(() => {
+                              // The cron writes one automated_sms_log row per
+                              // year on the client's birthday. We classify the
+                              // most recent send into three buckets so the
+                              // agent can tell at a glance whether THIS year
+                              // already fired and, if not, when the last
+                              // greeting actually went out.
+                              const currentYear = new Date().getFullYear();
+                              const entry = birthdaySmsByClient[client.id];
+                              if (entry && entry.lastSentYear === currentYear) {
+                                return (
+                                  <Badge
+                                    variant="outline"
+                                    className="text-[10px] px-1.5 py-0 h-4 w-fit gap-0.5 bg-emerald-50 text-emerald-700 border-emerald-300"
+                                    title={`أُرسلت رسالة عيد الميلاد بتاريخ ${formatDate(entry.lastSentDate)}`}
+                                  >
+                                    <Cake className="h-2.5 w-2.5" />
+                                    تم {currentYear}
+                                  </Badge>
+                                );
+                              }
+                              if (entry) {
+                                return (
+                                  <Badge
+                                    variant="outline"
+                                    className="text-[10px] px-1.5 py-0 h-4 w-fit gap-0.5 bg-muted/30 text-muted-foreground border-border"
+                                    title={`آخر رسالة أُرسلت بتاريخ ${formatDate(entry.lastSentDate)}`}
+                                  >
+                                    <Cake className="h-2.5 w-2.5" />
+                                    آخر {entry.lastSentYear}
+                                  </Badge>
+                                );
+                              }
+                              return (
+                                <Badge
+                                  variant="outline"
+                                  className="text-[10px] px-1.5 py-0 h-4 w-fit gap-0.5 bg-muted/30 text-muted-foreground border-border"
+                                  title="لم تُرسَل أي رسالة عيد ميلاد لهذا العميل بعد"
+                                >
+                                  <Cake className="h-2.5 w-2.5" />
+                                  لم يُرسَل
+                                </Badge>
+                              );
+                            })()}
+                          </div>
+                        ) : (
+                          "-"
+                        )}
                       </TableCell>
                       <TableCell>
                         {client.signature_url ? (
