@@ -181,6 +181,56 @@ const renewalSkipReasonLabels: Record<string, string> = {
   sms_quota_exhausted: 'تم تخطّي التذكير التلقائي — انتهى الحد الشهري للرسائل النصية. قم بترقية الباقة أو شراء رصيد إضافي.',
 };
 
+// Compact two-pill indicator showing which of the auto reminders has
+// already been sent (شهر / أسبوع). Green-filled = sent, outlined =
+// not sent yet. Sits next to the renewal status badge so the agent can
+// tell at a glance whether the first nudge has gone out without
+// drilling into the policy.
+function ReminderTypeBadges({
+  month,
+  week,
+  size = 'sm',
+}: {
+  month: boolean;
+  week: boolean;
+  size?: 'xs' | 'sm';
+}) {
+  const base =
+    size === 'xs'
+      ? 'text-[10px] px-1.5 py-0 h-4'
+      : 'text-[11px] px-1.5 py-0.5 h-5';
+  return (
+    <div className="inline-flex items-center gap-1">
+      <Badge
+        variant="outline"
+        className={cn(
+          base,
+          'border font-medium gap-0.5',
+          month
+            ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+            : 'bg-muted/30 text-muted-foreground border-border',
+        )}
+        title={month ? 'تم إرسال تذكير الشهر' : 'لم يُرسَل تذكير الشهر بعد'}
+      >
+        {month ? '✓' : '○'} شهر
+      </Badge>
+      <Badge
+        variant="outline"
+        className={cn(
+          base,
+          'border font-medium gap-0.5',
+          week
+            ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+            : 'bg-muted/30 text-muted-foreground border-border',
+        )}
+        title={week ? 'تم إرسال تذكير الأسبوع' : 'لم يُرسَل تذكير الأسبوع بعد'}
+      >
+        {week ? '✓' : '○'} أسبوع
+      </Badge>
+    </div>
+  );
+}
+
 // Client's individual policy details
 interface RenewalPolicy {
   id: string;
@@ -297,6 +347,16 @@ export default function PolicyReports() {
   const [renewalsPage, setRenewalsPage] = useState(0);
   const [renewalsTotalRows, setRenewalsTotalRows] = useState(0);
   const [renewalsSummary, setRenewalsSummary] = useState<RenewalSummary | null>(null);
+  // Per-policy map of which auto-reminder types have already been sent.
+  // Filled by a follow-up query after each fetchRenewals: the
+  // report_renewals RPC only returns a single `worst_renewal_status`
+  // (sms_sent / called / …) so by itself the UI can't distinguish the
+  // 1-month reminder from the 1-week one. Source of truth is
+  // public.policy_reminders.reminder_type which the cron writes
+  // ('renewal_1month' / 'renewal_1week') on every successful send.
+  const [remindersByPolicy, setRemindersByPolicy] = useState<
+    Record<string, { month: boolean; week: boolean }>
+  >({});
   const [renewalsMonth, setRenewalsMonth] = useState<string>(new Date().toISOString().slice(0, 7));
   const [renewalsDaysFilter, setRenewalsDaysFilter] = useState<string>('month');
   const [renewalsPolicyTypeFilter, setRenewalsPolicyTypeFilter] = useState<string>('all');
@@ -534,6 +594,33 @@ export default function PolicyReports() {
       const clientData = (renewalsRes.data as unknown as RenewalClient[]) || [];
       setRenewalClients(clientData);
       setRenewalsTotalRows(clientData[0]?.total_count || 0);
+
+      // Pull per-policy reminder types for everything on this page so
+      // the status column can show "تم شهر" / "تم أسبوع" badges. One
+      // round-trip, scoped to the page's policies — cheap even with
+      // 3-5 policies per client.
+      const policyIdsOnPage = Array.from(
+        new Set(
+          clientData.flatMap((c) => c.policy_ids || []).filter(Boolean) as string[],
+        ),
+      );
+      if (policyIdsOnPage.length > 0) {
+        const { data: reminderRows } = await supabase
+          .from('policy_reminders')
+          .select('policy_id, reminder_type')
+          .in('policy_id', policyIdsOnPage)
+          .in('reminder_type', ['renewal_1month', 'renewal_1week']);
+        const map: Record<string, { month: boolean; week: boolean }> = {};
+        for (const id of policyIdsOnPage) map[id] = { month: false, week: false };
+        for (const r of (reminderRows ?? []) as { policy_id: string; reminder_type: string }[]) {
+          if (!map[r.policy_id]) map[r.policy_id] = { month: false, week: false };
+          if (r.reminder_type === 'renewal_1month') map[r.policy_id].month = true;
+          if (r.reminder_type === 'renewal_1week') map[r.policy_id].week = true;
+        }
+        setRemindersByPolicy(map);
+      } else {
+        setRemindersByPolicy({});
+      }
       
       // Handle summary separately to show errors clearly
       if (summaryRes.error) {
@@ -1534,18 +1621,34 @@ export default function PolicyReports() {
                             </TableCell>
                             <TableCell className="font-bold">₪{client.total_insurance_price.toLocaleString()}</TableCell>
                             <TableCell>
-                              <div className="flex items-center gap-1.5">
-                                <Badge className={cn('border', renewalStatusColors[client.worst_renewal_status])}>
-                                  {renewalStatusLabels[client.worst_renewal_status]}
-                                </Badge>
-                                {client.auto_reminder_skipped && (
-                                  <span
-                                    title={renewalSkipReasonLabels[client.auto_reminder_skip_reason ?? ''] ?? 'تم تخطّي التذكير التلقائي'}
-                                    className="inline-flex items-center text-amber-600"
-                                  >
-                                    <AlertCircle className="h-4 w-4" />
-                                  </span>
-                                )}
+                              <div className="flex flex-col gap-1">
+                                <div className="flex items-center gap-1.5">
+                                  <Badge className={cn('border', renewalStatusColors[client.worst_renewal_status])}>
+                                    {renewalStatusLabels[client.worst_renewal_status]}
+                                  </Badge>
+                                  {client.auto_reminder_skipped && (
+                                    <span
+                                      title={renewalSkipReasonLabels[client.auto_reminder_skip_reason ?? ''] ?? 'تم تخطّي التذكير التلقائي'}
+                                      className="inline-flex items-center text-amber-600"
+                                    >
+                                      <AlertCircle className="h-4 w-4" />
+                                    </span>
+                                  )}
+                                </div>
+                                {/* Aggregate the per-policy reminder flags up to
+                                    the client level: "month sent" if ANY policy
+                                    of this client got the 1-month reminder, same
+                                    for week. The per-policy breakdown is in the
+                                    expanded row below. */}
+                                <ReminderTypeBadges
+                                  size="xs"
+                                  month={(client.policy_ids || []).some(
+                                    (pid) => remindersByPolicy[pid]?.month,
+                                  )}
+                                  week={(client.policy_ids || []).some(
+                                    (pid) => remindersByPolicy[pid]?.week,
+                                  )}
+                                />
                               </div>
                             </TableCell>
                             <TableCell className="max-w-[150px] truncate text-xs text-muted-foreground">
@@ -1658,9 +1761,16 @@ export default function PolicyReports() {
                                           </div>
                                           <div>
                                             <p className="text-xs text-muted-foreground">الحالة</p>
-                                            <Badge className={cn('border text-xs', renewalStatusColors[policy.renewal_status])}>
-                                              {renewalStatusLabels[policy.renewal_status]}
-                                            </Badge>
+                                            <div className="flex flex-col gap-1">
+                                              <Badge className={cn('border text-xs w-fit', renewalStatusColors[policy.renewal_status])}>
+                                                {renewalStatusLabels[policy.renewal_status]}
+                                              </Badge>
+                                              <ReminderTypeBadges
+                                                size="xs"
+                                                month={!!remindersByPolicy[policy.id]?.month}
+                                                week={!!remindersByPolicy[policy.id]?.week}
+                                              />
+                                            </div>
                                           </div>
                                         </div>
                                       </div>
