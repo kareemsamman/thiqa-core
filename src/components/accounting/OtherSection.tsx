@@ -46,25 +46,16 @@ import {
   CommandList,
 } from '@/components/ui/command';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
   ArrowDownRight,
   ArrowUpRight,
   Banknote,
   CalendarRange,
   Check,
   ChevronsUpDown,
-  Plus,
-  Receipt,
   Search,
   TrendingUp,
   Users,
   Wallet,
-  WalletMinimal,
   X,
   type LucideIcon,
 } from 'lucide-react';
@@ -84,8 +75,6 @@ import {
 import { PAYMENT_METHOD_LABELS } from './accountingTypes';
 import { cn } from '@/lib/utils';
 import { ReceiptActionsDialog, type VoucherActionRow } from './ReceiptActionsDialog';
-import { AddOtherVoucherDialog } from '../receipts/AddOtherVoucherDialog';
-import type { VoucherKind } from '../receipts/AddVoucherDialog';
 import { formatOtherCategory } from './otherCategoryLabel';
 
 // 4 sub-tabs. No "all/issuances/returns" — external parties have no
@@ -119,8 +108,6 @@ export function OtherSection({ branchId }: OtherSectionProps = {}) {
   const [search, setSearch] = useState('');
   const [selectedRecipient, setSelectedRecipient] = useState<string | null>(null);
   const [voucherActionRow, setVoucherActionRow] = useState<VoucherActionRow | null>(null);
-  const [addOpen, setAddOpen] = useState(false);
-  const [addKind, setAddKind] = useState<VoucherKind>('payment');
   // Same month-defaulting as the other accounting tabs — loading this
   // section on day 18 should NOT dump the whole year by default.
   const [filters, setFilters] = useState<AccountingFiltersValue>(() => {
@@ -249,13 +236,6 @@ export function OtherSection({ branchId }: OtherSectionProps = {}) {
     () => Object.entries(PAYMENT_METHOD_LABELS).map(([value, label]) => ({ value, label })),
     [],
   );
-
-  // Trigger the AddOtherVoucherDialog with the chosen voucher kind.
-  // Same dialog the /receipts page uses — single source of truth.
-  const openAdd = (kind: VoucherKind) => {
-    setAddKind(kind);
-    setAddOpen(true);
-  };
 
   return (
     <div className="space-y-2.5">
@@ -404,34 +384,6 @@ export function OtherSection({ branchId }: OtherSectionProps = {}) {
               sort: true,
             }}
           />
-          {/* "إضافة سند آخر" — splits into 4 voucher kinds, opens
-              AddOtherVoucherDialog with the chosen kind. */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button size="sm" className="gap-1.5">
-                <Plus className="h-3.5 w-3.5" />
-                إضافة سند
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => openAdd('payment')}>
-                <Receipt className="h-4 w-4 ml-2 text-emerald-600" />
-                سند قبض من جهة خارجية
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => openAdd('disbursement')}>
-                <Banknote className="h-4 w-4 ml-2 text-rose-600" />
-                سند صرف لجهة خارجية
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => openAdd('credit_note')}>
-                <Wallet className="h-4 w-4 ml-2 text-amber-600" />
-                إشعار دائن
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => openAdd('debit_note')}>
-                <WalletMinimal className="h-4 w-4 ml-2 text-sky-600" />
-                إشعار مدين
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
         </div>
       </div>
 
@@ -502,13 +454,6 @@ export function OtherSection({ branchId }: OtherSectionProps = {}) {
       <ReceiptActionsDialog
         row={voucherActionRow}
         onClose={() => setVoucherActionRow(null)}
-      />
-
-      <AddOtherVoucherDialog
-        open={addOpen}
-        onOpenChange={setAddOpen}
-        kind={addKind}
-        onSaved={() => data.refresh()}
       />
     </div>
   );
