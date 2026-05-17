@@ -3,15 +3,16 @@ import { useSearchParams } from 'react-router-dom';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Header } from '@/components/layout/Header';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { Building2, Users, UserRound, Wallet } from 'lucide-react';
+import { Building2, Users, UserRound, Wallet, PieChart } from 'lucide-react';
 import { CompaniesSection } from '@/components/accounting/CompaniesSection';
 import { BrokersSection } from '@/components/accounting/BrokersSection';
 import { OtherSection } from '@/components/accounting/OtherSection';
 import { ClientsSection } from '@/components/accounting/ClientsSection';
+import { FinancialOverviewSection } from '@/components/accounting/FinancialOverviewSection';
 import { RecalcProfitsButton } from '@/components/dashboard/RecalcProfitsButton';
 import { AgentBranchFilter } from '@/components/shared/AgentBranchFilter';
 
-type MainTab = 'companies' | 'brokers' | 'clients' | 'other';
+type MainTab = 'companies' | 'brokers' | 'clients' | 'other' | 'overview';
 
 // Access is gated by <PermissionRoute permission="page.accounting"
 // feature="accounting"> at the route level — admins bypass; workers
@@ -24,6 +25,8 @@ export default function Accounting() {
       ? 'brokers'
       : searchParams.get('tab') === 'clients'
       ? 'clients'
+      : searchParams.get('tab') === 'overview'
+      ? 'overview'
       : searchParams.get('tab') === 'other' || searchParams.get('tab') === 'expenses'
       ? // Accept the legacy `tab=expenses` deep-link (e.g. from
         // Cheques.tsx's cheque-transferred-to-expense link) and quietly
@@ -73,22 +76,26 @@ export default function Accounting() {
       <div className="p-3 md:p-4 space-y-3">
         <Tabs value={tab} onValueChange={(v) => setTab(v as MainTab)}>
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <TabsList className="grid w-full max-w-2xl grid-cols-4">
+            <TabsList className="grid w-full max-w-3xl grid-cols-5">
               <TabsTrigger value="companies" className="gap-2">
                 <Building2 className="h-4 w-4" />
-                شركات التأمين
+                <span className="hidden sm:inline">شركات التأمين</span>
               </TabsTrigger>
               <TabsTrigger value="brokers" className="gap-2">
                 <Users className="h-4 w-4" />
-                الوسطاء
+                <span className="hidden sm:inline">الوسطاء</span>
               </TabsTrigger>
               <TabsTrigger value="clients" className="gap-2">
                 <UserRound className="h-4 w-4" />
-                العملاء
+                <span className="hidden sm:inline">العملاء</span>
               </TabsTrigger>
               <TabsTrigger value="other" className="gap-2">
                 <Wallet className="h-4 w-4" />
-                آخر
+                <span className="hidden sm:inline">آخر</span>
+              </TabsTrigger>
+              <TabsTrigger value="overview" className="gap-2">
+                <PieChart className="h-4 w-4" />
+                <span className="hidden sm:inline">النظرة المالية</span>
               </TabsTrigger>
             </TabsList>
             <div className="flex items-center gap-2">
@@ -112,6 +119,11 @@ export default function Accounting() {
           </TabsContent>
           <TabsContent value="other" className="mt-3">
             {mountedTabs.has('other') && <OtherSection branchId={branchId} />}
+          </TabsContent>
+          <TabsContent value="overview" className="mt-3">
+            {mountedTabs.has('overview') && (
+              <FinancialOverviewSection branchId={branchId} />
+            )}
           </TabsContent>
         </Tabs>
       </div>
