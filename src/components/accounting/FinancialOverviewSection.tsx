@@ -33,8 +33,9 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { ArabicDatePicker } from '@/components/ui/arabic-date-picker';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -277,12 +278,17 @@ export function FinancialOverviewSection({
   }, [data.issuances, data.expensesTotal]);
 
   // ─── Receivables (مستحق لنا) ─────────────────────────────────
+  // Period-scoped receivables — what's still outstanding against
+  // policies issued / paid within the chosen window. NOT a full
+  // per-client lifetime balance; that lives on each client's kashf
+  // page. Includes both directions: payments owed TO us and any
+  // disbursement-style outflows that haven't actually cleared.
   const receivables = useMemo(() => {
-    // From clients — gross billed minus what they paid minus credit
-    // notes we issued plus any debit notes against them. The minimal
-    // rough version: clients' billed amount (from issuances) minus
-    // already-received payments. Per the per-client formula in
-    // get_client_balance, this approximates the period's net receivable.
+    // CLIENTS — gross billed (insurance + commission, excluding
+    // ELZAMI as already handled by useAccountingData.moneySubs)
+    // minus collected payments minus credit notes we issued
+    // (we credited them = they owe less) plus debit notes against
+    // them (they owe more).
     const clientsBilled = data.issuances.reduce(
       (s, r) =>
         s +
@@ -290,10 +296,22 @@ export function FinancialOverviewSection({
         Number(r.office_commission || 0),
       0,
     );
-    const fromClients = Math.max(0, clientsBilled - cashIn.fromClients);
-    // From brokers — to_broker direction policies create a receivable
-    // from the broker; subtract what they've already paid + debit-note
-    // (broker owes us extra) abs sum.
+    // Credit notes ON clients (positive amount = we owe them = reduces
+    // what they owe us); debit notes (positive amount = they owe more).
+    const clientCreditNotesSum = data.clientCreditNotes
+      .filter((r) => !r.cancelled_at && r.receipt_type === 'credit_note')
+      .reduce((s, r) => s + Math.abs(Number(r.amount || 0)), 0);
+    const clientDebitNotesSum = data.clientCreditNotes
+      .filter((r) => !r.cancelled_at && r.receipt_type === 'debit_note')
+      .reduce((s, r) => s + Math.abs(Number(r.amount || 0)), 0);
+    const fromClients = Math.max(
+      0,
+      clientsBilled + clientDebitNotesSum - cashIn.fromClients - clientCreditNotesSum,
+    );
+
+    // BROKERS — to_broker policies create a receivable from the
+    // broker. Subtract collected + debit notes (broker owes us extra
+    // beyond the policy price).
     const grossDueFromBrokers = data.issuances
       .filter((r) => r.main.broker_direction === 'to_broker')
       .reduce((s, r) => s + Number(r.insurance_price || 0), 0);
@@ -304,7 +322,8 @@ export function FinancialOverviewSection({
       0,
       grossDueFromBrokers - cashIn.fromBrokers - brokerDebitNotesSum,
     );
-    // From external — debit notes against external parties.
+
+    // EXTERNAL — debit notes against external parties (they owe us).
     const fromOther = data.otherReceipts
       .filter((r) => r.receipt_type === 'debit_note' && !r.cancelled_at)
       .reduce((s, r) => s + Math.abs(Number(r.amount || 0)), 0);
@@ -316,6 +335,7 @@ export function FinancialOverviewSection({
     };
   }, [
     data.issuances,
+    data.clientCreditNotes,
     data.brokerCreditNotes,
     data.otherReceipts,
     cashIn.fromClients,
@@ -414,26 +434,29 @@ export function FinancialOverviewSection({
                 {PERIOD_LABEL.custom}
               </button>
             </PopoverTrigger>
-            <PopoverContent className="w-[280px] p-3" align="end" dir="rtl">
-              <div className="space-y-2.5">
-                <Label className="text-xs">من تاريخ</Label>
-                <Input
-                  type="date"
-                  value={customFrom}
-                  onChange={(e) => {
-                    setCustomFrom(e.target.value);
-                    setPeriod('custom');
-                  }}
-                />
-                <Label className="text-xs">إلى تاريخ</Label>
-                <Input
-                  type="date"
-                  value={customTo}
-                  onChange={(e) => {
-                    setCustomTo(e.target.value);
-                    setPeriod('custom');
-                  }}
-                />
+            <PopoverContent className="w-[300px] p-3" align="end" dir="rtl">
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">من تاريخ</Label>
+                  <ArabicDatePicker
+                    value={customFrom}
+                    onChange={(v) => {
+                      setCustomFrom(v);
+                      setPeriod('custom');
+                    }}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">إلى تاريخ</Label>
+                  <ArabicDatePicker
+                    value={customTo}
+                    onChange={(v) => {
+                      setCustomTo(v);
+                      setPeriod('custom');
+                    }}
+                    min={customFrom}
+                  />
+                </div>
               </div>
             </PopoverContent>
           </Popover>
@@ -846,6 +869,18 @@ function LedgerCard({
   );
 }
 
+// Per-segment palette — fixed HSL values that work with both light and
+// dark themes. Each card cycles through these in segment order; same
+// label always gets the same color across the two breakdown cards.
+const CHART_COLORS = [
+  'hsl(160 70% 45%)', // emerald
+  'hsl(217 91% 60%)', // blue
+  'hsl(38 92% 55%)',  // amber
+  'hsl(280 70% 60%)', // purple
+  'hsl(0 75% 60%)',   // rose
+  'hsl(195 70% 50%)', // sky
+];
+
 function BreakdownCard({
   title,
   icon: Icon,
@@ -862,11 +897,21 @@ function BreakdownCard({
   fmt: (n: number) => string;
 }) {
   const cls = TONE_CLASSES[tone];
-  // Filter out zero segments so the breakdown stays clean — 5 lines of
-  // zeros under a real number is just visual noise.
-  const visible = segments.filter((s) => s.value > 0);
+  // Filter out zero segments so the donut isn't cluttered with empty
+  // slices and the legend stays focused on real activity.
+  const visible = segments
+    .map((s, idx) => ({ ...s, color: CHART_COLORS[idx % CHART_COLORS.length] }))
+    .filter((s) => s.value > 0);
+
+  // When total is zero we still render a ghost segment so the donut
+  // shape stays consistent. Center overlay swaps to "لا توجد بيانات".
+  const chartData =
+    total > 0
+      ? visible.map((s) => ({ name: s.label, value: s.value, color: s.color }))
+      : [{ name: '', value: 1, color: 'hsl(var(--muted))' }];
+
   return (
-    <Card>
+    <Card className="h-full">
       <CardContent className="py-4 px-5">
         <div className="flex items-center gap-2.5 mb-3">
           <div className={cn('h-8 w-8 rounded-lg flex items-center justify-center', cls.bg)}>
@@ -877,40 +922,77 @@ function BreakdownCard({
             <p className={cn('text-base font-bold tabular-nums', cls.text)}>{fmt(total)}</p>
           </div>
         </div>
-        {visible.length === 0 ? (
-          <p className="text-xs text-muted-foreground text-center py-4">
-            لا توجد حركات بهالفترة
-          </p>
-        ) : (
-          <div className="space-y-2">
-            {visible.map((s) => {
-              const Icon = s.icon;
-              const pct = total > 0 ? (s.value / total) * 100 : 0;
-              return (
-                <div key={s.label} className="text-xs">
-                  <div className="flex items-center justify-between gap-2 mb-1">
-                    <div className="flex items-center gap-1.5 text-foreground/80">
-                      <Icon className="h-3 w-3 text-muted-foreground" />
-                      <span>{s.label}</span>
-                    </div>
-                    <div className="flex items-center gap-2 tabular-nums">
-                      <span className="text-muted-foreground">
-                        {pct.toFixed(0)}%
-                      </span>
-                      <span className="font-semibold">{fmt(s.value)}</span>
-                    </div>
-                  </div>
-                  <div className="h-1.5 bg-muted/40 rounded-full overflow-hidden">
-                    <div
-                      className={cn('h-full transition-all', cls.bg.replace('/10', '/60'))}
-                      style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
+        <div className="grid grid-cols-1 sm:grid-cols-[180px_1fr] gap-3 items-center">
+          {/* Donut */}
+          <div className="relative h-[180px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={chartData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={55}
+                  outerRadius={80}
+                  paddingAngle={total > 0 && visible.length > 1 ? 2 : 0}
+                  dataKey="value"
+                  isAnimationActive={total > 0}
+                >
+                  {chartData.map((d, i) => (
+                    <Cell key={i} fill={d.color} />
+                  ))}
+                </Pie>
+                {total > 0 && (
+                  <RechartsTooltip
+                    formatter={(v: number, n: string) => [fmt(v), n]}
+                    contentStyle={{
+                      direction: 'rtl',
+                      textAlign: 'right',
+                      backgroundColor: 'hsl(var(--background))',
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: '8px',
+                      fontSize: '12px',
+                    }}
+                  />
+                )}
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+              {total === 0 ? (
+                <p className="text-[11px] text-muted-foreground">لا توجد حركات</p>
+              ) : (
+                <>
+                  <p className="text-[10px] text-muted-foreground">الإجمالي</p>
+                  <p className={cn('text-sm font-bold tabular-nums', cls.text)}>{fmt(total)}</p>
+                </>
+              )}
+            </div>
           </div>
-        )}
+          {/* Legend */}
+          <div className="space-y-1.5">
+            {visible.length === 0 ? (
+              <p className="text-xs text-muted-foreground">—</p>
+            ) : (
+              visible.map((s) => {
+                const SegIcon = s.icon;
+                const pct = total > 0 ? (s.value / total) * 100 : 0;
+                return (
+                  <div key={s.label} className="flex items-center gap-2 text-xs">
+                    <span
+                      className="w-2.5 h-2.5 rounded-full shrink-0"
+                      style={{ backgroundColor: s.color }}
+                    />
+                    <SegIcon className="h-3 w-3 text-muted-foreground shrink-0" />
+                    <span className="flex-1 truncate text-foreground/80">{s.label}</span>
+                    <span className="tabular-nums text-muted-foreground text-[10px]">
+                      {pct.toFixed(0)}%
+                    </span>
+                    <span className="tabular-nums font-semibold">{fmt(s.value)}</span>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
       </CardContent>
     </Card>
   );
