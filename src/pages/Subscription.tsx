@@ -17,7 +17,7 @@ import {
   Crown, CreditCard, Calendar, Clock, AlertTriangle, Check, X, MessageCircle,
   Sparkles, ShieldCheck, Pause, Info, ArrowUp, ArrowDown,
   Rocket, Shield, Trash2, XCircle, Loader2, Settings, BarChart3, Receipt, UserCog, Plus, ChevronDown,
-  ShoppingCart, KeyRound, FileSignature, Cake, Save,
+  ShoppingCart, KeyRound, FileSignature, Cake, Save, IdCard,
 } from "lucide-react";
 import { AddQuotaDialog, type OverageUsageType } from "@/components/subscription/AddQuotaDialog";
 import { AgentPlanOverview, UsageRow } from "@/components/subscription/AgentPlanOverview";
@@ -269,6 +269,21 @@ export default function Subscription() {
   const BIRTHDAY_TEMPLATE_PLACEHOLDER =
     "كل عام وأنت بخير {client_name}! 🎉 عيد ميلاد سعيد من {company_name}";
 
+  // License expiry SMS — second campaign handled by the same cron
+  // edge function. The agent enables/disables independently of
+  // birthday and edits its own template. Cron fires daily ~14:00
+  // and sends to clients whose car's license_expiry is ~1 month
+  // out, honoring the agent's SMS quota.
+  const [licenseEnabled, setLicenseEnabled] = useState(false);
+  const [licenseTemplate, setLicenseTemplate] = useState("");
+  const [licenseInitialTemplate, setLicenseInitialTemplate] = useState("");
+  const [licenseEnabledSaving, setLicenseEnabledSaving] = useState(false);
+  const [licenseTemplateSaving, setLicenseTemplateSaving] = useState(false);
+  const licenseTemplateDirty =
+    licenseTemplate.trim() !== licenseInitialTemplate.trim();
+  const LICENSE_TEMPLATE_PLACEHOLDER =
+    "تنبيه {client_name}: رخصة سيارتك {car_number} ستنتهي قريباً. يرجى التجديد قبل انتهاء صلاحيتها.";
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -297,7 +312,7 @@ export default function Subscription() {
         // of flicker-empty.
         supabase
           .from("sms_settings")
-          .select("id, birthday_sms_enabled, birthday_sms_template")
+          .select("id, birthday_sms_enabled, birthday_sms_template, license_expiry_sms_enabled, license_expiry_sms_template")
           .eq("agent_id", agentId)
           .maybeSingle(),
       ]);
@@ -310,6 +325,10 @@ export default function Subscription() {
       const tpl = smsRow?.birthday_sms_template ?? "";
       setBirthdayTemplate(tpl);
       setBirthdayInitialTemplate(tpl);
+      setLicenseEnabled(smsRow?.license_expiry_sms_enabled === true);
+      const licTpl = smsRow?.license_expiry_sms_template ?? "";
+      setLicenseTemplate(licTpl);
+      setLicenseInitialTemplate(licTpl);
     })();
     return () => { cancelled = true; };
   }, [agentId]);
@@ -369,6 +388,41 @@ export default function Subscription() {
       toast.error(err?.message || "فشل حفظ نص الرسالة");
     } finally {
       setBirthdayTemplateSaving(false);
+    }
+  };
+
+  const handleToggleLicense = async (next: boolean) => {
+    if (!agentId) return;
+    setLicenseEnabledSaving(true);
+    const prev = licenseEnabled;
+    setLicenseEnabled(next);
+    try {
+      await upsertSmsField({ license_expiry_sms_enabled: next });
+      toast.success(
+        next
+          ? "تم تفعيل تنبيهات انتهاء الرخصة"
+          : "تم تعطيل تنبيهات انتهاء الرخصة"
+      );
+    } catch (err: any) {
+      setLicenseEnabled(prev);
+      toast.error(err?.message || "فشل تحديث الإعدادات");
+    } finally {
+      setLicenseEnabledSaving(false);
+    }
+  };
+
+  const handleSaveLicenseTemplate = async () => {
+    if (!agentId) return;
+    setLicenseTemplateSaving(true);
+    const value = licenseTemplate.trim() || null;
+    try {
+      await upsertSmsField({ license_expiry_sms_template: value });
+      setLicenseInitialTemplate(licenseTemplate);
+      toast.success("تم حفظ نص رسالة تنبيه الرخصة");
+    } catch (err: any) {
+      toast.error(err?.message || "فشل حفظ نص الرسالة");
+    } finally {
+      setLicenseTemplateSaving(false);
     }
   };
 
@@ -1525,6 +1579,76 @@ export default function Subscription() {
                         className="gap-2"
                       >
                         {birthdayTemplateSaving ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Save className="h-4 w-4" />
+                        )}
+                        حفظ النص
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* License expiry SMS — second campaign on the same cron.
+                Sends a heads-up to the client when their car's
+                license_expiry is ~1 month out. Honours SMS quota and
+                is idempotent on (car_id, license_expiry) so renewing
+                the license naturally re-arms the notification. */}
+            <Card className="shadow-sm">
+              <CardContent className="py-5 space-y-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div className="flex items-start gap-3">
+                    <div className="h-10 w-10 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
+                      <IdCard className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold">تنبيهات انتهاء رخصة السيارة</h3>
+                      <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                        عند التفعيل، يُرسَل تلقائياً تنبيه قبل شهر من انتهاء رخصة كل سيارة (الساعة 14:00 تقريباً)
+                        مع توقيع المكتب. إذا انتهى رصيد الرسائل لا تُرسَل أي رسالة.
+                        كل تاريخ انتهاء يستلم تنبيهاً واحداً فقط — تجديد الرخصة يعيد التفعيل تلقائياً.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="shrink-0 flex items-center gap-2">
+                    {licenseEnabledSaving && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+                    <Switch
+                      checked={licenseEnabled}
+                      onCheckedChange={handleToggleLicense}
+                      disabled={licenseEnabledSaving || !agentId}
+                    />
+                  </div>
+                </div>
+                {licenseEnabled && (
+                  <div className="space-y-2 pt-2 border-t">
+                    <label className="text-sm font-medium flex items-center justify-between gap-2">
+                      <span>نص رسالة تنبيه الرخصة</span>
+                      <span className="text-xs font-normal text-muted-foreground">
+                        المتغيرات: <code className="font-mono">{"{client_name}"}</code> ، <code className="font-mono">{"{car_number}"}</code> ، <code className="font-mono">{"{company_name}"}</code>
+                      </span>
+                    </label>
+                    <Textarea
+                      dir="rtl"
+                      rows={3}
+                      value={licenseTemplate}
+                      onChange={(e) => setLicenseTemplate(e.target.value)}
+                      placeholder={LICENSE_TEMPLATE_PLACEHOLDER}
+                      disabled={licenseTemplateSaving}
+                      className="resize-none"
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                      اتركه فارغاً لاستخدام النص الافتراضي. سيُضاف توقيع المكتب تلقائياً في أسفل كل رسالة.
+                    </p>
+                    <div className="flex justify-end">
+                      <Button
+                        size="sm"
+                        onClick={handleSaveLicenseTemplate}
+                        disabled={!licenseTemplateDirty || licenseTemplateSaving}
+                        className="gap-2"
+                      >
+                        {licenseTemplateSaving ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
                         ) : (
                           <Save className="h-4 w-4" />

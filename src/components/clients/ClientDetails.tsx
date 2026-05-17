@@ -596,6 +596,16 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
   const [deleteCarDialogOpen, setDeleteCarDialogOpen] = useState(false);
   const [deletingCar, setDeletingCar] = useState(false);
   const [carPolicyCounts, setCarPolicyCounts] = useState<Record<string, number>>({});
+  // Per-car: was a license-expiry SMS already sent for the current
+  // license_expiry value? Filled once cars are loaded. The cron's
+  // idempotency key is (sms_type='license_expiry', car_id,
+  // sent_for_date=car.license_expiry) — so a row whose sent_for_date
+  // matches the car's current license_expiry means "تم الإرسال
+  // لتاريخ الانتهاء الحالي". When the rخصة is renewed, license_expiry
+  // changes and this becomes false → the next cron run will fire.
+  const [licenseSmsByCar, setLicenseSmsByCar] = useState<
+    Record<string, string>
+  >({});
   
   // Policy metadata - fetched once, used for instant filtering
   const [policyPaymentInfo, setPolicyPaymentInfo] = useState<Record<string, { paid: number; remaining: number }>>({});
@@ -748,6 +758,30 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
       const rows = (data || []) as CarRecord[];
       queryClient.setQueryData(cacheKey, rows);
       setCars(rows);
+
+      // Follow-up: did the cron already send a license-expiry SMS for
+      // each car's CURRENT license_expiry? Scoped to the cars we just
+      // loaded. Building a map keyed by car_id → the sent_for_date
+      // recorded in automated_sms_log; the cell flags it as "تم" only
+      // when that matches the car's current license_expiry.
+      const carIds = rows.map(r => r.id);
+      if (carIds.length > 0) {
+        const { data: smsRows } = await supabase
+          .from('automated_sms_log')
+          .select('car_id, sent_for_date, status')
+          .in('car_id', carIds)
+          .eq('sms_type', 'license_expiry')
+          .eq('status', 'sent')
+          .order('sent_for_date', { ascending: false });
+        const map: Record<string, string> = {};
+        for (const r of (smsRows ?? []) as { car_id: string; sent_for_date: string }[]) {
+          // Latest-first; first row per car wins.
+          if (r.car_id && !map[r.car_id]) map[r.car_id] = r.sent_for_date;
+        }
+        setLicenseSmsByCar(map);
+      } else {
+        setLicenseSmsByCar({});
+      }
     } catch (error) {
       console.error('Error fetching cars:', error);
     } finally {
@@ -4021,6 +4055,7 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                       <TableHead className="text-right">السنة</TableHead>
                       <TableHead className="text-right">اللون</TableHead>
                       <TableHead className="text-right">القيمة</TableHead>
+                      <TableHead className="text-right">انتهاء الرخصة</TableHead>
                       <TableHead className="text-right">النوع</TableHead>
                       <TableHead className="text-right">المعاملات</TableHead>
                       <TableHead className="text-right w-[60px]">إجراءات</TableHead>
@@ -4042,6 +4077,61 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                             {car.car_value ? (
                               <span className="font-semibold text-primary ltr-nums">₪{car.car_value.toLocaleString()}</span>
                             ) : (
+                              <span className="text-muted-foreground">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {car.license_expiry ? (() => {
+                              // Three-state cell: the expiry date itself
+                              // (with urgency color when ≤30 days away), and
+                              // a small pill noting whether the cron has
+                              // already fired a reminder for THIS expiry
+                              // value. When the license is renewed, the
+                              // expiry changes and the pill resets — next
+                              // cron run will fire fresh.
+                              const expiryDate = new Date(car.license_expiry);
+                              const today = new Date();
+                              today.setHours(0, 0, 0, 0);
+                              const daysLeft = Math.floor(
+                                (expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
+                              );
+                              const expired = daysLeft < 0;
+                              const soon = !expired && daysLeft <= 30;
+                              const sentForDate = licenseSmsByCar[car.id];
+                              const reminderSent = sentForDate === car.license_expiry;
+                              return (
+                                <div className="flex flex-col gap-1">
+                                  <span
+                                    className={cn(
+                                      'font-mono text-sm',
+                                      expired && 'text-destructive font-semibold',
+                                      soon && 'text-amber-700 font-semibold',
+                                    )}
+                                  >
+                                    {formatDate(car.license_expiry)}
+                                    {expired && <span className="text-[10px] mr-1">(منتهية)</span>}
+                                    {soon && <span className="text-[10px] mr-1">({daysLeft} يوم)</span>}
+                                  </span>
+                                  {reminderSent ? (
+                                    <Badge
+                                      variant="outline"
+                                      className="text-[10px] px-1.5 py-0 h-4 w-fit gap-0.5 bg-emerald-50 text-emerald-700 border-emerald-300"
+                                      title="تم إرسال تنبيه انتهاء الرخصة للعميل"
+                                    >
+                                      ✓ تم التنبيه
+                                    </Badge>
+                                  ) : (
+                                    <Badge
+                                      variant="outline"
+                                      className="text-[10px] px-1.5 py-0 h-4 w-fit gap-0.5 bg-muted/30 text-muted-foreground border-border"
+                                      title="لم يُرسَل تنبيه انتهاء الرخصة لهذا التاريخ بعد"
+                                    >
+                                      ○ بدون تنبيه
+                                    </Badge>
+                                  )}
+                                </div>
+                              );
+                            })() : (
                               <span className="text-muted-foreground">-</span>
                             )}
                           </TableCell>
