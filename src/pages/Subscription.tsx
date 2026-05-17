@@ -11,12 +11,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import {
   Crown, CreditCard, Calendar, Clock, AlertTriangle, Check, X, MessageCircle,
   Sparkles, ShieldCheck, Pause, Info, ArrowUp, ArrowDown,
   Rocket, Shield, Trash2, XCircle, Loader2, Settings, BarChart3, Receipt, UserCog, Plus, ChevronDown,
-  ShoppingCart, KeyRound, FileSignature,
+  ShoppingCart, KeyRound, FileSignature, Cake, Save,
 } from "lucide-react";
 import { AddQuotaDialog, type OverageUsageType } from "@/components/subscription/AddQuotaDialog";
 import { AgentPlanOverview, UsageRow } from "@/components/subscription/AgentPlanOverview";
@@ -252,6 +253,21 @@ export default function Subscription() {
   const [signingTimingSaving, setSigningTimingSaving] = useState(false);
   const signingOnCompletion =
     (agent as any)?.signing_check_timing === "on_completion";
+  // Birthday SMS — per-agent toggle + Arabic template lives on
+  // sms_settings (birthday_sms_enabled, birthday_sms_template).
+  // The cron-birthday-license-sms edge function reads both fields
+  // daily at ~14:00 local and sends to clients whose birth_date's
+  // MM-DD matches today, honoring the agent's SMS quota.
+  const [smsSettingsId, setSmsSettingsId] = useState<string | null>(null);
+  const [birthdayEnabled, setBirthdayEnabled] = useState(false);
+  const [birthdayTemplate, setBirthdayTemplate] = useState("");
+  const [birthdayInitialTemplate, setBirthdayInitialTemplate] = useState("");
+  const [birthdayEnabledSaving, setBirthdayEnabledSaving] = useState(false);
+  const [birthdayTemplateSaving, setBirthdayTemplateSaving] = useState(false);
+  const birthdayTemplateDirty =
+    birthdayTemplate.trim() !== birthdayInitialTemplate.trim();
+  const BIRTHDAY_TEMPLATE_PLACEHOLDER =
+    "كل عام وأنت بخير {client_name}! 🎉 عيد ميلاد سعيد من {company_name}";
 
   useEffect(() => {
     let cancelled = false;
@@ -273,16 +289,88 @@ export default function Subscription() {
     if (!agentId) return;
     let cancelled = false;
     (async () => {
-      const [ownerRes, settingsRes] = await Promise.all([
+      const [ownerRes, settingsRes, smsRes] = await Promise.all([
         (supabase as any).rpc("is_agent_owner"),
         supabase.from("auth_settings").select("sms_otp_enabled").eq("agent_id", agentId).maybeSingle(),
+        // Birthday SMS toggle + template piggy-back on the same effect
+        // so the الحساب tab can render its state on first paint instead
+        // of flicker-empty.
+        supabase
+          .from("sms_settings")
+          .select("id, birthday_sms_enabled, birthday_sms_template")
+          .eq("agent_id", agentId)
+          .maybeSingle(),
       ]);
       if (cancelled) return;
       setIsAgentOwner(ownerRes.data === true);
       setSmsOtpEnabled(((settingsRes.data as any)?.sms_otp_enabled) === true);
+      const smsRow: any = smsRes.data;
+      setSmsSettingsId(smsRow?.id ?? null);
+      setBirthdayEnabled(smsRow?.birthday_sms_enabled === true);
+      const tpl = smsRow?.birthday_sms_template ?? "";
+      setBirthdayTemplate(tpl);
+      setBirthdayInitialTemplate(tpl);
     })();
     return () => { cancelled = true; };
   }, [agentId]);
+
+  // Upsert helper for the sms_settings row — birthday + template share
+  // it. The /sms-settings page also writes to this row, so we use the
+  // existing settings.id when present and only fall back to insert
+  // when no row exists yet for this agent.
+  const upsertSmsField = async (patch: Record<string, unknown>) => {
+    if (!agentId) throw new Error("missing agentId");
+    if (smsSettingsId) {
+      const { error } = await supabase
+        .from("sms_settings")
+        .update(patch)
+        .eq("id", smsSettingsId);
+      if (error) throw error;
+      return;
+    }
+    const { data, error } = await supabase
+      .from("sms_settings")
+      .insert({ agent_id: agentId, ...patch } as any)
+      .select("id")
+      .single();
+    if (error) throw error;
+    setSmsSettingsId((data as any)?.id ?? null);
+  };
+
+  const handleToggleBirthday = async (next: boolean) => {
+    if (!agentId) return;
+    setBirthdayEnabledSaving(true);
+    const prev = birthdayEnabled;
+    setBirthdayEnabled(next);
+    try {
+      await upsertSmsField({ birthday_sms_enabled: next });
+      toast.success(
+        next
+          ? "تم تفعيل رسائل عيد الميلاد التلقائية"
+          : "تم تعطيل رسائل عيد الميلاد التلقائية"
+      );
+    } catch (err: any) {
+      setBirthdayEnabled(prev);
+      toast.error(err?.message || "فشل تحديث الإعدادات");
+    } finally {
+      setBirthdayEnabledSaving(false);
+    }
+  };
+
+  const handleSaveBirthdayTemplate = async () => {
+    if (!agentId) return;
+    setBirthdayTemplateSaving(true);
+    const value = birthdayTemplate.trim() || null;
+    try {
+      await upsertSmsField({ birthday_sms_template: value });
+      setBirthdayInitialTemplate(birthdayTemplate);
+      toast.success("تم حفظ نص رسالة عيد الميلاد");
+    } catch (err: any) {
+      toast.error(err?.message || "فشل حفظ نص الرسالة");
+    } finally {
+      setBirthdayTemplateSaving(false);
+    }
+  };
 
   const handleToggleSigningTiming = async (next: boolean) => {
     if (!agentId) return;
@@ -1376,6 +1464,76 @@ export default function Subscription() {
                     disabled={signingTimingSaving || !agentId}
                   />
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Birthday SMS — daily cron at ~14:00 local fires off a
+                greeting to clients whose birth_date matches today.
+                Honours the agent's SMS quota and is naturally idempotent
+                per (client, calendar date) so re-running same day or
+                next year's same MM-DD behaves correctly. */}
+            <Card className="shadow-sm">
+              <CardContent className="py-5 space-y-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div className="flex items-start gap-3">
+                    <div className="h-10 w-10 rounded-xl bg-pink-100 text-pink-600 flex items-center justify-center shrink-0">
+                      <Cake className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold">رسائل عيد ميلاد العملاء</h3>
+                      <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                        عند التفعيل، يُرسَل تلقائياً يوم عيد ميلاد كل عميل (الساعة 14:00 تقريباً)
+                        رسالة تهنئة من رصيد الرسائل النصية لوكالتك. إذا انتهى الرصيد لا تُرسَل أي رسالة.
+                        كل عميل يستقبل رسالة واحدة بالسنة.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="shrink-0 flex items-center gap-2">
+                    {birthdayEnabledSaving && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+                    <Switch
+                      checked={birthdayEnabled}
+                      onCheckedChange={handleToggleBirthday}
+                      disabled={birthdayEnabledSaving || !agentId}
+                    />
+                  </div>
+                </div>
+                {birthdayEnabled && (
+                  <div className="space-y-2 pt-2 border-t">
+                    <label className="text-sm font-medium flex items-center justify-between gap-2">
+                      <span>نص رسالة عيد الميلاد</span>
+                      <span className="text-xs font-normal text-muted-foreground">
+                        المتغيرات: <code className="font-mono">{"{client_name}"}</code> ، <code className="font-mono">{"{company_name}"}</code>
+                      </span>
+                    </label>
+                    <Textarea
+                      dir="rtl"
+                      rows={3}
+                      value={birthdayTemplate}
+                      onChange={(e) => setBirthdayTemplate(e.target.value)}
+                      placeholder={BIRTHDAY_TEMPLATE_PLACEHOLDER}
+                      disabled={birthdayTemplateSaving}
+                      className="resize-none"
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                      اتركه فارغاً لاستخدام النص الافتراضي. سيُضاف توقيع المكتب تلقائياً في أسفل كل رسالة.
+                    </p>
+                    <div className="flex justify-end">
+                      <Button
+                        size="sm"
+                        onClick={handleSaveBirthdayTemplate}
+                        disabled={!birthdayTemplateDirty || birthdayTemplateSaving}
+                        className="gap-2"
+                      >
+                        {birthdayTemplateSaving ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Save className="h-4 w-4" />
+                        )}
+                        حفظ النص
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
