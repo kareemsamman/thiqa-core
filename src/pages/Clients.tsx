@@ -22,7 +22,6 @@ import {
   Users,
   Building2,
   Plus,
-  Cake,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { normalizeArabic } from "@/lib/arabicNormalize";
@@ -80,8 +79,12 @@ export default function Clients() {
   // after fetchClients so the تاريخ الميلاد cell can show whether the
   // current-year greeting went out + the year of the most recent send.
   // Source: automated_sms_log where sms_type='birthday'.
+  // Per-client set of years a birthday SMS was successfully sent. The
+  // cell renders one pill per recent year so the agent can see at a
+  // glance: did هاي السنة fire? السنة اللي راحت؟ اللي قبلها؟ — and
+  // implicitly: السنة الجاي راح تنبعت تلقائياً (لأنها مش بالسجل بعد).
   const [birthdaySmsByClient, setBirthdaySmsByClient] = useState<
-    Record<string, { lastSentDate: string; lastSentYear: number }>
+    Record<string, Set<number>>
   >({});
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -217,10 +220,11 @@ export default function Clients() {
       setClients(clientsWithAccidentCount);
       setTotalCount(count || 0);
 
-      // Birthday-SMS lookup, scoped to this page's clients. One row per
-      // (client, calendar year) at most — we take the latest sent_for_date
-      // per client so the table can show "تم 2026" (current year) or
-      // "آخر إرسال 2025" (past send, this year hasn't fired yet).
+      // Birthday-SMS history lookup, scoped to this page's clients.
+      // We gather EVERY successful send (not just the latest) so the
+      // cell can render a per-year history strip (current year + the
+      // two prior years). Limited to 200 rows total — at one send per
+      // client per year, that's effectively unbounded for our use.
       const clientIdsOnPage = clientsWithAccidentCount
         .map((c) => c.id)
         .filter(Boolean);
@@ -230,15 +234,13 @@ export default function Clients() {
           .select('client_id, sent_for_date, status')
           .in('client_id', clientIdsOnPage)
           .eq('sms_type', 'birthday')
-          .eq('status', 'sent')
-          .order('sent_for_date', { ascending: false });
-        const map: Record<string, { lastSentDate: string; lastSentYear: number }> = {};
+          .eq('status', 'sent');
+        const map: Record<string, Set<number>> = {};
         for (const r of (bdayRows ?? []) as { client_id: string; sent_for_date: string }[]) {
-          // Rows arrive newest-first; first one we see for a client wins.
-          if (!map[r.client_id]) {
-            const year = parseInt(r.sent_for_date.slice(0, 4), 10);
-            map[r.client_id] = { lastSentDate: r.sent_for_date, lastSentYear: year };
-          }
+          const year = parseInt(r.sent_for_date.slice(0, 4), 10);
+          if (!Number.isFinite(year)) continue;
+          if (!map[r.client_id]) map[r.client_id] = new Set();
+          map[r.client_id].add(year);
         }
         setBirthdaySmsByClient(map);
       } else {
@@ -497,47 +499,49 @@ export default function Clients() {
                           <div className="flex flex-col gap-1">
                             <span>{formatDate(client.birth_date)}</span>
                             {(() => {
-                              // The cron writes one automated_sms_log row per
-                              // year on the client's birthday. We classify the
-                              // most recent send into three buckets so the
-                              // agent can tell at a glance whether THIS year
-                              // already fired and, if not, when the last
-                              // greeting actually went out.
+                              // History strip: current year + the two prior
+                              // years, oldest → newest. Years BEFORE the
+                              // client was added to the system are skipped —
+                              // showing "○ 2024" for a client added in 2026
+                              // would imply a missed send that never could
+                              // have happened. Next year is implicit: not
+                              // on the strip, and the cron will fire because
+                              // next year's MM-DD isn't in automated_sms_log.
                               const currentYear = new Date().getFullYear();
-                              const entry = birthdaySmsByClient[client.id];
-                              if (entry && entry.lastSentYear === currentYear) {
-                                return (
-                                  <Badge
-                                    variant="outline"
-                                    className="text-[10px] px-1.5 py-0 h-4 w-fit gap-0.5 bg-emerald-50 text-emerald-700 border-emerald-300"
-                                    title={`أُرسلت رسالة عيد الميلاد بتاريخ ${formatDate(entry.lastSentDate)}`}
-                                  >
-                                    <Cake className="h-2.5 w-2.5" />
-                                    تم {currentYear}
-                                  </Badge>
-                                );
-                              }
-                              if (entry) {
-                                return (
-                                  <Badge
-                                    variant="outline"
-                                    className="text-[10px] px-1.5 py-0 h-4 w-fit gap-0.5 bg-muted/30 text-muted-foreground border-border"
-                                    title={`آخر رسالة أُرسلت بتاريخ ${formatDate(entry.lastSentDate)}`}
-                                  >
-                                    <Cake className="h-2.5 w-2.5" />
-                                    آخر {entry.lastSentYear}
-                                  </Badge>
-                                );
-                              }
+                              const sent = birthdaySmsByClient[client.id] ?? new Set<number>();
+                              const createdYear = client.created_at
+                                ? new Date(client.created_at).getFullYear()
+                                : currentYear - 2;
+                              const years = [currentYear - 2, currentYear - 1, currentYear]
+                                .filter((y) => y >= createdYear);
+                              if (years.length === 0) return null;
                               return (
-                                <Badge
-                                  variant="outline"
-                                  className="text-[10px] px-1.5 py-0 h-4 w-fit gap-0.5 bg-muted/30 text-muted-foreground border-border"
-                                  title="لم تُرسَل أي رسالة عيد ميلاد لهذا العميل بعد"
-                                >
-                                  <Cake className="h-2.5 w-2.5" />
-                                  لم يُرسَل
-                                </Badge>
+                                <div className="flex items-center gap-0.5">
+                                  {years.map((y) => {
+                                    const wasSent = sent.has(y);
+                                    return (
+                                      <Badge
+                                        key={y}
+                                        variant="outline"
+                                        className={cn(
+                                          "text-[10px] px-1.5 py-0 h-4 gap-0.5 font-medium border",
+                                          wasSent
+                                            ? "bg-emerald-50 text-emerald-700 border-emerald-300"
+                                            : "bg-muted/30 text-muted-foreground border-border",
+                                        )}
+                                        title={
+                                          wasSent
+                                            ? `أُرسلت رسالة عيد الميلاد سنة ${y}`
+                                            : y === currentYear
+                                              ? `لم تُرسَل رسالة عيد الميلاد لسنة ${y} بعد`
+                                              : `لم تُرسَل رسالة عيد الميلاد سنة ${y}`
+                                        }
+                                      >
+                                        {wasSent ? '✓' : '○'} {y}
+                                      </Badge>
+                                    );
+                                  })}
+                                </div>
                               );
                             })()}
                           </div>
