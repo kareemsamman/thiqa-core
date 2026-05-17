@@ -225,17 +225,52 @@ export function AddOtherVoucherDialog({ open, onOpenChange, kind, onSaved }: Pro
 
   const finalAmount = supportsCashFlow ? linesTotal : Number(paperAmount || 0);
 
+  // Per-line validation — every line must be complete before the
+  // dialog accepts the save. Per user rule: ما يقبل تسديد المبلغ
+  // إلا لما كل دفعة فيها مبلغ، وكل دفعة شيك فيها رقم الشيك + البنك
+  // + الفرع + تاريخ الاستحقاق. Returns the user-facing missing-field
+  // message for the offending line, or null when the line is fine.
+  const lineValidationError = (line: PaymentLine): string | null => {
+    if (!(Number(line.amount) > 0)) return 'المبلغ';
+    if (line.type === 'cheque') {
+      const missing: string[] = [];
+      if (!line.cheque_number?.trim()) missing.push('رقم الشيك');
+      if (!line.bank_code) missing.push('البنك');
+      if (!line.branch_code) missing.push('الفرع');
+      if (!line.cheque_due_date) missing.push('تاريخ الاستحقاق');
+      if (missing.length > 0) return missing.join('، ');
+    }
+    return null;
+  };
+
+  // Count of payment lines that pass the per-line validation. Used
+  // by the dialog's "أضف دفعة واحدة على الأقل" guardrail at the
+  // bottom of the lines list — 0 means the user added a row but
+  // hasn't filled in any of the required fields yet.
   const validLineCount = useMemo(
-    () => lines.filter((l) => Number(l.amount || 0) > 0).length,
+    () => lines.filter((l) => lineValidationError(l) === null).length,
     [lines],
   );
+
+  // List of human-readable issues we surface above the Save button so
+  // the user knows exactly what's blocking the action. Empty array =
+  // everything's good to go.
+  const lineIssues = useMemo(() => {
+    if (!supportsCashFlow) return [] as string[];
+    const out: string[] = [];
+    lines.forEach((l, idx) => {
+      const err = lineValidationError(l);
+      if (err) out.push(`الدفعة ${idx + 1}: ${err}`);
+    });
+    return out;
+  }, [lines, supportsCashFlow]);
 
   const canSave =
     !!agentId &&
     recipientName.trim().length > 0 &&
     finalAmount > 0 &&
     !!issueDate &&
-    (!supportsCashFlow || validLineCount > 0) &&
+    (!supportsCashFlow || lineIssues.length === 0) &&
     !saving;
 
   const updateLine = (id: string, patch: Partial<PaymentLine>) =>
