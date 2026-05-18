@@ -3,7 +3,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Badge } from '@/components/ui/badge';
 import { ArabicDatePicker } from '@/components/ui/arabic-date-picker';
 import {
   Tooltip,
@@ -24,7 +23,6 @@ import {
   IssuanceEditOverlay,
   IssuanceEditPatch,
   IssuanceRow,
-  PAYMENT_METHOD_LABELS,
   applyOverlay,
 } from './accountingTypes';
 
@@ -375,7 +373,6 @@ export function CompanyIssuancesTable({
                   {showCol('end_date') && <TableHead className="whitespace-nowrap min-w-[160px]">نهاية التأمين</TableHead>}
                   {showCol('car_number') && <TableHead className="whitespace-nowrap min-w-[120px]">رقم السيارة</TableHead>}
                   {showCol('car_value') && <TableHead className="whitespace-nowrap min-w-[120px]">سعر السيارة</TableHead>}
-                  {showCol('payment_method') && <TableHead className="whitespace-nowrap min-w-[120px]">طريقة الدفع</TableHead>}
                   {showCol('company_name') && <TableHead className="whitespace-nowrap min-w-[160px]">{mode === 'broker' ? 'الوسيط / الشركة' : 'شركة التأمين'}</TableHead>}
                   {showCol('policy_type') && <TableHead className="whitespace-nowrap min-w-[110px]">نوع التأمين</TableHead>}
                   {showCol('payed_for_company') && (
@@ -511,29 +508,6 @@ export function CompanyIssuancesTable({
                               onChange={(v) => updateCarValue(rawRow, v)}
                               tip={!row.main.car_id ? 'لا توجد سيارة مرتبطة' : undefined}
                             />
-                          </TableCell>
-                        )}
-
-                        {showCol('payment_method') && (
-                          <TableCell>
-                            {(() => {
-                              // ELZAMI premiums are always paid on the
-                              // company portal with the customer's own
-                              // card — render as "فيزا خارجي" regardless
-                              // of whether a policy_payments row exists
-                              // yet (matches getPaymentTypeLabel).
-                              const label = isElzami
-                                ? 'فيزا خارجي'
-                                : row.primary_payment_method
-                                ? PAYMENT_METHOD_LABELS[row.primary_payment_method] ??
-                                  row.primary_payment_method
-                                : null;
-                              return label ? (
-                                <Badge variant="outline" className="text-xs">{label}</Badge>
-                              ) : (
-                                <span className="text-xs text-muted-foreground">-</span>
-                              );
-                            })()}
                           </TableCell>
                         )}
 
