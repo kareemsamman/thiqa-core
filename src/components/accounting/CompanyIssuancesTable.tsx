@@ -607,17 +607,15 @@ export function CompanyIssuancesTable({
                           <TableCell>
                             {isElzami ? (
                               <span className="text-xs text-muted-foreground">—</span>
-                            ) : row.is_grouped ? (
-                              // Grouped packages: display the row-level
-                              // AGGREGATE (sum across non-إلزامي subs) so
-                              // the column manually sums to the same number
-                              // the summary pills show. Editing routes
-                              // through the package drawer where per-sub
-                              // values are reachable.
-                              <span className="font-semibold tabular-nums text-destructive">
-                                ₪{Number(row.payed_for_company ?? 0).toLocaleString('en-US')}
-                              </span>
                             ) : (
+                              // Always show the MAIN sub-policy's value
+                              // (THIRD/FULL) — never the cross-sub sum,
+                              // which would fold in خدمات الطريق /
+                              // إعفاء حوادث and break the row-level
+                              // invariant سعر التأمين = الربح + المستحق
+                              // للشركة. Editing writes through to main;
+                              // per-sub values for services/exemption
+                              // stay reachable via the package drawer.
                               <NumberCell
                                 value={row.main.payed_for_company ?? 0}
                                 onChange={(v) => updateNumericField(rawRow, 'payed_for_company', v)}
