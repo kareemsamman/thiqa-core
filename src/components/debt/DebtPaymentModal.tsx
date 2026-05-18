@@ -55,7 +55,7 @@ interface DebtItem {
 interface PaymentLine {
   id: string;
   amount: number;
-  paymentType: 'cash' | 'cheque' | 'transfer' | 'visa';
+  paymentType: 'cash' | 'cheque' | 'transfer' | 'visa' | 'visa_external';
   /** For cash/transfer/visa: the day money flowed.
    *  For cheque: تاريخ الاستحقاق (when the cheque can be cashed). */
   paymentDate: string;
@@ -164,6 +164,7 @@ const paymentTypesBase = [
   { value: 'cash', label: 'نقدي', icon: Banknote },
   { value: 'cheque', label: 'شيك', icon: CreditCard },
   { value: 'transfer', label: 'تحويل', icon: Wallet },
+  { value: 'visa_external', label: 'فيزا خارجي', icon: CreditCard },
 ];
 const paymentTypeVisa = { value: 'visa', label: 'فيزا', icon: CreditCard };
 
@@ -322,7 +323,7 @@ export function DebtPaymentModal({
         const toLine = (rep: (typeof eligible)[number], amount: number): PaymentLine => ({
           id: crypto.randomUUID(),
           amount,
-          paymentType: (['cash', 'cheque', 'transfer', 'visa'].includes(rep.payment_type)
+          paymentType: (['cash', 'cheque', 'transfer', 'visa', 'visa_external'].includes(rep.payment_type)
             ? rep.payment_type
             : 'cash') as PaymentLine['paymentType'],
           paymentDate: rep.payment_type === 'cheque'
@@ -1238,8 +1239,8 @@ export function DebtPaymentModal({
             }
 
             // Upload images
-            if ((paymentLine.paymentType === 'cash' || paymentLine.paymentType === 'cheque' || paymentLine.paymentType === 'transfer') && 
-                paymentLine.pendingImages && paymentLine.pendingImages.length > 0 && 
+            if ((paymentLine.paymentType === 'cash' || paymentLine.paymentType === 'cheque' || paymentLine.paymentType === 'transfer' || paymentLine.paymentType === 'visa_external') &&
+                paymentLine.pendingImages && paymentLine.pendingImages.length > 0 &&
                 insertedPayments && insertedPayments.length > 0) {
               
               const firstPaymentId = insertedPayments[0].id;
@@ -1688,7 +1689,7 @@ export function DebtPaymentModal({
                         pending uploads collapses into a single short
                         line under the tiles so it doesn't double the
                         modal height. */}
-                    {(payment.paymentType === 'cash' || payment.paymentType === 'cheque' || payment.paymentType === 'transfer') && (
+                    {(payment.paymentType === 'cash' || payment.paymentType === 'cheque' || payment.paymentType === 'transfer' || payment.paymentType === 'visa_external') && (
                       <div className="flex items-center gap-2 flex-wrap">
                         <Label className="text-xs text-muted-foreground whitespace-nowrap">
                           {payment.paymentType === 'cheque' ? 'صور الشيك:' : payment.paymentType === 'transfer' ? 'صور التحويل:' : 'صور الإيصال:'}
