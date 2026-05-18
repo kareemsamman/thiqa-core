@@ -11,13 +11,12 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { ChevronLeft, ChevronRight, Eye, FileText, Layers, Lock, Receipt } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Eye, FileText, Layers, Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useDebouncedAutoSave } from '@/hooks/useDebouncedAutoSave';
 import { CalculationExplanationModal } from '@/components/reports/CalculationExplanationModal';
-import { PolicyReceiptsDrawer } from './PolicyReceiptsDrawer';
 import { PackageDetailsDrawer } from './PackageDetailsDrawer';
 import { PolicyTypeBadge } from './PolicyTypeBadge';
 import { StickyHorizontalScroll } from './StickyHorizontalScroll';
@@ -52,11 +51,6 @@ interface Props {
    *  parent uses this to patch its data state optimistically instead
    *  of triggering a full refetch. */
   onSubPolicySaved?: (subPolicyId: string, patch: IssuanceEditPatch) => void;
-  /** Fired when the user clicks the receipts cell on a row with a
-   *  single receipt — the parent opens ReceiptActionsDialog so the
-   *  user gets print / SMS / WhatsApp directly. Multi-receipt rows
-   *  still fall through to the drawer below. */
-  onPrimaryReceiptClick?: (row: IssuanceRow) => void;
 }
 
 type PolicyPatch = Pick<
@@ -91,12 +85,9 @@ export function CompanyIssuancesTable({
   editLocal,
   onPatch,
   onSubPolicySaved,
-  onPrimaryReceiptClick,
 }: Props) {
   const [calcRow, setCalcRow] = useState<IssuanceRow | null>(null);
   const [calcOpen, setCalcOpen] = useState(false);
-  const [drawerRow, setDrawerRow] = useState<IssuanceRow | null>(null);
-  const [drawerOpen, setDrawerOpen] = useState(false);
   const [packageRow, setPackageRow] = useState<IssuanceRow | null>(null);
   const [packageOpen, setPackageOpen] = useState(false);
 
@@ -376,7 +367,6 @@ export function CompanyIssuancesTable({
                   {showCol('document_number') && (
                     <TableHead className="whitespace-nowrap min-w-[140px]">رقم المعاملة</TableHead>
                   )}
-                  {showCol('receipts') && <TableHead className="whitespace-nowrap min-w-[120px]">رقم السند</TableHead>}
                   {showCol('client_name') && <TableHead className="whitespace-nowrap min-w-[160px]">العميل</TableHead>}
                   {showCol('client_id_number') && <TableHead className="whitespace-nowrap min-w-[140px]">رقم الهوية</TableHead>}
                   {showCol('client_phone') && <TableHead className="whitespace-nowrap min-w-[140px]">رقم الهاتف</TableHead>}
@@ -463,48 +453,6 @@ export function CompanyIssuancesTable({
                         {showCol('document_number') && (
                           <TableCell className="font-mono text-sm">
                             <span>{row.document_number ?? '—'}</span>
-                          </TableCell>
-                        )}
-
-                        {showCol('receipts') && (
-                          <TableCell>
-                            {/* Single-receipt rows render the actual
-                                voucher number and open the print/send
-                                dialog on click (per user feedback —
-                                "في سند واحد بدو يكون رقم السند
-                                وينكبس عليه يفتح البوب اب تبع الإرسال
-                                او الطباعة"). Rows with 0 or >1
-                                receipts keep the existing drawer
-                                pill behavior. */}
-                            {row.receipts_count === 1 && row.primary_receipt && onPrimaryReceiptClick && row.primary_receipt.voucher_number ? (
-                              <button
-                                type="button"
-                                onClick={() => onPrimaryReceiptClick(rawRow)}
-                                className={cn(
-                                  'inline-flex items-center gap-1 text-xs font-mono ltr-nums',
-                                  'text-blue-600 hover:text-blue-700 underline underline-offset-2 transition-colors',
-                                )}
-                              >
-                                {row.primary_receipt.voucher_number}
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setDrawerRow(rawRow);
-                                  setDrawerOpen(true);
-                                }}
-                                className={cn(
-                                  'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors',
-                                  row.receipts_count > 0
-                                    ? 'border-emerald-500/30 text-emerald-700 bg-emerald-500/5 hover:bg-emerald-500/10'
-                                    : 'border-dashed text-muted-foreground hover:bg-slate-50',
-                                )}
-                              >
-                                <Receipt className="h-3.5 w-3.5" />
-                                {row.receipts_count > 0 ? `${row.receipts_count} سند` : 'لا يوجد'}
-                              </button>
-                            )}
                           </TableCell>
                         )}
 
@@ -861,14 +809,6 @@ export function CompanyIssuancesTable({
           onOpenChange={setCalcOpen}
           policy={calcPolicy}
           company={calcCompany}
-        />
-
-        <PolicyReceiptsDrawer
-          open={drawerOpen}
-          onOpenChange={setDrawerOpen}
-          policyIds={drawerRow?.sub_policies.map((s) => s.id) ?? []}
-          policyNumber={drawerRow?.document_number ?? null}
-          clientName={drawerRow?.client_name ?? null}
         />
 
         <PackageDetailsDrawer

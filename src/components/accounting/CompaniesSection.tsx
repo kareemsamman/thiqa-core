@@ -212,22 +212,6 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
     });
   };
 
-  // Issuance row's "سندات القبض" cell — when receipts_count === 1
-  // the cell shows the voucher number; clicking it opens the same
-  // print/send dialog the receipts page uses. Multi-receipt rows
-  // still fall through to the package drawer inside the table.
-  const openPrimaryReceiptVoucher = (row: IssuanceRow) => {
-    if (!row.primary_receipt) return;
-    setVoucherActionRow({
-      id: row.primary_receipt.receipt_id,
-      receipt_type: row.primary_receipt.receipt_type,
-      voucher_number: row.primary_receipt.voucher_number,
-      payment_id: row.primary_receipt.payment_id,
-      client_name: row.client_name,
-      client_phone: row.primary_receipt.client_phone ?? row.client_phone ?? null,
-    });
-  };
-
   const data = useAccountingData(filters, branchId);
 
   // Auto-switch sub-tab when a deep-link points at a specific settlement
@@ -920,7 +904,6 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
             editLocal={editLocal}
             onPatch={onPatch}
             onSubPolicySaved={(id, patch) => data.patchSubPolicy(id, patch)}
-            onPrimaryReceiptClick={openPrimaryReceiptVoucher}
           />
         </TabsContent>
         <TabsContent value="issuances" className="mt-3 m-0">
@@ -933,7 +916,6 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
             editLocal={editLocal}
             onPatch={onPatch}
             onSubPolicySaved={(id, patch) => data.patchSubPolicy(id, patch)}
-            onPrimaryReceiptClick={openPrimaryReceiptVoucher}
           />
         </TabsContent>
         <TabsContent value="returns" className="mt-3 m-0">
@@ -946,7 +928,6 @@ export function CompaniesSection({ focusSettlementId, branchId }: CompaniesSecti
             editLocal={editLocal}
             onPatch={onPatch}
             onSubPolicySaved={(id, patch) => data.patchSubPolicy(id, patch)}
-            onPrimaryReceiptClick={openPrimaryReceiptVoucher}
           />
         </TabsContent>
         <TabsContent value="disbursements" className="mt-3 m-0">

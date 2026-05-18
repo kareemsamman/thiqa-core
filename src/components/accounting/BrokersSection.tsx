@@ -279,18 +279,6 @@ export function BrokersSection({ focusSettlementId, branchId }: BrokersSectionPr
     });
   };
 
-  const openPrimaryReceiptVoucher = (row: IssuanceRow) => {
-    if (!row.primary_receipt) return;
-    setVoucherActionRow({
-      id: row.primary_receipt.receipt_id,
-      receipt_type: row.primary_receipt.receipt_type,
-      voucher_number: row.primary_receipt.voucher_number,
-      payment_id: row.primary_receipt.payment_id,
-      client_name: row.client_name,
-      client_phone: row.primary_receipt.client_phone ?? row.client_phone ?? null,
-    });
-  };
-
   // Broker options for the picker — drawn from data.brokers (the
   // dedicated brokers table) so the dropdown includes every broker
   // the agent has access to, not just the ones with issuances.
@@ -761,7 +749,6 @@ export function BrokersSection({ focusSettlementId, branchId }: BrokersSectionPr
             editLocal={editLocal}
             onPatch={onPatch}
             onSubPolicySaved={(id, patch) => data.patchSubPolicy(id, patch)}
-            onPrimaryReceiptClick={openPrimaryReceiptVoucher}
           />
         </TabsContent>
         <TabsContent value="issuances" className="mt-3 m-0">
@@ -774,7 +761,6 @@ export function BrokersSection({ focusSettlementId, branchId }: BrokersSectionPr
             editLocal={editLocal}
             onPatch={onPatch}
             onSubPolicySaved={(id, patch) => data.patchSubPolicy(id, patch)}
-            onPrimaryReceiptClick={openPrimaryReceiptVoucher}
           />
         </TabsContent>
         <TabsContent value="returns" className="mt-3 m-0">
@@ -787,7 +773,6 @@ export function BrokersSection({ focusSettlementId, branchId }: BrokersSectionPr
             editLocal={editLocal}
             onPatch={onPatch}
             onSubPolicySaved={(id, patch) => data.patchSubPolicy(id, patch)}
-            onPrimaryReceiptClick={openPrimaryReceiptVoucher}
           />
         </TabsContent>
         <TabsContent value="disbursements" className="mt-3 m-0">
