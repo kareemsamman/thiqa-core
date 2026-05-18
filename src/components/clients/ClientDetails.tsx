@@ -3464,9 +3464,15 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                             className="hover:bg-muted/40 bg-sky-50/40 dark:bg-sky-950/10"
                           >
                             <TableCell className="font-mono text-xs ltr-nums whitespace-nowrap">
-                              <span className="font-bold text-sky-700 dark:text-sky-300">
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); handlePrintDisbursement(d.id, d.voucherNumber); }}
+                                disabled={generatingReceipt === `disbursement-${d.id}`}
+                                className="font-bold text-sky-700 dark:text-sky-300 hover:underline disabled:opacity-50 disabled:no-underline"
+                                title="طباعة سند الصرف"
+                              >
                                 {d.voucherNumber}
-                              </span>
+                              </button>
                             </TableCell>
                             <TableCell className="font-semibold">
                               <span className="text-sky-700 dark:text-sky-300">
@@ -3538,9 +3544,15 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                             className="hover:bg-muted/40 bg-emerald-50/40 dark:bg-emerald-950/10"
                           >
                             <TableCell className="font-mono text-xs ltr-nums whitespace-nowrap">
-                              <span className="font-bold text-emerald-700 dark:text-emerald-300">
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); handlePrintCreditNote(n.id, n.voucherNumber); }}
+                                disabled={generatingReceipt === `credit-${n.id}`}
+                                className="font-bold text-emerald-700 dark:text-emerald-300 hover:underline disabled:opacity-50 disabled:no-underline"
+                                title="طباعة الإشعار"
+                              >
                                 {n.voucherNumber}
-                              </span>
+                              </button>
                             </TableCell>
                             <TableCell className="font-semibold">
                               <span className="text-emerald-700 dark:text-emerald-300">
@@ -3607,9 +3619,15 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                             className="hover:bg-muted/40 bg-rose-50/40 dark:bg-rose-950/10"
                           >
                             <TableCell className="font-mono text-xs ltr-nums whitespace-nowrap">
-                              <span className="font-bold text-rose-700 dark:text-rose-300">
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); handlePrintCreditNote(n.id, n.voucherNumber); }}
+                                disabled={generatingReceipt === `credit-${n.id}`}
+                                className="font-bold text-rose-700 dark:text-rose-300 hover:underline disabled:opacity-50 disabled:no-underline"
+                                title="طباعة الإشعار"
+                              >
                                 {n.voucherNumber}
-                              </span>
+                              </button>
                             </TableCell>
                             <TableCell className="font-semibold">
                               <span className="text-rose-700 dark:text-rose-300">
@@ -3676,13 +3694,19 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                             className="hover:bg-muted/40 bg-amber-50/40 dark:bg-amber-950/10"
                           >
                             <TableCell className="font-mono text-xs ltr-nums whitespace-nowrap">
-                              <span className="font-bold text-amber-700 dark:text-amber-300">
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); handlePrintCancellationVoucher(v.id, v.voucherNumber); }}
+                                disabled={generatingReceipt === `voucher-${v.id}`}
+                                className="font-bold text-amber-700 dark:text-amber-300 hover:underline disabled:opacity-50 disabled:no-underline"
+                                title="طباعة سند الإلغاء"
+                              >
                                 {/* Display as R{N}/{YYYY} — same shape as
                                     سند قبض numbers so the bookkeeper
                                     can read both numbering schemes at a
                                     glance without mental conversion. */}
                                 R{v.voucherNumber}/{new Date(v.date).getFullYear()}
-                              </span>
+                              </button>
                             </TableCell>
                             <TableCell className="font-semibold">
                               <span className="text-amber-700 dark:text-amber-300">
@@ -3773,8 +3797,18 @@ export function ClientDetails({ client, onBack, onRefresh, initialCarFilter, ret
                         <TableCell className="font-mono text-xs ltr-nums whitespace-nowrap">
                           {group.isPassthrough ? (
                             <span className="text-muted-foreground">—</span>
+                          ) : group.receipt_number ? (
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); handlePrintGroupReceipts(group.id, group.payments.map((p) => p.id)); }}
+                              disabled={generatingReceipt === group.id}
+                              className="hover:underline disabled:opacity-50 disabled:no-underline"
+                              title="طباعة سند القبض"
+                            >
+                              {group.receipt_number}
+                            </button>
                           ) : (
-                            group.receipt_number || '—'
+                            '—'
                           )}
                         </TableCell>
                         <TableCell className="font-semibold">
